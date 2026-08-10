@@ -7,6 +7,7 @@
     "vscode": "^1.125.0"
   },
   "categories": [
+    "Programming Languages",
     "Other"
   ],
   "activationEvents": [],
@@ -14,10 +15,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "gen.main",
-        "title": "Главная"
+        "command": "gen.commentSelection",
+        "title": "Gen - Прокомментировать выделение"
+      },
+      {
+        "command": "gen.commentFunction",
+        "title": "Gen - Прокомментировать текущую функцию"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "gen.commentSelection",
+          "when": "editorHasSelection && editorTextFocus",
+          "group": "gen@1"
+        },
+        {
+          "command": "gen.commentFunction",
+          "when": "editorTextFocus",
+          "group": "gen@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "yarn run package",
