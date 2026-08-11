@@ -36,8 +36,16 @@ export async function showCommentDiff(
 	}
 ): Promise<'apply' | 'reject'> {
 	const stamp = Date.now();
-	const leftUri = vscode.Uri.parse(`${SCHEME}:original/${stamp}/${params.fileName}?lang=${params.languageId}`);
-	const rightUri = vscode.Uri.parse(`${SCHEME}:commented/${stamp}/${params.fileName}?lang=${params.languageId}`);
+	const leftUri = vscode.Uri.from({
+		scheme: SCHEME,
+		path: `/original/${stamp}/${params.fileName}`,
+		query: `lang=${params.languageId}`,
+	});
+	const rightUri = vscode.Uri.from({
+		scheme: SCHEME,
+		path: `/commented/${stamp}/${params.fileName}`,
+		query: `lang=${params.languageId}`,
+	});
 
 	params.provider.set(leftUri, params.original);
 	params.provider.set(rightUri, params.commented);

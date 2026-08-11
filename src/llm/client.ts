@@ -54,7 +54,7 @@ export class HttpLlmClient implements LlmClient {
 	}
 
 	private async requestJson<T>(path: string, init: RequestInit, timeoutMs: number, baseUrl: string): Promise<T> {
-		const url = `${baseUrl}${path}`;
+		const url = new URL(path, baseUrl).toString();
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), timeoutMs);
 
