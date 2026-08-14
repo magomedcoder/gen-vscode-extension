@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent, type SubmitEvent } from 'react';
 import { vscodeApi } from '../vscodeApi';
 
 interface ComposerProps {
@@ -18,7 +18,7 @@ export function Composer({ busy }: ComposerProps) {
 		vscodeApi.postMessage({ type: 'send', text });
 	};
 
-	const onSubmit = (event: FormEvent) => {
+	const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		submit();
 	};
@@ -36,8 +36,7 @@ export function Composer({ busy }: ComposerProps) {
 				className="composer__input"
 				rows={2}
 				value={draft}
-				disabled={busy}
-				placeholder="Сообщение... Enter - отправить, Shift+Enter - строка"
+				placeholder={busy ? 'Идёт запрос... можно набрать следующий' : 'Сообщение... Enter - отправить, Shift+Enter - строка'}
 				onChange={(e) => setDraft(e.target.value)}
 				onKeyDown={onKeyDown}
 			/>

@@ -26,6 +26,16 @@ interface ModelsListResponse {
 	};
 }
 
+function isAbortError(err: unknown): boolean {
+	return ((err instanceof Error && err.name === 'AbortError') || (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError'));
+}
+
+function toAbortError(cause?: unknown): Error {
+	const err = new Error('Операция отменена', { cause });
+	err.name = 'AbortError';
+	return err;
+}
+
 export class HttpLlmClient implements LlmClient {
 	constructor(private readonly getConfig = getSettings) {}
 
@@ -42,7 +52,7 @@ export class HttpLlmClient implements LlmClient {
 		const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify(body),
 				signal: params.signal,
@@ -56,7 +66,6 @@ export class HttpLlmClient implements LlmClient {
 		}
 
 		const content = data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
-
 		if (!content.trim()) {
 			throw new Error('LLM-сервер вернул пустой ответ');
 		}
@@ -68,13 +77,13 @@ export class HttpLlmClient implements LlmClient {
 		const settings = this.getConfig();
 		const baseUrl = (params.baseUrl ?? settings.baseUrl).trim();
 		if (!baseUrl) {
-			throw new Error('Укажите Base URL');
+			throw new Error('Укажите базовый URL');
 		}
 
 		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
-				method: 'GET',
-				signal: params.signal,
-			},
+			method: 'GET',
+			signal: params.signal
+		},
 			Math.min(settings.requestTimeoutMs, 30_000),
 			baseUrl,
 		);
@@ -118,7 +127,9 @@ export class HttpLlmClient implements LlmClient {
 			if (init.signal.aborted) {
 				controller.abort();
 			} else {
-				init.signal.addEventListener('abort', onAbort, { once: true });
+				init.signal.addEventListener('abort', onAbort, {
+					once: true
+				});
 			}
 		}
 
@@ -129,7 +140,7 @@ export class HttpLlmClient implements LlmClient {
 			});
 
 			const text = await response.text();
-			let parsed: unknown = undefined;
+			let parsed: unknown;
 			if (text.trim()) {
 				try {
 					parsed = JSON.parse(text) as unknown;
@@ -144,12 +155,20 @@ export class HttpLlmClient implements LlmClient {
 						message?: string
 					}
 				})?.error?.message ?? text.slice(0, 300) ?? response.statusText;
-				throw new Error(`HTTP ${response.status}: ${msg}`);
+				throw new Error(`Ошибка HTTP ${response.status}: ${msg}`);
 			}
 
 			return (parsed ?? {}) as T;
 		} catch (err) {
-			throw new Error(err instanceof Error ? err.message : String(err));
+			if (isAbortError(err) || controller.signal.aborted) {
+				throw toAbortError(err);
+			}
+
+			if (err instanceof Error) {
+				throw err;
+			}
+
+			throw new Error(String(err));
 		} finally {
 			clearTimeout(timer);
 			init.signal?.removeEventListener('abort', onAbort);

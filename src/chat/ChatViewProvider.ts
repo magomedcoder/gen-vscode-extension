@@ -7,10 +7,15 @@ import { ChatSession } from './ChatSession';
 
 export const CHAT_VIEW_ID = 'gen.chatView';
 
+function isAbortError(err: unknown): boolean {
+	return err instanceof Error && err.name === 'AbortError';
+}
+
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private readonly session: ChatSession;
 	private readonly client: HttpLlmClient;
+	private modelsAbort?: AbortController;
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.client = new HttpLlmClient();
@@ -42,20 +47,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 		webviewView.onDidDispose(() => {
 			messageSub.dispose();
+			this.modelsAbort?.abort();
 			if (this.view === webviewView) {
 				this.view = undefined;
 			}
 		});
 	}
 
+
 	showScreen(screen: PanelScreen): void {
 		this.post({ type: 'showScreen', screen });
-		if (screen === 'settings') {
-			this.post({
-				type: 'settings',
-				settings: getSettings()
-			});
-		}
 	}
 
 	private post(message: ToWebviewMessage): void {
@@ -79,31 +80,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'send':
 				await this.session.send(msg.text);
 				return;
+			case 'openExternal': {
+				try {
+					const uri = vscode.Uri.parse(msg.url);
+					if (uri.scheme === 'http' || uri.scheme === 'https') {
+						await vscode.env.openExternal(uri);
+					}
+				} catch {}
+				return;
+			}
 			case 'loadSettings':
 				this.post({
 					type: 'settings',
-					settings: getSettings(),
+					settings: getSettings()
 				});
 				return;
 			case 'loadModels':
-				try {
-					const models = await this.client.listModels({
-						baseUrl: msg.baseUrl
-					});
-					this.post({ type: 'models', models });
-				} catch (err) {
-					this.post({
-						type: 'modelsError',
-						message: err instanceof Error ? err.message : String(err),
-					});
-				}
+				await this.handleLoadModels(msg.baseUrl, msg.requestId);
 				return;
 			case 'saveSettings':
 				try {
 					const saved = await updateSettings(msg.settings);
 					this.post({
 						type: 'settingsSaved',
-						settings: saved,
+						settings: saved
 					});
 				} catch (err) {
 					this.post({
@@ -112,6 +112,39 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					});
 				}
 				return;
+		}
+	}
+
+	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {
+		this.modelsAbort?.abort();
+		const controller = new AbortController();
+		this.modelsAbort = controller;
+
+		try {
+			const models = await this.client.listModels({
+				baseUrl,
+				signal: controller.signal,
+			});
+			if (controller.signal.aborted) {
+				return;
+			}
+			this.post({
+				type: 'models',
+				models, requestId
+			});
+		} catch (err) {
+			if (isAbortError(err) || controller.signal.aborted) {
+				return;
+			}
+			this.post({
+				type: 'modelsError',
+				message: err instanceof Error ? err.message : String(err),
+				requestId,
+			});
+		} finally {
+			if (this.modelsAbort === controller) {
+				this.modelsAbort = undefined;
+			}
 		}
 	}
 }

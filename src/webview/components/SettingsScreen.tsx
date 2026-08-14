@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type SubmitEvent } from 'react';
 import type { CommentStyle, GenSettings } from '../../config/types';
 
 interface SettingsScreenProps {
@@ -10,6 +10,15 @@ interface SettingsScreenProps {
 	onBack: () => void;
 	onSave: (settings: GenSettings) => void;
 	onLoadModels: (baseUrl: string) => void;
+}
+
+function parseNumberInput(raw: string, fallback: number): number {
+	if (!raw.trim()) {
+		return fallback;
+	}
+
+	const n = Number(raw);
+	return Number.isFinite(n) ? n : fallback;
 }
 
 export function SettingsScreen({
@@ -26,32 +35,32 @@ export function SettingsScreen({
 
 	useEffect(() => {
 		setDraft(settings);
-	}, [settings]);
-
-	useEffect(() => {
 		if (settings.baseUrl.trim()) {
 			onLoadModels(settings.baseUrl);
 		}
-	}, [settings.baseUrl, onLoadModels]);
+	}, [settings, onLoadModels]);
 
 	useEffect(() => {
 		if (models.length === 0) {
 			return;
 		}
+		setDraft((prev) => {
+			if (prev.model.trim()) {
+				return prev;
+			}
 
-		if (!draft.model || !models.includes(draft.model)) {
-			setDraft((prev) => ({
+			return {
 				...prev,
 				model: models[0]
-			}));
-		}
-	}, [models, draft.model]);
+			};
+		});
+	}, [models]);
 
 	const setField = <K extends keyof GenSettings>(key: K, value: GenSettings[K]) => {
 		setDraft((prev) => ({ ...prev, [key]: value }));
 	};
 
-	const onSubmit = (event: FormEvent) => {
+	const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		onSave(draft);
 	};
@@ -69,7 +78,7 @@ export function SettingsScreen({
 
 			<form className="settings" onSubmit={onSubmit}>
 				<label className="field">
-					<span className="field__label">Base URL</span>
+					<span className="field__label">Базовый URL</span>
 					<input
 						className="field__input"
 						value={draft.baseUrl}
@@ -93,7 +102,7 @@ export function SettingsScreen({
 							onChange={(e) => setField('model', e.target.value)}
 						>
 							{modelOptions.length === 0 ? (
-								<option value="">{modelsLoading ? 'Загрузка...' : 'Нет моделей - укажите Base URL'}</option>
+								<option value="">{modelsLoading ? 'Загрузка...' : 'Нет моделей - укажите базовый URL'}</option>
 							) : (
 								modelOptions.map((id) => (
 									<option key={id} value={id}>{id}</option>
@@ -121,7 +130,7 @@ export function SettingsScreen({
 						max={2}
 						step={0.1}
 						value={draft.temperature}
-						onChange={(e) => setField('temperature', Number(e.target.value))}
+						onChange={(e) => setField('temperature', parseNumberInput(e.target.value, draft.temperature))}
 					/>
 				</label>
 
@@ -133,7 +142,7 @@ export function SettingsScreen({
 						min={64}
 						step={1}
 						value={draft.maxTokens}
-						onChange={(e) => setField('maxTokens', Number(e.target.value))}
+						onChange={(e) => setField('maxTokens', parseNumberInput(e.target.value, draft.maxTokens))}
 					/>
 				</label>
 
@@ -145,7 +154,7 @@ export function SettingsScreen({
 						min={1000}
 						step={1000}
 						value={draft.requestTimeoutMs}
-						onChange={(e) => setField('requestTimeoutMs', Number(e.target.value))}
+						onChange={(e) => setField('requestTimeoutMs', parseNumberInput(e.target.value, draft.requestTimeoutMs))}
 					/>
 				</label>
 
@@ -157,7 +166,7 @@ export function SettingsScreen({
 						min={500}
 						step={100}
 						value={draft.maxInputChars}
-						onChange={(e) => setField('maxInputChars', Number(e.target.value))}
+						onChange={(e) => setField('maxInputChars', parseNumberInput(e.target.value, draft.maxInputChars))}
 					/>
 				</label>
 
@@ -168,8 +177,8 @@ export function SettingsScreen({
 						value={draft.commentStyle}
 						onChange={(e) => setField('commentStyle', e.target.value as CommentStyle)}
 					>
-						<option value="inline">inline - короткие строковые комментарии</option>
-						<option value="block">block - короткие блочные комментарии</option>
+						<option value="inline">строчные (inline)</option>
+						<option value="block">блочные (block)</option>
 					</select>
 				</label>
 
@@ -179,7 +188,7 @@ export function SettingsScreen({
 						checked={draft.previewBeforeApply}
 						onChange={(e) => setField('previewBeforeApply', e.target.checked)}
 					/>
-					<span className="field__label">Diff перед применением комментариев</span>
+					<span className="field__label">Показывать diff перед применением комментариев</span>
 				</label>
 
 				{status ? <div className="settings__status">{status}</div> : null}

@@ -13,7 +13,7 @@ function messageId(): string {
 }
 
 function isAbortError(err: unknown): boolean {
-	return err instanceof Error && (err.name === 'AbortError' || /aborted|abort/i.test(err.message));
+	return err instanceof Error && err.name === 'AbortError';
 }
 
 type ChatSessionListener = (state: ChatViewState) => void;
@@ -92,7 +92,7 @@ export class ChatSession {
 			this.append({
 				id: messageId(),
 				role: 'error',
-				content: 'Не заданы Base URL или Model',
+				content: 'Не заданы базовый URL или модель',
 			});
 			return;
 		}

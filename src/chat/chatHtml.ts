@@ -12,9 +12,9 @@ export function renderChatHtml(params: {
 <html lang="ru">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}';">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}'; img-src https: data:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Gen Chat</title>
+	<title>Gen Чат</title>
 	<link href="${styleUri}" rel="stylesheet">
 </head>
 <body>
