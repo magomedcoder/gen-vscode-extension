@@ -10,9 +10,13 @@ export function App() {
 		chat,
 		settings,
 		settingsStatus,
+		models,
+		modelsStatus,
+		modelsLoading,
 		openSettings,
 		openChat,
 		saveSettings,
+		loadModels,
 	} = useGenBridge();
 
 	if (screen === 'settings') {
@@ -20,8 +24,12 @@ export function App() {
 			<SettingsScreen
 				settings={settings}
 				status={settingsStatus}
+				models={models}
+				modelsStatus={modelsStatus}
+				modelsLoading={modelsLoading}
 				onBack={openChat}
 				onSave={saveSettings}
+				onLoadModels={loadModels}
 			/>
 		);
 	}

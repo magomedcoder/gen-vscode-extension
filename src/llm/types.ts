@@ -12,6 +12,12 @@ export interface CompleteResult {
 	content: string;
 }
 
+export interface ListModelsParams {
+	baseUrl?: string;
+	signal?: AbortSignal;
+}
+
 export interface LlmClient {
 	complete(params: CompleteParams): Promise<CompleteResult>;
+	listModels(params?: ListModelsParams): Promise<string[]>;
 }

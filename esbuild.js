@@ -4,26 +4,39 @@ const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
 /**
- * @type {import('esbuild').Plugin}
+ * @param {string} name
+ * @returns {import('esbuild').Plugin}
  */
-const esbuildProblemMatcherPlugin = {
-	name: 'esbuild-problem-matcher',
+function createProblemMatcherPlugin(name) {
+	return {
+		name: 'esbuild-problem-matcher',
+		setup(build) {
+			build.onStart(() => {
+				if (activeBuilds.size === 0) {
+					console.log('[watch] build started');
+				}
+				activeBuilds.add(name);
+			});
 
-	setup(build) {
-		build.onStart(() => {
-			console.log(`[watch] ${build.initialOptions.outfile ?? build.initialOptions.outdir} build started`);
-		});
-		build.onEnd((result) => {
-			result.errors.forEach(({ text, location }) => {
-				console.error(`✘ [ERROR] ${text}`);
-				if (location) {
-					console.error(`    ${location.file}:${location.line}:${location.column}:`);
+			build.onEnd((result) => {
+				result.errors.forEach(({ text, location }) => {
+					console.error(`✘ [ERROR] ${text}`);
+					if (location) {
+						console.error(`    ${location.file}:${location.line}:${location.column}:`);
+					}
+				});
+
+				activeBuilds.delete(name);
+				if (activeBuilds.size === 0) {
+					console.log('[watch] build finished');
 				}
 			});
-			console.log(`[watch] ${build.initialOptions.outfile ?? build.initialOptions.outdir} build finished`);
-		});
-	},
-};
+		},
+	};
+}
+
+/** @type {Set<string>} */
+const activeBuilds = new Set();
 
 async function createExtensionContext() {
 	return esbuild.context({
@@ -37,7 +50,7 @@ async function createExtensionContext() {
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
 		logLevel: 'silent',
-		plugins: [esbuildProblemMatcherPlugin],
+		plugins: [createProblemMatcherPlugin('extension')],
 	});
 }
 
@@ -55,7 +68,7 @@ async function createWebviewContext() {
 		loader: {
 			'.css': 'css',
 		},
-		plugins: [esbuildProblemMatcherPlugin],
+		plugins: [createProblemMatcherPlugin('webview')],
 	});
 }
 
@@ -66,7 +79,8 @@ async function main() {
 	]);
 
 	if (watch) {
-		await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+		await extensionCtx.watch();
+		await webviewCtx.watch();
 		return;
 	}
 

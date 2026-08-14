@@ -29,6 +29,12 @@ export type ToWebviewMessage = | {
 } | {
 	type: 'settingsError';
 	message: string
+} | {
+	type: 'models';
+	models: string[]
+} | {
+	type: 'modelsError';
+	message: string
 };
 
 export type FromWebviewMessage = | {
@@ -45,4 +51,7 @@ export type FromWebviewMessage = | {
 } | {
 	type: 'saveSettings';
 	settings: GenSettings
+} | {
+	type: 'loadModels';
+	baseUrl: string
 };

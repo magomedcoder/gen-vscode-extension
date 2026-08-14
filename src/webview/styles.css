@@ -152,6 +152,22 @@ body {
 	gap: 8px;
 }
 
+.field__row {
+	display: flex;
+	gap: 6px;
+	align-items: stretch;
+}
+
+.field__row .field__input {
+	flex: 1;
+	min-width: 0;
+}
+
+.field__hint {
+	font-size: 11px;
+	opacity: 0.75;
+}
+
 .field__label {
 	font-size: 12px;
 	opacity: 0.85;

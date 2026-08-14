@@ -45,7 +45,8 @@
         {
           "type": "webview",
           "id": "gen.chatView",
-          "name": "Чат"
+          "name": "Чат",
+          "icon": "media/gen-chat.svg"
         }
       ]
     },

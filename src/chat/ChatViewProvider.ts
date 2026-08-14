@@ -10,9 +10,11 @@ export const CHAT_VIEW_ID = 'gen.chatView';
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private readonly session: ChatSession;
+	private readonly client: HttpLlmClient;
 
 	constructor(private readonly context: vscode.ExtensionContext) {
-		this.session = new ChatSession(context, new HttpLlmClient());
+		this.client = new HttpLlmClient();
+		this.session = new ChatSession(context, this.client);
 		this.session.subscribe((state) => {
 			this.post({ type: 'state', state });
 		});
@@ -80,15 +82,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'loadSettings':
 				this.post({
 					type: 'settings',
-					settings: getSettings()
+					settings: getSettings(),
 				});
+				return;
+			case 'loadModels':
+				try {
+					const models = await this.client.listModels({
+						baseUrl: msg.baseUrl
+					});
+					this.post({ type: 'models', models });
+				} catch (err) {
+					this.post({
+						type: 'modelsError',
+						message: err instanceof Error ? err.message : String(err),
+					});
+				}
 				return;
 			case 'saveSettings':
 				try {
 					const saved = await updateSettings(msg.settings);
 					this.post({
 						type: 'settingsSaved',
-						settings: saved
+						settings: saved,
 					});
 				} catch (err) {
 					this.post({

@@ -1,5 +1,5 @@
 import { getSettings } from '../config/settings';
-import type { ChatMessage, CompleteParams, CompleteResult, LlmClient } from './types';
+import type { ChatMessage, CompleteParams, CompleteResult, ListModelsParams, LlmClient } from './types';
 
 interface ChatCompletionsResponse {
 	choices?: Array<{
@@ -7,6 +7,19 @@ interface ChatCompletionsResponse {
 			content?: string | null
 		};
 		text?: string;
+	}>;
+	error?: {
+		message?: string
+	};
+}
+
+interface ModelsListResponse {
+	data?: Array<{
+		id?: string
+	}>;
+	models?: Array<string | {
+		id?: string;
+		name?: string
 	}>;
 	error?: {
 		message?: string
@@ -26,18 +39,16 @@ export class HttpLlmClient implements LlmClient {
 			stream: false,
 		};
 
-		const data = await this.requestJson<ChatCompletionsResponse>(
-			'/v1/chat/completions', 
-			{
+		const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json'
+					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify(body),
 				signal: params.signal,
-			}, 
-			settings.requestTimeoutMs, 
-			settings.baseUrl
+			},
+			settings.requestTimeoutMs,
+			settings.baseUrl,
 		);
 
 		if (data.error?.message) {
@@ -51,6 +62,50 @@ export class HttpLlmClient implements LlmClient {
 		}
 
 		return { content };
+	}
+
+	async listModels(params: ListModelsParams = {}): Promise<string[]> {
+		const settings = this.getConfig();
+		const baseUrl = (params.baseUrl ?? settings.baseUrl).trim();
+		if (!baseUrl) {
+			throw new Error('Укажите Base URL');
+		}
+
+		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
+				method: 'GET',
+				signal: params.signal,
+			},
+			Math.min(settings.requestTimeoutMs, 30_000),
+			baseUrl,
+		);
+
+		if (data.error?.message) {
+			throw new Error(data.error.message);
+		}
+
+		const ids = new Set<string>();
+
+		for (const item of data.data ?? []) {
+			if (item.id?.trim()) {
+				ids.add(item.id.trim());
+			}
+		}
+
+		for (const item of data.models ?? []) {
+			if (typeof item === 'string' && item.trim()) {
+				ids.add(item.trim());
+				continue;
+			}
+
+			if (typeof item === 'object' && item) {
+				const id = item.id?.trim() || item.name?.trim();
+				if (id) {
+					ids.add(id);
+				}
+			}
+		}
+
+		return [...ids].sort((a, b) => a.localeCompare(b));
 	}
 
 	private async requestJson<T>(path: string, init: RequestInit, timeoutMs: number, baseUrl: string): Promise<T> {
