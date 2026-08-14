@@ -21,8 +21,30 @@
       {
         "command": "gen.commentFunction",
         "title": "Gen - Прокомментировать текущую функцию"
+      },
+      {
+        "command": "gen.openChat",
+        "title": "Gen - Открыть чат"
       }
     ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gen",
+          "title": "Gen",
+          "icon": "media/gen-chat.svg"
+        }
+      ]
+    },
+    "views": {
+      "gen": [
+        {
+          "type": "webview",
+          "id": "gen.chatView",
+          "name": "Чат"
+        }
+      ]
+    },
     "menus": {
       "editor/context": [
         {
