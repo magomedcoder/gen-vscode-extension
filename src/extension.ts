@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
-import { registerChat } from './chat/ChatViewProvider';
+import { registerChat } from './chat';
 import { registerCommentFunction } from './commands/commentFunction';
 import { registerCommentSelection } from './commands/commentSelection';
+import { initSettings } from './config/settings';
 import { DiffContentProvider } from './preview/showDiff';
 
 export function activate(context: vscode.ExtensionContext): void {
+	initSettings(context);
+
 	const diffProvider = new DiffContentProvider();
 
 	context.subscriptions.push(

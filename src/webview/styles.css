@@ -1,0 +1,182 @@
+:root {
+	--pad: 8px;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+}
+
+.app {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px var(--pad);
+	border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	flex-shrink: 0;
+}
+
+.header__title {
+	opacity: 0.8;
+	font-size: 12px;
+}
+
+.header__actions {
+	display: flex;
+	gap: 6px;
+}
+
+.messages {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--pad);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.msg {
+	max-width: 92%;
+	padding: 8px 10px;
+	border-radius: 6px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	line-height: 1.45;
+}
+
+.msg--user {
+	align-self: flex-end;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.msg--assistant {
+	align-self: flex-start;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	border: 1px solid var(--vscode-widget-border, transparent);
+}
+
+.msg--error {
+	align-self: stretch;
+	background: var(--vscode-inputValidation-errorBackground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder);
+	color: var(--vscode-errorForeground, var(--vscode-foreground));
+}
+
+.msg--hint {
+	align-self: center;
+	opacity: 0.7;
+	font-size: 12px;
+	background: transparent;
+	text-align: center;
+}
+
+.composer {
+	display: flex;
+	gap: 6px;
+	padding: var(--pad);
+	border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	flex-shrink: 0;
+}
+
+.composer__input {
+	flex: 1;
+	resize: none;
+	min-height: 40px;
+	max-height: 120px;
+	padding: 6px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.composer__input:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+.btn {
+	border: none;
+	padding: 6px 10px;
+	cursor: pointer;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-family: inherit;
+}
+
+.btn--secondary {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+.btn:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.settings {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--pad);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.field--row {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.field__label {
+	font-size: 12px;
+	opacity: 0.85;
+}
+
+.field__input {
+	padding: 6px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.field__input:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+}
+
+.settings__actions {
+	display: flex;
+	gap: 6px;
+	padding-top: 4px;
+}
+
+.settings__status {
+	font-size: 12px;
+	opacity: 0.85;
+}

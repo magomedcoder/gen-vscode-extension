@@ -1,72 +1,52 @@
-export type CommentStyle = 'inline' | 'block';
+import type { ExtensionContext, Memento } from 'vscode';
+import { DEFAULT_SETTINGS, type GenSettings } from './types';
 
-export interface GenSettings {
+export type { CommentStyle, GenSettings } from './types';
+export { DEFAULT_SETTINGS } from './types';
 
-	baseUrl: string;
+const STORAGE_KEY = 'gen.settings';
 
-	model: string;
+let store: Memento | undefined;
 
-	/**
-	 * Температура сэмплинга
-	 * 
-	 * min - 0,
-	 * max - 2,
-	 * 
-	 * default - 0.2
-	 * 
-	 * лучше держать низкой для стабильного формата
-	 */
-	temperature: number;
+function asNumber(value: unknown, fallback: number): number {
+	const n = typeof value === 'number' ? value : Number(value);
+	return Number.isFinite(n) ? n : fallback;
+}
 
-	/**
-	 * Максимум токенов в ответе модели
-	 * 
-	 * min - 64
-	 * 
-	 * default - 2048
-	 */ 
-	maxTokens: number;
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, value));
+}
 
-	/**
-	 * Таймаут HTTP-запроса в миллисекундах
-	 * 
-	 * min - 1000
-	 * 
-	 * default - 120000
-	 */
-	requestTimeoutMs: number;
+function normalize(raw: Partial<GenSettings>): GenSettings {
+	const commentStyle = raw.commentStyle === 'block' ? 'block' : 'inline';
 
-	/**
-	 * Отказывать, если фрагмент кода длиннее этого лимита
-	 * 
-	 * min - 500
-	 * 
-	 * default - 8000
-	 */
-	maxInputChars: number;
+	return {
+		baseUrl: String(raw.baseUrl ?? '').trim(),
+		model: String(raw.model ?? '').trim(),
+		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
+		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),
+		requestTimeoutMs: Math.max(1000, Math.floor(asNumber(raw.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs))),
+		maxInputChars: Math.max(500, Math.floor(asNumber(raw.maxInputChars, DEFAULT_SETTINGS.maxInputChars))),
+		commentStyle,
+		previewBeforeApply: Boolean(raw.previewBeforeApply ?? DEFAULT_SETTINGS.previewBeforeApply),
+	};
+}
 
-	/**
-	 * Стиль комментариев
-	 * 
-	 * inline - Короткие строковые комментарии
-	 * block - Короткие блочные комментарии
-	 */
-	commentStyle: CommentStyle;
-
-	// Показывать diff перед вставкой комментариев
-	previewBeforeApply: boolean;
+export function initSettings(context: ExtensionContext): void {
+	store = context.globalState;
 }
 
 export function getSettings(): GenSettings {
-	
-	return {
-		baseUrl: '',
-		model: '',
-		temperature: 0.2,
-		maxTokens: 2048,
-		requestTimeoutMs: 120_000,
-		maxInputChars: 8000,
-		commentStyle: 'inline',
-		previewBeforeApply: true,
-	};
+	const raw = store?.get<Partial<GenSettings>>(STORAGE_KEY, DEFAULT_SETTINGS) ?? DEFAULT_SETTINGS;
+	return normalize(raw);
+}
+
+export async function updateSettings(next: GenSettings): Promise<GenSettings> {
+	if (!store) {
+		throw new Error('Хранилище настроек не инициализировано');
+	}
+
+	const normalized = normalize(next);
+	await store.update(STORAGE_KEY, normalized);
+	return normalized;
 }
