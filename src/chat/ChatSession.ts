@@ -1,19 +1,17 @@
 import type { ExtensionContext } from 'vscode';
-import { getSettings } from '../config/settings';
+import { AgentSession, isAbortError } from '../agent';
+import { getSettings, updateSettings } from '../config/settings';
+import type { ChatMode } from '../config/types';
 import type { LlmClient } from '../llm/types';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
 import type { ChatUiMessage, ChatViewState } from './protocol';
 
 const STORAGE_KEY = 'gen.chat.messages';
-const MAX_STORED = 40;
+const MAX_STORED = 80;
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function isAbortError(err: unknown): boolean {
-	return err instanceof Error && err.name === 'AbortError';
 }
 
 type ChatSessionListener = (state: ChatViewState) => void;
@@ -22,18 +20,21 @@ export class ChatSession {
 	private messages: ChatUiMessage[];
 	private inflight?: AbortController;
 	private readonly listeners = new Set<ChatSessionListener>();
+	private readonly agent: AgentSession;
 
 	constructor(
 		private readonly context: ExtensionContext,
 		private readonly client: LlmClient,
 	) {
 		this.messages = this.context.workspaceState.get<ChatUiMessage[]>(STORAGE_KEY, []);
+		this.agent = new AgentSession(client);
 	}
 
 	getState(): ChatViewState {
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
+			mode: getSettings().chatMode,
 		};
 	}
 
@@ -63,6 +64,15 @@ export class ChatSession {
 		this.emit();
 	}
 
+	private update(id: string, patch: Partial<ChatUiMessage>): void {
+		this.messages = this.messages.map((msg) => (msg.id === id ? {
+			...msg,
+			...patch
+		} : msg));
+		this.persist();
+		this.emit();
+	}
+
 	clear(): void {
 		this.inflight?.abort();
 		this.inflight = undefined;
@@ -75,6 +85,14 @@ export class ChatSession {
 		this.inflight?.abort();
 	}
 
+	async setMode(mode: ChatMode): Promise<void> {
+		await updateSettings({
+			...getSettings(),
+			chatMode: mode
+		});
+		this.emit();
+	}
+
 	async send(text: string): Promise<void> {
 		const trimmed = text.trim();
 		if (!trimmed || this.inflight) {
@@ -84,7 +102,7 @@ export class ChatSession {
 		this.append({
 			id: messageId(),
 			role: 'user',
-			content: trimmed
+			content: trimmed,
 		});
 
 		const settings = getSettings();
@@ -101,21 +119,36 @@ export class ChatSession {
 		this.inflight = controller;
 		this.emit();
 
-		try {
-			const result = await this.client.complete({
-				messages: buildChatCompletionMessages(
-					this.messages,
-					trimmed,
-					getEditorChatContext(),
-				),
-				signal: controller.signal,
-			});
+		const historyBeforeUser = this.messages.slice(0, -1);
 
-			this.append({
-				id: messageId(),
-				role: 'assistant',
-				content: result.content.trim(),
-			});
+		try {
+			if (settings.chatMode === 'agent') {
+				await this.agent.run({
+					history: historyBeforeUser,
+					userText: trimmed,
+					editorContext: getEditorChatContext(),
+					signal: controller.signal,
+					ui: {
+						append: (message) => this.append(message),
+						update: (id, patch) => this.update(id, patch),
+					},
+				});
+			} else {
+				const result = await this.client.complete({
+					messages: buildChatCompletionMessages(
+						this.messages,
+						trimmed,
+						getEditorChatContext(),
+					),
+					signal: controller.signal,
+				});
+
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: result.content.trim(),
+				});
+			}
 		} catch (err) {
 			const cancelled = isAbortError(err) || controller.signal.aborted;
 			this.append({

@@ -36,7 +36,7 @@ export function Composer({ busy }: ComposerProps) {
 				className="composer__input"
 				rows={2}
 				value={draft}
-				placeholder={busy ? 'Идёт запрос... можно набрать следующий' : 'Сообщение... Enter - отправить, Shift+Enter - строка'}
+				placeholder={busy ? 'Идёт запрос...' : 'Сообщение... Enter - отправить, Shift+Enter - строка'}
 				onChange={(e) => setDraft(e.target.value)}
 				onKeyDown={onKeyDown}
 			/>

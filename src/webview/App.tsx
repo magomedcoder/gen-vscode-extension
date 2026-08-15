@@ -36,7 +36,7 @@ export function App() {
 
 	return (
 		<div className="app">
-			<ChatHeader onOpenSettings={openSettings} />
+			<ChatHeader mode={chat.mode} busy={chat.busy} onOpenSettings={openSettings} />
 			<MessageList messages={chat.messages} />
 			<Composer busy={chat.busy} />
 		</div>

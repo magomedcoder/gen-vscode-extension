@@ -1,7 +1,7 @@
 import type { ExtensionContext, Memento } from 'vscode';
 import { DEFAULT_SETTINGS, type GenSettings } from './types';
 
-export type { CommentStyle, GenSettings } from './types';
+export type { ChatMode, CommentStyle, GenSettings } from './types';
 export { DEFAULT_SETTINGS } from './types';
 
 const STORAGE_KEY = 'gen.settings';
@@ -19,10 +19,13 @@ function clamp(value: number, min: number, max: number): number {
 
 function normalize(raw: Partial<GenSettings>): GenSettings {
 	const commentStyle = raw.commentStyle === 'block' ? 'block' : 'inline';
+	const chatMode = raw.chatMode === 'agent' ? 'agent' : 'ask';
 
 	return {
 		baseUrl: String(raw.baseUrl ?? '').trim(),
 		model: String(raw.model ?? '').trim(),
+		chatMode,
+		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 1, 40),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
 		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),
 		requestTimeoutMs: Math.max(1000, Math.floor(asNumber(raw.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs))),

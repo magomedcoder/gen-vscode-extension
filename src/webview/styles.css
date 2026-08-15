@@ -32,9 +32,110 @@ body {
 	flex-shrink: 0;
 }
 
-.header__title {
-	opacity: 0.8;
+.header__left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.mode-toggle {
+	display: inline-flex;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.mode-toggle__btn {
+	border: none;
+	padding: 3px 8px;
+	font-size: 11px;
+	cursor: pointer;
+	background: transparent;
+	color: var(--vscode-foreground);
+	opacity: 0.75;
+	font-family: inherit;
+}
+
+.mode-toggle__btn--active {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	opacity: 1;
+}
+
+.mode-toggle__btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.msg--tool {
+	align-self: stretch;
+	max-width: 100%;
+	padding: 0;
+	background: transparent;
+	border: none;
+	white-space: normal;
+}
+
+.tool-calls {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.tool-card {
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+	border-radius: 4px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	font-size: 12px;
+	overflow: hidden;
+}
+
+.tool-card summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 8px;
+	cursor: pointer;
+	list-style: none;
+}
+
+.tool-card summary::-webkit-details-marker {
+	display: none;
+}
+
+.tool-card__name {
+	font-family: var(--vscode-editor-font-family);
+	font-weight: 600;
+}
+
+.tool-card__status {
+	opacity: 0.75;
+	font-size: 11px;
+}
+
+.tool-card--pending {
+	border-color: var(--vscode-focusBorder, rgba(127, 127, 127, 0.5));
+}
+
+.tool-card--error {
+	border-color: var(--vscode-inputValidation-errorBorder, #f14c4c);
+}
+
+.tool-card__block {
+	margin: 0;
+	padding: 6px 8px;
+	overflow-x: auto;
+	border-top: 1px solid var(--vscode-widget-border, transparent);
+	background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.12));
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.tool-card__block--result {
+	border-top-style: dashed;
 }
 
 .header__actions {

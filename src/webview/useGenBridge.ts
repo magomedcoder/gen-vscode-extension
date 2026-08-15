@@ -7,6 +7,7 @@ import { vscodeApi } from './vscodeApi';
 const EMPTY_CHAT: ChatViewState = {
 	messages: [],
 	busy: false,
+	mode: 'ask',
 };
 
 export function useGenBridge() {

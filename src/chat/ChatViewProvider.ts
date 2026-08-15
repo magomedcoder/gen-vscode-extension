@@ -68,7 +68,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'ready':
 				this.post({
 					type: 'state',
-					state: this.session.getState()
+					state: this.session.getState(),
+				});
+				this.post({
+					type: 'settings',
+					settings: getSettings(),
 				});
 				return;
 			case 'clear':
@@ -79,6 +83,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				return;
 			case 'send':
 				await this.session.send(msg.text);
+				return;
+			case 'setChatMode':
+				await this.session.setMode(msg.mode);
+				this.post({
+					type: 'settings',
+					settings: getSettings(),
+				});
 				return;
 			case 'openExternal': {
 				try {
@@ -103,7 +114,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					const saved = await updateSettings(msg.settings);
 					this.post({
 						type: 'settingsSaved',
-						settings: saved
+						settings: saved,
+					});
+					this.post({
+						type: 'state',
+						state: this.session.getState(),
 					});
 				} catch (err) {
 					this.post({

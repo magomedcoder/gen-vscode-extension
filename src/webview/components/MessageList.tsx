@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ChatUiMessage } from '../../chat/protocol';
+import { ToolCallCard } from './ToolCallCard';
 import { MarkdownMessage } from './MarkdownMessage';
 
 interface MessageListProps {
@@ -34,13 +35,20 @@ export function MessageList({ messages }: MessageListProps) {
 			}}
 		>
 			{messages.length === 0 ? (
-				<div className="msg msg--hint">Напишите сообщение. Выделение в редакторе уйдёт в контекст.</div>
+				<div className="msg msg--hint">
+					Напишите сообщение. В режиме Агент модель может вызывать инструменты. Выделение в редакторе уйдёт в контекст.
+				</div>
 			) : (
-				messages.map((msg) => (
+				messages.filter((msg) => msg.role !== 'tool').map((msg) => (
 					<div key={msg.id} className={`msg msg--${msg.role}`}>
-						{msg.role === 'assistant' 
-						? (<MarkdownMessage content={msg.content} />) 
-						: (msg.content)}
+						{msg.role === 'assistant' && msg.content ? (
+							<MarkdownMessage content={msg.content} />
+						) : msg.role === 'assistant' ? null : (msg.content)}
+						{msg.toolCalls?.length ? (
+							<div className="tool-calls">
+								{msg.toolCalls.map((call) => (<ToolCallCard key={call.id} call={call} />))}
+							</div>
+						) : null}
 					</div>
 				))
 			)}

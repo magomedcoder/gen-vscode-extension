@@ -1,17 +1,33 @@
-import type { GenSettings } from '../config/types';
+import type { ChatMode, GenSettings } from '../config/types';
 
-export type ChatRole = 'user' | 'assistant' | 'error';
+export type { ChatMode };
+export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
+export type ToolCallStatus = 'pending' | 'ok' | 'error';
+
+export interface ToolCallUi {
+	id: string;
+	name: string;
+	arguments: string;
+	status: ToolCallStatus;
+	result?: string;
+}
 
 export interface ChatUiMessage {
 	id: string;
 	role: ChatRole;
 	content: string;
+	toolCalls?: ToolCallUi[];
+	toolCallId?: string;
+	toolName?: string;
+	toolArgs?: string;
+	toolStatus?: ToolCallStatus;
 }
 
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
+	mode: ChatMode;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -26,6 +42,7 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'send'; text: string }
 	| { type: 'cancel' }
 	| { type: 'clear' }
+	| { type: 'setChatMode'; mode: ChatMode }
 	| { type: 'openExternal'; url: string }
 	| { type: 'loadSettings' }
 	| { type: 'saveSettings'; settings: GenSettings }
