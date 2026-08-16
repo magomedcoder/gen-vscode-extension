@@ -1,7 +1,7 @@
 import type { ToolCallUi } from '../../chat/protocol';
 
 export function ToolCallCard({ call }: { call: ToolCallUi }) {
-	const statusLabel = call.status === 'pending' ? 'выполняется...' : call.status === 'ok' ? 'ok' : 'ошибка';
+	const statusLabel = call.status === 'pending' ? 'выполняется...' : call.status === 'ok'  ? 'ok' : call.status === 'denied' ? 'отклонено' : 'ошибка';
 
 	return (
 		<details className={`tool-card tool-card--${call.status}`} open={call.status !== 'ok'}>

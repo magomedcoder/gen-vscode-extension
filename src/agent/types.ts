@@ -1,12 +1,18 @@
+import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
+
+export type ConfirmChoice = 'apply' | 'skip' | 'abort';
 
 export interface ToolContext {
 	signal?: AbortSignal;
+	confirm?(request: { title: string; detail?: string }): Promise<ConfirmChoice>;
+	revealFile?(uri: Uri): Promise<void>;
 }
 
 export interface ToolResult {
 	ok: boolean;
 	content: string;
+	denied?: boolean;
 }
 
 export interface ToolDefinition {
@@ -34,9 +40,49 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
 			return parsed as Record<string, unknown>;
 		}
-		
+
 		return { value: parsed };
 	} catch (err) {
 		throw new Error(`Некорректный JSON аргументов инструмента: ${err instanceof Error ? err.message : String(err)}`);
 	}
+}
+
+export function asString(args: Record<string, unknown>, key: string, fallback = ''): string {
+	const value = args[key];
+	if (typeof value === 'string') {
+		return value;
+	}
+
+	if (value === undefined || value === null) {
+		return fallback;
+	}
+
+	return String(value);
+}
+
+export function asOptionalInt(args: Record<string, unknown>, key: string): number | undefined {
+	const value = args[key];
+	if (value === undefined || value === null || value === '') {
+		return undefined;
+	}
+
+	const n = typeof value === 'number' ? value : Number(value);
+	if (!Number.isFinite(n)) {
+		return undefined;
+	}
+
+	return Math.floor(n);
+}
+
+export function asBoolean(args: Record<string, unknown>, key: string, fallback = false): boolean {
+	const value = args[key];
+	if (typeof value === 'boolean') {
+		return value;
+	}
+	
+	if (typeof value === 'string') {
+		return value === 'true' || value === '1';
+	}
+
+	return fallback;
 }

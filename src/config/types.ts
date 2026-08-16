@@ -18,6 +18,11 @@ export interface GenSettings {
 	 */
 	agentMaxIterations: number;
 	/**
+	 * Спрашивать перед перезаписью файла и apply_patch
+	 * delete_file подтверждается всегда
+	 */
+	agentConfirmWrites: boolean;
+	/**
 	 * Температура
 	 *
 	 * min - 0,
@@ -67,6 +72,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	model: '',
 	chatMode: 'ask',
 	agentMaxIterations: 12,
+	agentConfirmWrites: true,
 	temperature: 0.2,
 	maxTokens: 2048,
 	requestTimeoutMs: 120_000,

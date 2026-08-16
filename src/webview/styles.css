@@ -124,6 +124,11 @@ body {
 	border-color: var(--vscode-inputValidation-errorBorder, #f14c4c);
 }
 
+.tool-card--denied {
+	border-color: var(--vscode-editorWarning-foreground, #cca700);
+	opacity: 0.9;
+}
+
 .tool-card__block {
 	margin: 0;
 	padding: 6px 8px;

@@ -3,7 +3,7 @@ import type { ChatMode, GenSettings } from '../config/types';
 export type { ChatMode };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
-export type ToolCallStatus = 'pending' | 'ok' | 'error';
+export type ToolCallStatus = 'pending' | 'ok' | 'error' | 'denied';
 
 export interface ToolCallUi {
 	id: string;

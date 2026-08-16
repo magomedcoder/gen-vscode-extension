@@ -26,6 +26,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		model: String(raw.model ?? '').trim(),
 		chatMode,
 		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 1, 40),
+		agentConfirmWrites: Boolean(raw.agentConfirmWrites ?? DEFAULT_SETTINGS.agentConfirmWrites),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
 		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),
 		requestTimeoutMs: Math.max(1000, Math.floor(asNumber(raw.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs))),

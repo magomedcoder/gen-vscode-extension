@@ -3,6 +3,7 @@ import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { buildAgentSystemPrompt } from './prompts';
 import { executeAgentTool, getAgentLlmTools } from './tools';
+import type { ToolContext } from './types';
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -94,6 +95,8 @@ export class AgentSession {
 		editorContext?: string;
 		signal: AbortSignal;
 		ui: AgentUiSink;
+		confirm?: ToolContext['confirm'];
+		revealFile?: ToolContext['revealFile'];
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
@@ -181,9 +184,11 @@ export class AgentSession {
 				const call = toolCalls[i];
 				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, {
 					signal: params.signal,
+					confirm: params.confirm,
+					revealFile: params.revealFile,
 				});
 				const resultText = truncate(toolResult.content);
-				const status: ToolCallStatus = toolResult.ok ? 'ok' : 'error';
+				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
 
 				liveCalls[i] = {
 					...liveCalls[i],

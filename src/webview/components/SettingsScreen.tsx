@@ -146,6 +146,15 @@ export function SettingsScreen({
 					/>
 				</label>
 
+				<label className="field field--row">
+					<input
+						type="checkbox"
+						checked={draft.agentConfirmWrites}
+						onChange={(e) => setField('agentConfirmWrites', e.target.checked)}
+					/>
+					<span className="field__label">Спрашивать перед перезаписью файла и apply_patch (удаление - всегда)</span>
+				</label>
+
 				<label className="field">
 					<span className="field__label">Температура (лучше держать низкой для стабильного формата)</span>
 					<input

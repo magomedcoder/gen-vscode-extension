@@ -1,5 +1,6 @@
-import type { ExtensionContext } from 'vscode';
+import * as vscode from 'vscode';
 import { AgentSession, isAbortError } from '../agent';
+import type { ConfirmChoice } from '../agent/types';
 import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
 import type { LlmClient } from '../llm/types';
@@ -14,6 +15,30 @@ function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+async function confirmAgentAction(request: { title: string; detail?: string }): Promise<ConfirmChoice> {
+	const choice = await vscode.window.showWarningMessage(
+		request.title,
+		{ modal: true, detail: request.detail },
+		'Применить',
+		'Пропустить',
+		'Стоп',
+	);
+
+	if (choice === 'Применить') {
+		return 'apply';
+	}
+
+	if (choice === 'Пропустить') {
+		return 'skip';
+	}
+	
+	return 'abort';
+}
+
+async function revealAgentFile(uri: vscode.Uri): Promise<void> {
+	await vscode.window.showTextDocument(uri, { preview: true });
+}
+
 type ChatSessionListener = (state: ChatViewState) => void;
 
 export class ChatSession {
@@ -23,7 +48,7 @@ export class ChatSession {
 	private readonly agent: AgentSession;
 
 	constructor(
-		private readonly context: ExtensionContext,
+		private readonly context: vscode.ExtensionContext,
 		private readonly client: LlmClient,
 	) {
 		this.messages = this.context.workspaceState.get<ChatUiMessage[]>(STORAGE_KEY, []);
@@ -128,6 +153,8 @@ export class ChatSession {
 					userText: trimmed,
 					editorContext: getEditorChatContext(),
 					signal: controller.signal,
+					confirm: confirmAgentAction,
+					revealFile: revealAgentFile,
 					ui: {
 						append: (message) => this.append(message),
 						update: (id, patch) => this.update(id, patch),
