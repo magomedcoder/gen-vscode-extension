@@ -1,0 +1,151 @@
+import * as vscode from 'vscode';
+import { applySearchReplace } from '../patch';
+import { AGENT_LIMITS } from '../policy';
+import { asBoolean, asObjectArray, asString} from '../types';
+import type { ToolContext, ToolDefinition, ToolResult } from '../types';
+import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
+import { confirmOrSkip, shouldConfirmWrites } from './confirm';
+
+export interface SearchReplaceEdit {
+	path: string;
+	old_string: string;
+	new_string: string;
+	replace_all: boolean;
+}
+
+export function parseWorkspaceEdits(args: Record<string, unknown>): SearchReplaceEdit[] {
+	return asObjectArray(args, 'edits').map((item) => ({
+		path: asString(item, 'path'),
+		old_string: asString(item, 'old_string'),
+		new_string: asString(item, 'new_string'),
+		replace_all: asBoolean(item, 'replace_all'),
+	}));
+}
+
+export const applyWorkspaceEditTool: ToolDefinition = {
+	name: 'apply_workspace_edit',
+	description: 'Несколько точечных правок (old_string -> new_string) атомарно через WorkspaceEdit. Либо все применятся, либо ни одна.',
+	parameters: {
+		type: 'object',
+		properties: {
+			edits: {
+				type: 'array',
+				description: 'Список правок',
+				items: {
+					type: 'object',
+					properties: {
+						path: {
+							type: 'string'
+						},
+						old_string: {
+							type: 'string'
+						},
+						new_string: {
+							type: 'string'
+
+						},
+						replace_all: {
+							type: 'boolean'
+
+						},
+					},
+					required: ['path', 'old_string', 'new_string'],
+				},
+			},
+		},
+		required: ['edits'],
+		additionalProperties: false,
+	},
+	async execute(args, ctx: ToolContext): Promise<ToolResult> {
+		throwIfAborted(ctx.signal);
+		const parsed = parseWorkspaceEdits(args);
+		if (parsed.length === 0) {
+			return {
+				ok: false,
+				content: 'Нужен непустой массив edits'
+			};
+		}
+
+		if (parsed.length > AGENT_LIMITS.maxWorkspaceEdits) {
+			return {
+				ok: false,
+				content: `Слишком много правок (${parsed.length}, лимит ${AGENT_LIMITS.maxWorkspaceEdits})`,
+			};
+		}
+
+		const prepared: Array<{
+			uri: vscode.Uri;
+			relative: string;
+			range: vscode.Range;
+			text: string;
+			count: number;
+		}> = [];
+
+		for (const item of parsed) {
+			throwIfAborted(ctx.signal);
+			if (!item.path || !item.old_string) {
+				return {
+					ok: false,
+					content: 'У каждой правки нужны path и old_string'
+				};
+			}
+
+			const resolved = await resolveWorkspacePath(item.path);
+			const doc = await vscode.workspace.openTextDocument(resolved.uri);
+			let next: { text: string; count: number };
+			try {
+				next = applySearchReplace(doc.getText(), item.old_string, item.new_string, item.replace_all);
+			} catch (err) {
+				return {
+					ok: false,
+					content: `${resolved.relative}: ${err instanceof Error ? err.message : String(err)}`,
+				};
+			}
+			if (new TextEncoder().encode(next.text).byteLength > AGENT_LIMITS.maxWriteBytes) {
+				return {
+					ok: false,
+					content: `Результат слишком большой: ${resolved.relative}`
+				};
+			}
+
+			const last = Math.max(0, doc.lineCount - 1);
+			prepared.push({
+				uri: doc.uri,
+				relative: resolved.relative,
+				range: new vscode.Range(0, 0, last, doc.lineAt(last).text.length),
+				text: next.text,
+				count: next.count,
+			});
+		}
+
+		if (shouldConfirmWrites()) {
+			const summary = prepared.map((p) => `${p.relative} (${p.count} замен)`).join('\n');
+			const denied = await confirmOrSkip(ctx, `Применить ${prepared.length} правок атомарно?`, summary);
+			if (denied) {
+				return denied;
+			}
+		}
+
+		const ws = new vscode.WorkspaceEdit();
+		for (const item of prepared) {
+			ws.replace(item.uri, item.range, item.text);
+		}
+
+		const ok = await vscode.workspace.applyEdit(ws);
+		if (!ok) {
+			return {
+				ok: false,
+				content: 'WorkspaceEdit не применён'
+			};
+		}
+
+		if (ctx.revealFile && prepared[0]) {
+			await ctx.revealFile(prepared[0].uri);
+		}
+
+		return {
+			ok: true,
+			content: `Применено правок: ${prepared.length}\n${prepared.map((p) => `${p.relative}: ${p.count}`).join('\n')}`,
+		};
+	},
+};

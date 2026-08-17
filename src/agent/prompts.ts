@@ -12,7 +12,9 @@ export function buildAgentSystemPrompt(options?: { toolsAvailable: boolean }): s
 		lines.push(
 			'У тебя есть инструменты. Вызывай их, когда нужны факты о файлах или правки.',
 			'Не выдумывай содержимое файлов - сначала read_file / list_dir / search_files.',
-			'Для нового файла: write_file. Для точечной правки: apply_patch (old_string должен однозначно встречаться в файле). Для удаления: delete_file.',
+			'Для нового файла: write_file. Для точечной правки: apply_patch. Несколько файлов сразу: apply_workspace_edit.',
+			'Навигация: open_file, reveal_line, close_file. Состояние редактора: get_active_editor, get_open_editors.',
+			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Пути - относительно корня workspace. Не трогай node_modules, .git и файлы секретов (.env).',
 			'Деструктивные действия пользователь подтверждает в диалоге; если отклонил - предложи другой план.',
 			'Когда задача решена, дай итоговый текстовый ответ без лишних tool-вызовов.',

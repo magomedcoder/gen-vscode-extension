@@ -88,6 +88,18 @@ export async function pathExists(uri: vscode.Uri): Promise<boolean> {
 	}
 }
 
+export async function relativeFromUri(uri: vscode.Uri): Promise<string> {
+	if (uri.scheme === 'untitled') {
+		return uri.path || 'untitled';
+	}
+
+	try {
+		return (await resolveWorkspacePath(uri.fsPath)).relative;
+	} catch {
+		return uri.fsPath;
+	}
+}
+
 export function throwIfAborted(signal?: AbortSignal): void {
 	if (signal?.aborted) {
 		const err = new Error('Операция отменена');

@@ -79,10 +79,19 @@ export function asBoolean(args: Record<string, unknown>, key: string, fallback =
 	if (typeof value === 'boolean') {
 		return value;
 	}
-	
+
 	if (typeof value === 'string') {
 		return value === 'true' || value === '1';
 	}
-
+	
 	return fallback;
+}
+
+export function asObjectArray(args: Record<string, unknown>, key: string): Record<string, unknown>[] {
+	const value = args[key];
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
 }

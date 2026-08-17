@@ -7,6 +7,10 @@ export const AGENT_LIMITS = {
 	maxSearchFiles: 80,
 	maxSearchMatches: 60,
 	maxConfirmPreview: 800,
+	maxDiagnostics: 50,
+	maxGitOutput: 8_000,
+	maxWorkspaceEdits: 20,
+	maxSelectionChars: 2_000,
 } as const;
 
 const DENIED_SEGMENTS = new Set(['node_modules', '.git']);
