@@ -3,9 +3,11 @@ import type { AgentAuthLevel } from '../config/types';
 export function buildAgentSystemPrompt(options?: {
 	toolsAvailable: boolean;
 	authLevel?: AgentAuthLevel;
+	deniedPaths?: readonly string[];
 }): string {
 	const toolsAvailable = options?.toolsAvailable ?? true;
 	const authLevel = options?.authLevel ?? 'ask';
+	const deniedPaths = (options?.deniedPaths ?? []).map((item) => item.trim()).filter((item) => item && !item.startsWith('#'));
 
 	const lines = [
 		'Ты Gen - агент-помощник программиста в VS Code.',
@@ -22,8 +24,11 @@ export function buildAgentSystemPrompt(options?: {
 			'Если инструмент вернул ошибку про невалидный JSON - повтори меньшим куском через apply_patch, не повторяй тот же огромный write_file.',
 			'Навигация: open_file, reveal_line, close_file. Состояние редактора: get_active_editor, get_open_editors.',
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
-			'Тесты: run_tests (автоопределение npm/go/cargo/pytest) или run_command с allowlist (npm, go, cargo, pytest, make, ...). Команды всегда требуют подтверждения; в режиме «Чтение» запрещены.',
-			'Пути - относительно корня workspace. Не трогай node_modules, .git, ключи (.pem/.key) и файлы секретов (.env).',
+			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). Всегда confirm; в режиме «Чтение» запрещены.',
+			'Если задача трогает больше одного файла: сначала propose_plan (заголовок и шаги с path), дождись подтверждения, потом правки. Один файл можно править без плана.',
+			deniedPaths.length > 0
+				? `Пути - относительно корня workspace. Не трогай файлы по шаблонам из настроек: ${deniedPaths.join(', ')}.`
+				: 'Пути - относительно корня workspace. Дополнительные запреты путей задаются в настройках.',
 		);
 		if (authLevel === 'auto') {
 			lines.push('Сейчас режим «Чтение»: только чтение и навигация, без записи, удаления и shell-команд.');

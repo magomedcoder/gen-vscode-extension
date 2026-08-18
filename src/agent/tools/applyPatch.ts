@@ -98,6 +98,7 @@ export const applyPatchTool: ToolDefinition = {
 			};
 		}
 
+		await ctx.checkpoint?.remember(doc.uri, resolved.relative, original);
 		ctx.trackMutation?.(doc.uri);
 		if (ctx.revealFile) {
 			await ctx.revealFile(doc.uri);

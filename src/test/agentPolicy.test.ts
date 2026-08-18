@@ -5,8 +5,10 @@ import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFo
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy';
 import { formatMiniDiff, pathFromToolArguments } from '../agent/diff';
+import { formatPlan, mutationPathsFromArgs, parsePlanArgs, TurnPlan } from '../agent/plan';
 import { redactSecrets } from '../agent/secrets';
 import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types';
+import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../config/types';
 
 suite('path sandbox', () => {
 	const root = path.resolve('/tmp/ws');
@@ -22,13 +24,19 @@ suite('path sandbox', () => {
 		assert.throws(() => resolveAgainstFolders('../secret', [root]));
 	});
 
-	test('node_modules, .env и ключи запрещены', () => {
-		assert.ok(isDeniedRelativePath('node_modules/pkg/index.js'));
-		assert.ok(isDeniedRelativePath('.env'));
-		assert.ok(isDeniedRelativePath('app/.env.local'));
-		assert.ok(isDeniedRelativePath('certs/server.pem'));
-		assert.ok(isDeniedRelativePath('.git/config'));
-		assert.ok(!isDeniedRelativePath('src/index.ts'));
+	test('пустой список ничего не запрещает', () => {
+		assert.ok(!isDeniedRelativePath('node_modules/pkg/index.js', []));
+		assert.ok(!isDeniedRelativePath('.env', []));
+		assert.ok(!isDeniedRelativePath('certs/server.pem', []));
+	});
+
+	test('шаблоны из настроек запрещают .env, ключи и node_modules', () => {
+		assert.ok(isDeniedRelativePath('node_modules/pkg/index.js', EXAMPLE_DENIED_PATHS));
+		assert.ok(isDeniedRelativePath('.env', EXAMPLE_DENIED_PATHS));
+		assert.ok(isDeniedRelativePath('app/.env.local', EXAMPLE_DENIED_PATHS));
+		assert.ok(isDeniedRelativePath('certs/server.pem', EXAMPLE_DENIED_PATHS));
+		assert.ok(isDeniedRelativePath('.git/config', EXAMPLE_DENIED_PATHS));
+		assert.ok(!isDeniedRelativePath('src/index.ts', EXAMPLE_DENIED_PATHS));
 	});
 });
 
@@ -111,11 +119,12 @@ suite('pathFromToolArguments', () => {
 		assert.strictEqual(pathFromToolArguments('{"path":"src/a.ts"}'), 'src/a.ts');
 	});
 
+	test('собирает path из steps плана', () => {
+		assert.strictEqual(pathFromToolArguments('{"title":"x","steps":[{"path":"a.go"},{"path":"b.go"}]}'), 'a.go, b.go');
+	});
+
 	test('собирает path из edits', () => {
-		assert.strictEqual(
-			pathFromToolArguments('{"edits":[{"path":"a.ts"},{"path":"b.ts"},{"path":"a.ts"}]}'),
-			'a.ts, b.ts',
-		);
+		assert.strictEqual(pathFromToolArguments('{"edits":[{"path":"a.ts"},{"path":"b.ts"},{"path":"a.ts"}]}'), 'a.ts, b.ts');
 	});
 
 	test('битый JSON без path - undefined', () => {
@@ -150,8 +159,11 @@ suite('tool argument JSON', () => {
 });
 
 suite('commandPolicy', () => {
-	test('разрешает npm test', () => {
+	test('разрешает npm test, go test, python, go run', () => {
 		assert.doesNotThrow(() => assertAllowedCommand('npm', ['test']));
+		assert.doesNotThrow(() => assertAllowedCommand('go', ['test', './...']));
+		assert.doesNotThrow(() => assertAllowedCommand('python', ['app.py']));
+		assert.doesNotThrow(() => assertAllowedCommand('go', ['run', '.']));
 	});
 
 	test('запрещает npm install', () => {
@@ -161,18 +173,20 @@ suite('commandPolicy', () => {
 		);
 	});
 
-	test('запрещает go run', () => {
-		assert.throws(
-			() => assertAllowedCommand('go', ['run', '.']),
-			(err: unknown) => err instanceof CommandPolicyError,
-		);
+	test('запрещает node -e, python -c, curl, rm, git push', () => {
+		assert.throws(() => assertAllowedCommand('node', ['-e', '1']), (err: unknown) => err instanceof CommandPolicyError);
+		assert.throws(() => assertAllowedCommand('python', ['-c', '1']), (err: unknown) => err instanceof CommandPolicyError);
+		assert.throws(() => assertAllowedCommand('curl', ['https://example.com']), (err: unknown) => err instanceof CommandPolicyError);
+		assert.throws(() => assertAllowedCommand('rm', ['-rf', 'src']), (err: unknown) => err instanceof CommandPolicyError);
+		assert.throws(() => assertAllowedCommand('git', ['-C', '/tmp', 'push']), (err: unknown) => err instanceof CommandPolicyError);
 	});
 
-	test('запрещает node -e', () => {
-		assert.throws(
-			() => assertAllowedCommand('node', ['-e', '1']),
-			(err: unknown) => err instanceof CommandPolicyError,
-		);
+	test('gcc -c файл можно, python -c код нельзя', () => {
+		assert.doesNotThrow(() => assertAllowedCommand('gcc', ['-c', 'foo.c']));
+		assert.doesNotThrow(() => assertAllowedCommand('tar', ['-c', '-f', 'out.tar', 'src']));
+		assert.doesNotThrow(() => assertAllowedCommand('git', ['-c', 'user.name=gen', 'status']));
+		assert.throws(() => assertAllowedCommand('python', ['-c', 'print(1)']), (err: unknown) => err instanceof CommandPolicyError);
+		assert.throws(() => assertAllowedCommand('ruby', ['-c', 'p 1']), (err: unknown) => err instanceof CommandPolicyError);
 	});
 
 	test('formatCommandLine экранирует пробелы', () => {
@@ -180,13 +194,70 @@ suite('commandPolicy', () => {
 	});
 });
 
+suite('TurnPlan', () => {
+	test('один файл без плана разрешён', () => {
+		const plan = new TurnPlan();
+		assert.strictEqual(plan.guard(['src/a.ts']), undefined);
+		assert.strictEqual(plan.guard(['src/a.ts']), undefined);
+	});
+
+	test('второй файл без плана запрещён', () => {
+		const plan = new TurnPlan();
+		assert.ok(!plan.guard(['a.ts']));
+		const denied = plan.guard(['b.ts']);
+		assert.ok(denied?.denied);
+		assert.ok(denied?.content.includes('propose_plan'));
+	});
+
+	test('apply_workspace_edit на два файла требует план', () => {
+		const plan = new TurnPlan();
+		const paths = mutationPathsFromArgs('apply_workspace_edit', {
+			edits: [{ path: 'a.ts' }, { path: 'b.ts' }],
+		});
+		assert.deepStrictEqual(paths, ['a.ts', 'b.ts']);
+		assert.ok(plan.guard(paths)?.denied);
+	});
+
+	test('после approve несколько файлов можно', () => {
+		const plan = new TurnPlan();
+		plan.approve();
+		assert.ok(!plan.guard(['a.ts', 'b.ts']));
+	});
+});
+
+suite('parsePlanArgs', () => {
+	test('форматирует шаги', () => {
+		const parsed = parsePlanArgs({
+			title: 'Фича',
+			steps: [
+				{ title: 'handler', path: 'news/handlers/news_handler.go', action: 'write' },
+				{ summary: 'тесты', path: 'news/handlers/news_handler_test.go' },
+			],
+		});
+		assert.strictEqual(parsed.steps.length, 2);
+		const text = formatPlan(parsed);
+		assert.ok(text.includes('Фича'));
+		assert.ok(text.includes('news/handlers/news_handler.go'));
+	});
+
+	test('пустые steps - ошибка', () => {
+		assert.throws(() => parsePlanArgs({ title: 'x', steps: [] }));
+	});
+});
+
 suite('redactSecrets', () => {
-	test('маскирует ключи и токены', () => {
-		const raw = 'token: ghp_abcdefghijklmnopqrstuvwxyz0123456789 extra AKIAIOSFODNN7EXAMPLE';
-		const { text, count } = redactSecrets(raw);
+	test('без шаблонов ничего не маскирует', () => {
+		const raw = 'token: supersecretvalue extra';
+		const { text, count } = redactSecrets(raw, []);
+		assert.strictEqual(count, 0);
+		assert.strictEqual(text, raw);
+	});
+
+	test('маскирует ключи по шаблонам из настроек', () => {
+		const raw = 'token: supersecretvalue extra eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signaturexx';
+		const { text, count } = redactSecrets(raw, EXAMPLE_SECRET_PATTERNS);
 		assert.ok(count >= 1);
-		assert.ok(!text.includes('ghp_'));
-		assert.ok(!text.includes('AKIAIOSFODNN7EXAMPLE'));
+		assert.ok(!text.includes('supersecretvalue'));
 		assert.ok(text.includes('[REDACTED]'));
 	});
 });

@@ -7,30 +7,97 @@ export class CommandPolicyError extends Error {
 	}
 }
 
-const ALLOWED_BINARIES = new Set(['npm', 'yarn', 'pnpm', 'node', 'npx', 'go', 'cargo', 'rustc', 'python', 'python3', 'pytest', 'make', 'deno', 'bun', 'vitest', 'jest', 'mocha']);
-const GO_SUBCOMMANDS = new Set(['test', 'vet', 'fmt', 'build', 'list', 'version', 'env']);
-const NPM_ALLOWED = new Set(['test', 'run', 'exec']);
-const PACKAGE_MANAGER_ALLOWED = new Set(['test', 'run']);
-const PACKAGE_MANAGER_DENIED = new Set(['install', 'ci', 'publish', 'uninstall', 'link', 'unlink', 'dedupe', 'audit', 'fund', 'add', 'remove', 'global']);
-const NODE_DENIED_FLAGS = new Set(['-e', '--eval', '-r', '--require', '-p', '--print']);
-const PYTHON_DENIED_FLAGS = new Set(['-c', '-m']);
+const DENIED_BINARIES = new Set(['sudo', 'doas', 'su', 'rm', 'rmdir', 'unlink', 'dd', 'mkfs', 'fdisk', 'chmod', 'chown', 'chgrp', 'curl', 'wget', 'nc', 'ncat', 'netcat', 'ssh', 'scp', 'sftp', 'docker', 'podman', 'kubectl', 'nerdctl', 'sh', 'bash', 'zsh', 'fish', 'dash', 'csh', 'tcsh', 'cmd', 'powershell', 'pwsh']);
+
+const EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print']);
+const C_FLAGS = new Set(['-c', '--command']);
+
+const PACKAGE_SUBCOMMANDS = new Set(['install', 'ci', 'publish', 'uninstall', 'global', 'add', 'remove']);
+const GIT_WRITE_SUBCOMMANDS = new Set(['push', 'rebase', 'reset', 'commit', 'tag', 'filter-branch']);
 
 export function normalizeBinaryName(command: string): string {
 	const base = path.basename(command.trim()).toLowerCase();
 	return base.replace(/\.(cmd|exe|bat)$/i, '');
 }
 
+function looksLikeFileOperand(arg: string): boolean {
+	if (arg.startsWith('-') || /[\s;`$(){}|&<>]/.test(arg)) {
+		return false;
+	}
+
+	return /[\\/]/.test(arg) || /\.\w{1,10}$/.test(arg);
+}
+
+function isDeniedCFlag(binary: string, args: string[], index: number): boolean {
+	if (!C_FLAGS.has(args[index])) {
+		return false;
+	}
+
+	if (binary === 'git') {
+		return false;
+	}
+
+	const next = args[index + 1];
+	if (next === undefined) {
+		return true;
+	}
+
+	if (next.startsWith('-')) {
+		return false;
+	}
+
+	return !looksLikeFileOperand(next);
+}
+
+function firstSubcommand(args: string[]): string | undefined {
+	for (const arg of args) {
+		if (!arg.startsWith('-')) {
+			return arg.toLowerCase();
+		}
+	}
+
+	return undefined;
+}
+
+function gitSubcommand(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i += 1) {
+		const arg = args[i];
+		if (arg === '-C' || arg === '--git-dir' || arg === '--work-tree' || arg === '-c') {
+			i += 1;
+			continue;
+		}
+
+		if (arg.startsWith('-')) {
+			continue;
+		}
+
+		return arg.toLowerCase();
+	}
+
+	return undefined;
+}
+
 export function assertAllowedCommand(command: string, args: string[]): void {
-	const binary = normalizeBinaryName(command);
+	const trimmed = command.trim();
+	if (!trimmed) {
+		throw new CommandPolicyError('Пустая команда');
+	}
+
+	if (trimmed.includes('..') || trimmed.includes('\0')) {
+		throw new CommandPolicyError('Недопустимый путь к команде');
+	}
+
+	const binary = normalizeBinaryName(trimmed);
 	if (!binary) {
 		throw new CommandPolicyError('Пустая команда');
 	}
 
-	if (!ALLOWED_BINARIES.has(binary)) {
-		throw new CommandPolicyError(`Команда не в allowlist: ${command}. Разрешены: ${[...ALLOWED_BINARIES].sort().join(', ')}`);
+	if (DENIED_BINARIES.has(binary)) {
+		throw new CommandPolicyError(`Команда запрещена политикой: ${binary}`);
 	}
 
-	for (const arg of args) {
+	for (let i = 0; i < args.length; i += 1) {
+		const arg = args[i];
 		if (typeof arg !== 'string') {
 			throw new CommandPolicyError('Аргументы должны быть строками');
 		}
@@ -38,48 +105,19 @@ export function assertAllowedCommand(command: string, args: string[]): void {
 		if (arg.includes('\0')) {
 			throw new CommandPolicyError('Недопустимый символ в аргументе');
 		}
-	}
 
-	if (binary === 'go') {
-		const sub = args[0];
-		if (!sub || !GO_SUBCOMMANDS.has(sub)) {
-			throw new CommandPolicyError(`go: разрешены только ${[...GO_SUBCOMMANDS].join(', ')}`);
+		if (EVAL_FLAGS.has(arg) || isDeniedCFlag(binary, args, i)) {
+			throw new CommandPolicyError(`Флаг ${arg} запрещён политикой (eval)`);
 		}
 	}
 
-	if (binary === 'npm' || binary === 'yarn' || binary === 'pnpm') {
-		const sub = args[0];
-		if (!sub) {
-			throw new CommandPolicyError(`${binary}: нужен подкомандный аргумент (например test или run)`);
-		}
-
-		if (PACKAGE_MANAGER_DENIED.has(sub)) {
-			throw new CommandPolicyError(`${binary} ${sub} запрещён политикой`);
-		}
-
-		if (binary === 'npm' && !NPM_ALLOWED.has(sub)) {
-			throw new CommandPolicyError(`npm: разрешены только ${[...NPM_ALLOWED].join(', ')}`);
-		}
-
-		if ((binary === 'yarn' || binary === 'pnpm') && !PACKAGE_MANAGER_ALLOWED.has(sub)) {
-			throw new CommandPolicyError(`${binary}: разрешены только ${[...PACKAGE_MANAGER_ALLOWED].join(', ')}`);
-		}
+	const sub = binary === 'git' ? gitSubcommand(args) : firstSubcommand(args);
+	if (sub && PACKAGE_SUBCOMMANDS.has(sub)) {
+		throw new CommandPolicyError(`Подкоманда ${sub} запрещена политикой`);
 	}
 
-	if (binary === 'node') {
-		for (const arg of args) {
-			if (NODE_DENIED_FLAGS.has(arg)) {
-				throw new CommandPolicyError('node: флаги -e/-r/-p запрещены');
-			}
-		}
-	}
-
-	if (binary === 'python' || binary === 'python3') {
-		for (const arg of args) {
-			if (PYTHON_DENIED_FLAGS.has(arg)) {
-				throw new CommandPolicyError('python: флаги -c/-m запрещены');
-			}
-		}
+	if (binary === 'git' && sub && GIT_WRITE_SUBCOMMANDS.has(sub)) {
+		throw new CommandPolicyError(`git ${sub} запрещён. Для статуса используйте git_status`);
 	}
 }
 

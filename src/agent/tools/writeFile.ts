@@ -76,6 +76,7 @@ export const writeFileTool: ToolDefinition = {
 			};
 		}
 
+		await ctx.checkpoint?.remember(resolved.uri, resolved.relative, exists ? before : undefined);
 		ctx.trackMutation?.(resolved.uri);
 		if (ctx.revealFile) {
 			await ctx.revealFile(resolved.uri);

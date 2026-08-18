@@ -151,6 +151,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 		}
 
 		for (const item of prepared) {
+			await ctx.checkpoint?.remember(item.uri, item.relative, item.original);
 			ctx.trackMutation?.(item.uri);
 		}
 

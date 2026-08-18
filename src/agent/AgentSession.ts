@@ -2,6 +2,8 @@ import { getSettings } from '../config/settings';
 import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { pathFromToolArguments } from './diff';
+import { AgentCheckpoint } from './checkpoint';
+import { TurnPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
@@ -105,10 +107,14 @@ export class AgentSession {
 		confirm?: ToolContext['confirm'];
 		revealFile?: ToolContext['revealFile'];
 		trackMutation?: ToolContext['trackMutation'];
+		plan?: TurnPlan;
+		checkpoint?: AgentCheckpoint;
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
 		let toolsEnabled = true;
+		const plan = params.plan ?? new TurnPlan();
+		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
 
 		const userContent = params.editorContext
 			? `${params.userText}\n\n---\nКонтекст редактора:\n${params.editorContext}`
@@ -120,6 +126,7 @@ export class AgentSession {
 				content: buildAgentSystemPrompt({
 					toolsAvailable: true,
 					authLevel: settings.agentAuthLevel,
+					deniedPaths: settings.deniedPaths,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -183,7 +190,19 @@ export class AgentSession {
 				return;
 			}
 
-			const liveCalls = toolCalls.map((c) => toToolCallUi(c, 'pending'));
+			const orderedCalls = [...toolCalls].sort((a, b) => {
+				if (a.function.name === 'propose_plan' && b.function.name !== 'propose_plan') {
+					return -1;
+				}
+
+				if (b.function.name === 'propose_plan' && a.function.name !== 'propose_plan') {
+					return 1;
+				}
+				
+				return 0;
+			});
+
+			const liveCalls = orderedCalls.map((c) => toToolCallUi(c, 'pending'));
 			params.ui.update(assistantId, {
 				content: content || '',
 				toolCalls: liveCalls.map((c) => ({ ...c })),
@@ -192,7 +211,7 @@ export class AgentSession {
 			apiMessages.push({
 				role: 'assistant',
 				content: content || null,
-				tool_calls: toolCalls.map((call) => ({
+				tool_calls: orderedCalls.map((call) => ({
 					...call,
 					function: {
 						...call.function,
@@ -201,17 +220,19 @@ export class AgentSession {
 				})),
 			});
 
-			for (let i = 0; i < toolCalls.length; i += 1) {
+			for (let i = 0; i < orderedCalls.length; i += 1) {
 				if (params.signal.aborted) {
 					throw toAbortError();
 				}
 
-				const call = toolCalls[i];
+				const call = orderedCalls[i];
 				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, {
 					signal: params.signal,
 					confirm: params.confirm,
 					revealFile: params.revealFile,
 					trackMutation: params.trackMutation,
+					plan,
+					checkpoint,
 				});
 				const lengthHint = !toolResult.ok && result.finishReason === 'length'
 					? '\nОтвет модели обрезан по max_tokens. Увеличь лимит в настройках или пиши файл частями через apply_patch.'

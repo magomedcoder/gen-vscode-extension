@@ -45,9 +45,12 @@ export const deleteFileTool: ToolDefinition = {
 			}
 		}
 
+		const doc = await vscode.workspace.openTextDocument(resolved.uri);
+		await ctx.checkpoint?.remember(resolved.uri, resolved.relative, doc.getText());
 		await vscode.workspace.fs.delete(resolved.uri, {
 			useTrash: true
 		});
+		ctx.trackMutation?.(resolved.uri);
 		return {
 			ok: true,
 			path: resolved.relative,

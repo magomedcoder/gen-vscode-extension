@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { AGENT_LIMITS, looksBinary } from '../policy';
+import { getSettings } from '../../config/settings';
+import { AGENT_LIMITS, deniedDirectoryExcludeGlob, looksBinary } from '../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 
@@ -18,7 +19,7 @@ function toGlob(pattern: string): string {
 
 export const searchFilesTool: ToolDefinition = {
 	name: 'search_files',
-	description: 'Поиск файлов по glob и/или тексту внутри workspace. Исключает node_modules и .git.',
+	description: 'Поиск файлов по glob и/или тексту внутри workspace. Учитывает запрещённые пути из настроек.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -46,7 +47,7 @@ export const searchFilesTool: ToolDefinition = {
 			AGENT_LIMITS.maxSearchMatches,
 		);
 
-		const exclude = '**/{node_modules,.git}/**';
+		const exclude = deniedDirectoryExcludeGlob(getSettings().deniedPaths);
 		const uris = await vscode.workspace.findFiles(glob, exclude, AGENT_LIMITS.maxSearchFiles);
 		if (!query) {
 			const paths: string[] = [];

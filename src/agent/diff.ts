@@ -71,6 +71,18 @@ export function pathFromToolArguments(raw: string): string | undefined {
 
 			return [...new Set(paths)].join(', ');
 		}
+
+		if (Array.isArray(obj.steps)) {
+			const paths = obj.steps.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+				.map((item) => item.path)
+				.filter((p): p is string => typeof p === 'string' && Boolean(p.trim()));
+
+			if (paths.length === 0) {
+				return undefined;
+			}
+
+			return [...new Set(paths)].join(', ');
+		}
 	} catch {
 		return extractPathFromPartialJson(raw);
 	}

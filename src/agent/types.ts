@@ -1,5 +1,7 @@
 import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
+import type { AgentCheckpoint } from './checkpoint';
+import type { TurnPlan } from './plan';
 
 export type ConfirmChoice = 'apply' | 'skip' | 'abort';
 
@@ -8,6 +10,8 @@ export interface ToolContext {
 	confirm?(request: { title: string; detail?: string }): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;
 	trackMutation?(uri: Uri): void;
+	plan?: TurnPlan;
+	checkpoint?: AgentCheckpoint;
 }
 
 export interface ToolResult {

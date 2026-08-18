@@ -1,6 +1,7 @@
 import type { LlmToolDefinition } from '../../llm/types';
 import { logAgentTool } from '../audit';
-import { denyMutatingIfAuto } from '../auth';
+import { denyMutatingIfAuto, isMutatingTool } from '../auth';
+import { mutationPathsFromArgs } from '../plan';
 import { extractPathFromPartialJson, parseToolArguments, toLlmToolDefinition, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { applyPatchTool } from './applyPatch';
 import { applyWorkspaceEditTool } from './applyWorkspaceEdit';
@@ -12,6 +13,7 @@ import { getWorkspaceInfoTool } from './getWorkspaceInfo';
 import { gitStatusTool } from './gitStatus';
 import { listDirTool } from './listDir';
 import { closeFileTool, openFileTool, revealLineTool } from './navigation';
+import { proposePlanTool } from './proposePlan';
 import { readFileTool } from './readFile';
 import { runCommandTool } from './runCommand';
 import { runTestsTool } from './runTests';
@@ -25,6 +27,7 @@ const TOOLS: ToolDefinition[] = [
 	listDirTool,
 	readFileTool,
 	searchFilesTool,
+	proposePlanTool,
 	writeFileTool,
 	applyPatchTool,
 	applyWorkspaceEditTool,
@@ -72,6 +75,19 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 
 	try {
 		const args = parseToolArguments(rawArguments);
+		if (isMutatingTool(name) && ctx.plan) {
+			const blockedByPlan = ctx.plan.guard(mutationPathsFromArgs(name, args));
+			if (blockedByPlan) {
+				logAgentTool({
+					name,
+					status: 'denied',
+					ms: Date.now() - started,
+					detail: blockedByPlan.content,
+				});
+				return blockedByPlan;
+			}
+		}
+
 		const result = await tool.execute(args, ctx);
 		logAgentTool({
 			name,

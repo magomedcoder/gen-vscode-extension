@@ -472,6 +472,15 @@ body {
 	outline: 1px solid var(--vscode-focusBorder);
 }
 
+.field__input--multiline {
+	min-height: 96px;
+	resize: vertical;
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: pre;
+}
+
 .settings__actions {
 	display: flex;
 	gap: 6px;

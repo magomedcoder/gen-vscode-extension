@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { getSettings } from '../config/settings';
 
 export const AGENT_LIMITS = {
 	maxReadBytes: 200_000,
@@ -13,12 +14,9 @@ export const AGENT_LIMITS = {
 	defaultCommandTimeoutMs: 60_000,
 	maxCommandTimeoutMs: 300_000,
 	maxWorkspaceEdits: 20,
+	maxPlanSteps: 20,
 	maxSelectionChars: 2_000,
 } as const;
-
-const DENIED_SEGMENTS = new Set(['node_modules', '.git', '.svn', '.hg']);
-const DENIED_BASENAME = /^(?:\.env(?:\..+)?|credentials\.json|secrets\.json|id_rsa|id_ed25519|id_ecdsa|\.npmrc|\.pypirc|\.netrc)$/i;
-const DENIED_EXTENSIONS = new Set(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']);
 
 export class PathPolicyError extends Error {
 	constructor(message: string) {
@@ -36,19 +34,56 @@ export function toPosixRelative(relativePath: string): string {
 	return relativePath.split(path.sep).join('/');
 }
 
-export function isDeniedRelativePath(relativePosix: string): boolean {
-	const parts = relativePosix.split('/').filter(Boolean);
-	if (parts.some((part) => DENIED_SEGMENTS.has(part))) {
-		return true;
+function globToRegExp(pattern: string): RegExp {
+	const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+	return new RegExp(`^${escaped}$`, 'i');
+}
+
+function activePatterns(patterns: readonly string[]): string[] {
+	const out: string[] = [];
+	for (const item of patterns) {
+		const line = item.trim();
+		if (!line || line.startsWith('#')) {
+			continue;
+		}
+
+		out.push(line);
 	}
 
+	return out;
+}
+
+export function isDeniedRelativePath(relativePosix: string, patterns: readonly string[]): boolean {
+	const parts = relativePosix.split('/').filter(Boolean);
 	const base = parts[parts.length - 1] ?? '';
-	if (DENIED_BASENAME.test(base)) {
-		return true;
+
+	for (const pattern of activePatterns(patterns)) {
+		let re: RegExp;
+		try {
+			re = globToRegExp(pattern);
+		} catch {
+			continue;
+		}
+
+		if (re.test(relativePosix) || re.test(base) || parts.some((part) => re.test(part))) {
+			return true;
+		}
+
+		if (pattern.includes('/') && (relativePosix === pattern || relativePosix.startsWith(`${pattern}/`))) {
+			return true;
+		}
 	}
-	
-	const ext = path.posix.extname(base).toLowerCase();
-	return DENIED_EXTENSIONS.has(ext);
+
+	return false;
+}
+
+export function deniedDirectoryExcludeGlob(patterns: readonly string[]): string | undefined {
+	const names = [...new Set(activePatterns(patterns).filter((item) => !/[*?/]/.test(item)))];
+	if (names.length === 0) {
+		return undefined;
+	}
+
+	return `**/{${names.join(',')}}/**`;
 }
 
 export function findContainingFolder(fsPath: string, folderFsPaths: string[]): string | undefined {
@@ -107,7 +142,7 @@ export function assertAllowedPath(fsPath: string, folder: string): string {
 	}
 
 	const relative = toPosixRelative(path.relative(folder, fsPath));
-	if (isDeniedRelativePath(relative)) {
+	if (isDeniedRelativePath(relative, getSettings().deniedPaths)) {
 		throw new PathPolicyError(`Путь запрещён политикой: ${relative || '.'}`);
 	}
 

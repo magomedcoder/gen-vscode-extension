@@ -64,7 +64,43 @@ export interface GenSettings {
 	 */
 	commentStyle: CommentStyle;
 	previewBeforeApply: boolean;
+	/**
+	 * Glob-шаблоны запрещённых путей (по одному на строку). 
+	 * Пусто - ничего не запрещать.
+	 */
+	deniedPaths: string[];
+	/**
+	 * JS-регулярки для маскировки секретов в тексте, уходящем в LLM. 
+	 * Пусто - не маскировать.
+	 */
+	secretPatterns: string[];
 }
+
+export const EXAMPLE_DENIED_PATHS: string[] = [
+	'.env',
+	'.env.*',
+	'credentials.json',
+	'secrets.json',
+	'id_rsa',
+	'id_ed25519',
+	'id_ecdsa',
+	'.npmrc',
+	'.pypirc',
+	'.netrc',
+	'*.pem',
+	'*.key',
+	'*.p12',
+	'*.pfx',
+	'node_modules',
+	'.git',
+];
+
+export const EXAMPLE_SECRET_PATTERNS: string[] = [
+	String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`,
+	String.raw`\b(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*['"]?[^\s'"]{8,}`,
+	String.raw`\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`,
+	String.raw`\bBearer\s+[A-Za-z0-9\-._~+/]+=*`,
+];
 
 export const DEFAULT_SETTINGS: GenSettings = {
 	baseUrl: '',
@@ -78,4 +114,6 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	maxInputChars: 8000,
 	commentStyle: 'inline',
 	previewBeforeApply: true,
+	deniedPaths: [],
+	secretPatterns: [],
 };

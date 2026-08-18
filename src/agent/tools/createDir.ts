@@ -34,9 +34,12 @@ export const createDirTool: ToolDefinition = {
 			};
 		}
 
+		await ctx.checkpoint?.remember(resolved.uri, resolved.relative, undefined);
 		await vscode.workspace.fs.createDirectory(resolved.uri);
+		ctx.trackMutation?.(resolved.uri);
 		return {
 			ok: true,
+			path: resolved.relative,
 			content: `Каталог создан: ${resolved.relative}`
 		};
 	},

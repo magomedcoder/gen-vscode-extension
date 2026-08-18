@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AgentSession, isAbortError } from '../agent';
-import { offerAgentUndo } from '../agent/undo';
+import { AgentCheckpoint, offerCheckpointRestore } from '../agent/checkpoint';
+import { TurnPlan } from '../agent/plan';
 import type { ConfirmChoice } from '../agent/types';
 import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
@@ -149,7 +150,8 @@ export class ChatSession {
 		this.emit();
 
 		const historyBeforeUser = this.messages.slice(0, -1);
-		const mutations: vscode.Uri[] = [];
+		const plan = new TurnPlan();
+		const checkpoint = new AgentCheckpoint();
 
 		try {
 			if (settings.chatMode === 'agent') {
@@ -160,9 +162,8 @@ export class ChatSession {
 					signal: controller.signal,
 					confirm: confirmAgentAction,
 					revealFile: revealAgentFile,
-					trackMutation: (uri) => {
-						mutations.push(uri);
-					},
+					plan,
+					checkpoint,
 					ui: {
 						append: (message) => this.append(message),
 						update: (id, patch) => this.update(id, patch),
@@ -210,8 +211,8 @@ export class ChatSession {
 			this.emit();
 		}
 
-		if (!controller.signal.aborted && mutations.length > 0) {
-			await offerAgentUndo(mutations);
+		if (checkpoint.size > 0) {
+			await offerCheckpointRestore(checkpoint);
 		}
 	}
 }

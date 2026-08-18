@@ -14,13 +14,13 @@ function asStringArray(args: Record<string, unknown>, key: string): string[] {
 
 export const runCommandTool: ToolDefinition = {
 	name: 'run_command',
-	description: 'Запустить разрешённую shell-команду в каталоге workspace (без pipe и shell-метасимволов). Всегда требует подтверждения.',
+	description: 'Запустить команду в каталоге workspace через execFile (без shell/pipe). Запрещены rm/curl/eval-флаги/install/git push. Всегда требует подтверждения.',
 	parameters: {
 		type: 'object',
 		properties: {
 			command: {
 				type: 'string',
-				description: 'Исполняемый файл (npm, go, pytest, ...)',
+				description: 'Исполняемый файл (go, python, npm, ... - без allowlist языков)',
 			},
 			args: {
 				type: 'array',
