@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../workspacePath';
-import { confirmOrSkip } from './confirm';
+import { confirmOrSkip, shouldConfirmDeletes } from './confirm';
 
 export const deleteFileTool: ToolDefinition = {
 	name: 'delete_file',
-	description: 'Удалить файл в workspace. Всегда требует подтверждения пользователя. Папки не удаляет.',
+	description: 'Удалить файл в workspace. В режиме «Спросить» требует подтверждения. Папки не удаляет.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -35,9 +35,14 @@ export const deleteFileTool: ToolDefinition = {
 			};
 		}
 
-		const denied = await confirmOrSkip(ctx, `Удалить файл ${resolved.relative}?`);
-		if (denied) {
-			return denied;
+		if (shouldConfirmDeletes()) {
+			const denied = await confirmOrSkip(ctx, `Удалить файл ${resolved.relative}?`);
+			if (denied) {
+				return {
+					...denied,
+					path: resolved.relative
+				};
+			}
 		}
 
 		await vscode.workspace.fs.delete(resolved.uri, {
@@ -45,6 +50,7 @@ export const deleteFileTool: ToolDefinition = {
 		});
 		return {
 			ok: true,
+			path: resolved.relative,
 			content: `Файл удалён: ${resolved.relative}`
 		};
 	},

@@ -7,12 +7,15 @@ export interface ToolContext {
 	signal?: AbortSignal;
 	confirm?(request: { title: string; detail?: string }): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;
+	trackMutation?(uri: Uri): void;
 }
 
 export interface ToolResult {
 	ok: boolean;
 	content: string;
 	denied?: boolean;
+	path?: string;
+	diff?: string;
 }
 
 export interface ToolDefinition {
@@ -33,6 +36,46 @@ export function toLlmToolDefinition(tool: ToolDefinition): LlmToolDefinition {
 	};
 }
 
+export function extractPathFromPartialJson(raw: string): string | undefined {
+	const pathMatch = raw.match(/"path"\s*:\s*"((?:\\.|[^"\\])*)"/);
+	if (pathMatch) {
+		try {
+			return JSON.parse(`"${pathMatch[1]}"`) as string;
+		} catch {
+			return pathMatch[1];
+		}
+	}
+
+	return undefined;
+}
+
+export function sanitizeToolArgumentsForApi(raw: string): string {
+	const trimmed = raw.trim() || '{}';
+	try {
+		JSON.parse(trimmed);
+		return trimmed;
+	} catch {
+		const path = extractPathFromPartialJson(trimmed);
+		return JSON.stringify({
+			error: 'invalid_or_truncated_json',
+			...(path ? { path } : {}),
+		});
+	}
+}
+
+function invalidToolArgsMessage(raw: string): string {
+	const path = extractPathFromPartialJson(raw);
+	const parts = [
+		'Аргументы инструмента обрезаны или это невалидный JSON (часто лимит max_tokens или кавычки внутри файла).',
+		path ? `Путь: ${path}.` : '',
+		'Файл не записан.',
+		'Повтори: короткий write_file (заготовка), затем apply_patch небольшими кусками. Не клади большой файл целиком в один write_file.',
+		`Длина аргументов: ${raw.length} символов.`,
+	];
+
+	return parts.filter(Boolean).join(' ');
+}
+
 export function parseToolArguments(raw: string): Record<string, unknown> {
 	const trimmed = raw.trim() || '{}';
 	try {
@@ -42,8 +85,8 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 		}
 
 		return { value: parsed };
-	} catch (err) {
-		throw new Error(`Некорректный JSON аргументов инструмента: ${err instanceof Error ? err.message : String(err)}`);
+	} catch {
+		throw new Error(invalidToolArgsMessage(trimmed));
 	}
 }
 

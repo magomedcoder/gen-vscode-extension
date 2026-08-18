@@ -106,9 +106,55 @@ body {
 	display: none;
 }
 
-.tool-card__name {
+.tool-card__title {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.tool-card__path {
+	font-size: 11px;
+	opacity: 0.7;
+	font-weight: 400;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tool-card__more {
+	display: block;
+	width: 100%;
+	border: none;
+	border-top: 1px dashed var(--vscode-widget-border, transparent);
+	padding: 4px 8px;
+	background: transparent;
+	color: var(--vscode-textLink-foreground);
+	cursor: pointer;
+	font-size: 11px;
+	font-family: inherit;
+	text-align: left;
+}
+
+.tool-card__diff {
+	display: flex;
+	flex-direction: column;
 	font-family: var(--vscode-editor-font-family);
-	font-weight: 600;
+	font-size: 11px;
+	line-height: 1.35;
+	white-space: pre;
+}
+
+.diff-line {
+	display: block;
+}
+
+.diff-line--add {
+	background: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, #54b33e) 18%, transparent);
+}
+
+.diff-line--del {
+	background: color-mix(in srgb, var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c) 18%, transparent);
 }
 
 .tool-card__status {
@@ -305,6 +351,11 @@ body {
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	border: 1px solid var(--vscode-widget-border, transparent);
 	white-space: normal;
+}
+
+.msg__typing {
+	opacity: 0.65;
+	font-style: italic;
 }
 
 .msg--error {

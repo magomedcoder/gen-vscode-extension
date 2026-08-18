@@ -13,8 +13,9 @@ export const AGENT_LIMITS = {
 	maxSelectionChars: 2_000,
 } as const;
 
-const DENIED_SEGMENTS = new Set(['node_modules', '.git']);
-const DENIED_BASENAME = /^(?:\.env(?:\..+)?|credentials\.json|id_rsa|id_ed25519)$/i;
+const DENIED_SEGMENTS = new Set(['node_modules', '.git', '.svn', '.hg']);
+const DENIED_BASENAME = /^(?:\.env(?:\..+)?|credentials\.json|secrets\.json|id_rsa|id_ed25519|id_ecdsa|\.npmrc|\.pypirc|\.netrc)$/i;
+const DENIED_EXTENSIONS = new Set(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']);
 
 export class PathPolicyError extends Error {
 	constructor(message: string) {
@@ -39,7 +40,12 @@ export function isDeniedRelativePath(relativePosix: string): boolean {
 	}
 
 	const base = parts[parts.length - 1] ?? '';
-	return DENIED_BASENAME.test(base);
+	if (DENIED_BASENAME.test(base)) {
+		return true;
+	}
+	
+	const ext = path.posix.extname(base).toLowerCase();
+	return DENIED_EXTENSIONS.has(ext);
 }
 
 export function findContainingFolder(fsPath: string, folderFsPaths: string[]): string | undefined {

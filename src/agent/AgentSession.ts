@@ -1,9 +1,11 @@
 import { getSettings } from '../config/settings';
 import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
+import { pathFromToolArguments } from './diff';
 import { buildAgentSystemPrompt } from './prompts';
+import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
-import type { ToolContext } from './types';
+import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -40,12 +42,16 @@ function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
 		}
 
 		if (msg.role === 'assistant') {
+			if (!msg.content && !msg.toolCalls?.length) {
+				continue;
+			}
+
 			const toolCalls = msg.toolCalls?.map((tc) => ({
 				id: tc.id,
 				type: 'function' as const,
 				function: {
 					name: tc.name,
-					arguments: tc.arguments,
+					arguments: sanitizeToolArgumentsForApi(redactSecrets(tc.arguments).text),
 				},
 			}));
 			out.push({
@@ -62,7 +68,7 @@ function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
 			out.push({
 				role: 'tool',
 				tool_call_id: msg.toolCallId,
-				content: msg.content,
+				content: redactSecrets(msg.content).text,
 				name: msg.toolName,
 			});
 		}
@@ -76,6 +82,7 @@ function toToolCallUi(call: LlmToolCall, status: ToolCallStatus = 'pending'): To
 		id: call.id,
 		name: call.function.name,
 		arguments: call.function.arguments,
+		path: pathFromToolArguments(call.function.arguments),
 		status,
 	};
 }
@@ -97,6 +104,7 @@ export class AgentSession {
 		ui: AgentUiSink;
 		confirm?: ToolContext['confirm'];
 		revealFile?: ToolContext['revealFile'];
+		trackMutation?: ToolContext['trackMutation'];
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
@@ -110,7 +118,8 @@ export class AgentSession {
 			{
 				role: 'system',
 				content: buildAgentSystemPrompt({
-					toolsAvailable: true
+					toolsAvailable: true,
+					authLevel: settings.agentAuthLevel,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -125,11 +134,25 @@ export class AgentSession {
 				throw toAbortError();
 			}
 
+			const assistantId = messageId();
+			let streamed = '';
+			params.ui.append({
+				id: assistantId,
+				role: 'assistant',
+				content: '',
+			});
+
 			const result = await this.client.complete({
 				messages: apiMessages,
 				signal: params.signal,
 				tools: toolsEnabled ? getAgentLlmTools() : undefined,
 				toolChoice: toolsEnabled ? 'auto' : 'none',
+				onDelta: (chunk) => {
+					streamed += chunk;
+					params.ui.update(assistantId, {
+						content: streamed
+					});
+				},
 			});
 
 			if (result.toolsFallback && toolsEnabled) {
@@ -137,7 +160,7 @@ export class AgentSession {
 				apiMessages[0] = {
 					role: 'system',
 					content: buildAgentSystemPrompt({
-						toolsAvailable: false
+						toolsAvailable: false,
 					}),
 				};
 				params.ui.append({
@@ -148,24 +171,20 @@ export class AgentSession {
 			}
 
 			const toolCalls = result.toolCalls ?? [];
-			const content = result.content.trim();
+			const content = (result.content || streamed).trim();
+			params.ui.update(assistantId, { content });
 
 			if (toolCalls.length === 0) {
-				if (content) {
-					params.ui.append({
-						id: messageId(),
-						role: 'assistant',
-						content,
+				if (!content) {
+					params.ui.update(assistantId, {
+						content: 'Пустой ответ модели'
 					});
 				}
 				return;
 			}
 
-			const assistantId = messageId();
 			const liveCalls = toolCalls.map((c) => toToolCallUi(c, 'pending'));
-			params.ui.append({
-				id: assistantId,
-				role: 'assistant',
+			params.ui.update(assistantId, {
 				content: content || '',
 				toolCalls: liveCalls.map((c) => ({ ...c })),
 			});
@@ -173,7 +192,13 @@ export class AgentSession {
 			apiMessages.push({
 				role: 'assistant',
 				content: content || null,
-				tool_calls: toolCalls,
+				tool_calls: toolCalls.map((call) => ({
+					...call,
+					function: {
+						...call.function,
+						arguments: sanitizeToolArgumentsForApi(call.function.arguments),
+					},
+				})),
 			});
 
 			for (let i = 0; i < toolCalls.length; i += 1) {
@@ -186,14 +211,20 @@ export class AgentSession {
 					signal: params.signal,
 					confirm: params.confirm,
 					revealFile: params.revealFile,
+					trackMutation: params.trackMutation,
 				});
-				const resultText = truncate(toolResult.content);
+				const lengthHint = !toolResult.ok && result.finishReason === 'length'
+					? '\nОтвет модели обрезан по max_tokens. Увеличь лимит в настройках или пиши файл частями через apply_patch.'
+					: '';
+				const resultText = truncate(`${toolResult.content}${lengthHint}`);
 				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
 
 				liveCalls[i] = {
 					...liveCalls[i],
 					status,
 					result: resultText,
+					path: toolResult.path ?? liveCalls[i].path,
+					diff: toolResult.diff,
 				};
 				params.ui.update(assistantId, {
 					toolCalls: liveCalls.map((c) => ({ ...c })),
@@ -213,7 +244,7 @@ export class AgentSession {
 					role: 'tool',
 					tool_call_id: call.id,
 					name: call.function.name,
-					content: resultText,
+					content: redactSecrets(resultText).text,
 				});
 			}
 		}

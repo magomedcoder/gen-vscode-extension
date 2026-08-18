@@ -1,5 +1,7 @@
 import type { LlmToolDefinition } from '../../llm/types';
-import { parseToolArguments, toLlmToolDefinition, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
+import { logAgentTool } from '../audit';
+import { denyMutatingIfAuto } from '../auth';
+import { extractPathFromPartialJson, parseToolArguments, toLlmToolDefinition, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { applyPatchTool } from './applyPatch';
 import { applyWorkspaceEditTool } from './applyWorkspaceEdit';
 import { createDirTool } from './createDir';
@@ -52,16 +54,48 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 		};
 	}
 
+	const started = Date.now();
+	const blocked = denyMutatingIfAuto(name);
+	if (blocked) {
+		logAgentTool({
+			name,
+			status: 'denied',
+			ms: Date.now() - started,
+			detail: rawArguments
+		});
+		return blocked;
+	}
+
 	try {
 		const args = parseToolArguments(rawArguments);
-		return await tool.execute(args, ctx);
+		const result = await tool.execute(args, ctx);
+		logAgentTool({
+			name,
+			status: result.denied ? 'denied' : result.ok ? 'ok' : 'error',
+			ms: Date.now() - started,
+			detail: typeof args.path === 'string' ? args.path : rawArguments,
+		});
+		return result;
 	} catch (err) {
 		if (err instanceof Error && err.name === 'AbortError') {
+			logAgentTool({
+				name,
+				status: 'error',
+				ms: Date.now() - started,
+				detail: 'abort'
+			});
 			throw err;
 		}
 
+		logAgentTool({
+			name,
+			status: 'error',
+			ms: Date.now() - started,
+			detail: err instanceof Error ? err.message : String(err),
+		});
 		return {
 			ok: false,
+			path: extractPathFromPartialJson(rawArguments),
 			content: err instanceof Error ? err.message : String(err),
 		};
 	}

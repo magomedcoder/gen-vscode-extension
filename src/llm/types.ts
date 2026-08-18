@@ -41,6 +41,7 @@ export interface CompleteParams {
 	signal?: AbortSignal;
 	tools?: LlmToolDefinition[];
 	toolChoice?: 'auto' | 'none' | 'required';
+	onDelta?: (chunk: string) => void;
 }
 
 export interface CompleteResult {

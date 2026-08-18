@@ -1,5 +1,5 @@
 export type ChatMode = 'ask' | 'agent';
-
+export type AgentAuthLevel = 'auto' | 'ask' | 'open';
 export type CommentStyle = 'inline' | 'block';
 
 export interface GenSettings {
@@ -14,14 +14,13 @@ export interface GenSettings {
 	 *
 	 * min - 1
 	 * max - 40
-	 * default - 12
+	 * default - 40
 	 */
 	agentMaxIterations: number;
 	/**
-	 * Спрашивать перед перезаписью файла и apply_patch
-	 * delete_file подтверждается всегда
+	 * Чтение - только просмотр; Спросить - подтверждать правки; Без спроса - без диалогов, всё в лог.
 	 */
-	agentConfirmWrites: boolean;
+	agentAuthLevel: AgentAuthLevel;
 	/**
 	 * Температура
 	 *
@@ -38,7 +37,7 @@ export interface GenSettings {
 	 *
 	 * min - 64
 	 *
-	 * default - 2048
+	 * default - 8192
 	 */
 	maxTokens: number;
 	/**
@@ -71,10 +70,10 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	baseUrl: '',
 	model: '',
 	chatMode: 'ask',
-	agentMaxIterations: 12,
-	agentConfirmWrites: true,
+	agentMaxIterations: 40,
+	agentAuthLevel: 'ask',
 	temperature: 0.2,
-	maxTokens: 2048,
+	maxTokens: 8192,
 	requestTimeoutMs: 120_000,
 	maxInputChars: 8000,
 	commentStyle: 'inline',

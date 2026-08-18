@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AgentSession, isAbortError } from '../agent';
+import { offerAgentUndo } from '../agent/undo';
 import type { ConfirmChoice } from '../agent/types';
 import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
@@ -94,7 +95,10 @@ export class ChatSession {
 			...msg,
 			...patch
 		} : msg));
-		this.persist();
+		if (patch.toolCalls) {
+			this.persist();
+		}
+
 		this.emit();
 	}
 
@@ -145,6 +149,7 @@ export class ChatSession {
 		this.emit();
 
 		const historyBeforeUser = this.messages.slice(0, -1);
+		const mutations: vscode.Uri[] = [];
 
 		try {
 			if (settings.chatMode === 'agent') {
@@ -155,25 +160,39 @@ export class ChatSession {
 					signal: controller.signal,
 					confirm: confirmAgentAction,
 					revealFile: revealAgentFile,
+					trackMutation: (uri) => {
+						mutations.push(uri);
+					},
 					ui: {
 						append: (message) => this.append(message),
 						update: (id, patch) => this.update(id, patch),
 					},
 				});
 			} else {
+				const historyForAsk = this.messages;
+				const assistantId = messageId();
+				let streamed = '';
+				this.append({
+					id: assistantId,
+					role: 'assistant',
+					content: '',
+				});
 				const result = await this.client.complete({
 					messages: buildChatCompletionMessages(
-						this.messages,
+						historyForAsk,
 						trimmed,
 						getEditorChatContext(),
 					),
 					signal: controller.signal,
+					onDelta: (chunk) => {
+						streamed += chunk;
+						this.update(assistantId, {
+							content: streamed
+						});
+					},
 				});
-
-				this.append({
-					id: messageId(),
-					role: 'assistant',
-					content: result.content.trim(),
+				this.update(assistantId, {
+					content: result.content.trim() || streamed
 				});
 			}
 		} catch (err) {
@@ -187,7 +206,12 @@ export class ChatSession {
 			if (this.inflight === controller) {
 				this.inflight = undefined;
 			}
+			this.persist();
 			this.emit();
+		}
+
+		if (!controller.signal.aborted && mutations.length > 0) {
+			await offerAgentUndo(mutations);
 		}
 	}
 }

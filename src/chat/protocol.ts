@@ -11,6 +11,8 @@ export interface ToolCallUi {
 	arguments: string;
 	status: ToolCallStatus;
 	result?: string;
+	path?: string;
+	diff?: string;
 }
 
 export interface ChatUiMessage {

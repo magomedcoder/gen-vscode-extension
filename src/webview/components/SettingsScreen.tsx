@@ -1,5 +1,5 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
-import type { ChatMode, CommentStyle, GenSettings } from '../../config/types';
+import type { AgentAuthLevel, ChatMode, CommentStyle, GenSettings } from '../../config/types';
 
 interface SettingsScreenProps {
 	settings: GenSettings;
@@ -146,13 +146,17 @@ export function SettingsScreen({
 					/>
 				</label>
 
-				<label className="field field--row">
-					<input
-						type="checkbox"
-						checked={draft.agentConfirmWrites}
-						onChange={(e) => setField('agentConfirmWrites', e.target.checked)}
-					/>
-					<span className="field__label">Спрашивать перед перезаписью файла и apply_patch (удаление - всегда)</span>
+				<label className="field">
+					<span className="field__label">Уровень доступа агента</span>
+					<select
+						className="field__input"
+						value={draft.agentAuthLevel}
+						onChange={(e) => setField('agentAuthLevel', e.target.value as AgentAuthLevel)}
+					>
+						<option value="auto">Чтение - только просмотр файлов</option>
+						<option value="ask">Спросить - подтверждать запись и удаление</option>
+						<option value="open">Без спроса - без диалогов (всё в лог Gen Agent)</option>
+					</select>
 				</label>
 
 				<label className="field">

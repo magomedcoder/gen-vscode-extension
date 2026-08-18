@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { formatMiniDiff } from '../diff';
 import { applySearchReplace } from '../patch';
 import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asObjectArray, asString} from '../types';
@@ -77,6 +78,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			uri: vscode.Uri;
 			relative: string;
 			range: vscode.Range;
+			original: string;
 			text: string;
 			count: number;
 		}> = [];
@@ -92,9 +94,10 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 
 			const resolved = await resolveWorkspacePath(item.path);
 			const doc = await vscode.workspace.openTextDocument(resolved.uri);
+			const original = doc.getText();
 			let next: { text: string; count: number };
 			try {
-				next = applySearchReplace(doc.getText(), item.old_string, item.new_string, item.replace_all);
+				next = applySearchReplace(original, item.old_string, item.new_string, item.replace_all);
 			} catch (err) {
 				return {
 					ok: false,
@@ -113,6 +116,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 				uri: doc.uri,
 				relative: resolved.relative,
 				range: new vscode.Range(0, 0, last, doc.lineAt(last).text.length),
+				original,
 				text: next.text,
 				count: next.count,
 			});
@@ -122,7 +126,10 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			const summary = prepared.map((p) => `${p.relative} (${p.count} замен)`).join('\n');
 			const denied = await confirmOrSkip(ctx, `Применить ${prepared.length} правок атомарно?`, summary);
 			if (denied) {
-				return denied;
+				return { 
+					...denied,
+					path: prepared.map((p) => p.relative).join(', ')
+				};
 			}
 		}
 
@@ -143,8 +150,14 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			await ctx.revealFile(prepared[0].uri);
 		}
 
+		for (const item of prepared) {
+			ctx.trackMutation?.(item.uri);
+		}
+
 		return {
 			ok: true,
+			path: prepared.map((p) => p.relative).join(', '),
+			diff: prepared.map((p) => `--- ${p.relative}\n${formatMiniDiff(p.original, p.text)}`).join('\n\n'),
 			content: `Применено правок: ${prepared.length}\n${prepared.map((p) => `${p.relative}: ${p.count}`).join('\n')}`,
 		};
 	},

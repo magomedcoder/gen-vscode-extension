@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { formatMiniDiff } from '../diff';
 import { applySearchReplace } from '../patch';
 import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
@@ -41,15 +42,15 @@ export const applyPatchTool: ToolDefinition = {
 			};
 		}
 
-		const raw = await vscode.workspace.fs.readFile(resolved.uri);
-		if (raw.byteLength > AGENT_LIMITS.maxReadBytes) {
+		const doc = await vscode.workspace.openTextDocument(resolved.uri);
+		if (new TextEncoder().encode(doc.getText()).byteLength > AGENT_LIMITS.maxReadBytes) {
 			return {
 				ok: false,
 				content: `Файл слишком большой для patch: ${resolved.relative}`
 			};
 		}
 
-		const original = new TextDecoder('utf8', { fatal: false }).decode(raw);
+		const original = doc.getText();
 		let next: {
 			text: string;
 			count: number
@@ -79,17 +80,33 @@ export const applyPatchTool: ToolDefinition = {
 		if (shouldConfirmWrites()) {
 			const denied = await confirmOrSkip(ctx, `Применить правку к ${resolved.relative}? (${next.count} замен)`, asString(args, 'new_string'));
 			if (denied) {
-				return denied;
+				return { 
+					...denied,
+					path: resolved.relative
+				};
 			}
 		}
 
-		await vscode.workspace.fs.writeFile(resolved.uri, encoded);
+		const last = Math.max(0, doc.lineCount - 1);
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(doc.uri, new vscode.Range(0, 0, last, doc.lineAt(last).text.length), next.text);
+		const applied = await vscode.workspace.applyEdit(edit);
+		if (!applied) {
+			return {
+				ok: false,
+				content: `Не удалось применить правку: ${resolved.relative}`
+			};
+		}
+
+		ctx.trackMutation?.(doc.uri);
 		if (ctx.revealFile) {
-			await ctx.revealFile(resolved.uri);
+			await ctx.revealFile(doc.uri);
 		}
 
 		return {
 			ok: true,
+			path: resolved.relative,
+			diff: formatMiniDiff(original, next.text),
 			content: `Правка применена: ${resolved.relative} (${next.count} замен)`,
 		};
 	},

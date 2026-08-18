@@ -12,14 +12,12 @@ export function buildChatCompletionMessages(
 	latestUserText: string,
 	editorContext?: string,
 ): ChatMessage[] {
-	const prior = messages.filter((m): m is ChatUiMessage & {
-			role: 'user' | 'assistant'
-		} => (m.role === 'user' || m.role === 'assistant') && !m.toolCalls?.length)
-		.slice(0, -1)
-		.map((m) => ({
-			role: m.role,
-			content: m.content,
-		}));
+	const prior = messages.filter((m): m is ChatUiMessage & { role: 'user' | 'assistant' } => (m.role === 'user' || m.role === 'assistant') && !m.toolCalls?.length && Boolean(m.content))
+	.slice(0, -1)
+	.map((m) => ({
+		role: m.role,
+		content: m.content,
+	}));
 
 	const userContent = editorContext ? `${latestUserText}\n\n---\nКонтекст редактора:\n${editorContext}` : latestUserText;
 
