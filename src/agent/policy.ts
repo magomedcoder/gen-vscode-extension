@@ -9,6 +9,9 @@ export const AGENT_LIMITS = {
 	maxConfirmPreview: 800,
 	maxDiagnostics: 50,
 	maxGitOutput: 8_000,
+	maxCommandOutput: 16_000,
+	defaultCommandTimeoutMs: 60_000,
+	maxCommandTimeoutMs: 300_000,
 	maxWorkspaceEdits: 20,
 	maxSelectionChars: 2_000,
 } as const;

@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { applySearchReplace, PatchError } from '../agent/patch';
 import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy';
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit';
+import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy';
 import { formatMiniDiff, pathFromToolArguments } from '../agent/diff';
 import { redactSecrets } from '../agent/secrets';
 import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types';
@@ -145,6 +146,37 @@ suite('tool argument JSON', () => {
 				&& err.message.includes('a.go')
 				&& err.message.includes('не записан'),
 		);
+	});
+});
+
+suite('commandPolicy', () => {
+	test('разрешает npm test', () => {
+		assert.doesNotThrow(() => assertAllowedCommand('npm', ['test']));
+	});
+
+	test('запрещает npm install', () => {
+		assert.throws(
+			() => assertAllowedCommand('npm', ['install']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+	});
+
+	test('запрещает go run', () => {
+		assert.throws(
+			() => assertAllowedCommand('go', ['run', '.']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+	});
+
+	test('запрещает node -e', () => {
+		assert.throws(
+			() => assertAllowedCommand('node', ['-e', '1']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+	});
+
+	test('formatCommandLine экранирует пробелы', () => {
+		assert.strictEqual(formatCommandLine('npm', ['run', 'my script']), 'npm run "my script"');
 	});
 });
 

@@ -15,7 +15,7 @@
 ## Чат
 
 - **Ask** - только текстовые ответы (выделение в редакторе уходит в контекст)
-- **Agent** - tool-calling: чтение/правка файлов, навигация, git status, диагностики
+- **Agent** - tool-calling: чтение/правка файлов, навигация, git status, диагностики, запуск тестов и команд
 
 Уровень доступа агента:
 
@@ -49,6 +49,8 @@
 | `reveal_line`          | Перейти к строке                                 | нет                          |
 | `git_status`           | `git status` + `diff --stat` (без commit/push)   | нет                          |
 | `get_diagnostics`      | Ошибки TS/ESLint и т.п.                          | нет                          |
+| `run_command`          | Разрешённая команда в cwd workspace              | всегда                       |
+| `run_tests`            | Тесты проекта (npm/go/cargo/pytest)              | всегда                       |
 
 ---
 

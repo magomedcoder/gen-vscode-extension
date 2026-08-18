@@ -100,6 +100,25 @@ export async function relativeFromUri(uri: vscode.Uri): Promise<string> {
 	}
 }
 
+export async function resolveCommandCwd(input: string): Promise<ResolvedWorkspacePath & { cwd: string }> {
+	const resolved = await resolveWorkspacePath(input);
+	try {
+		const stat = await vscode.workspace.fs.stat(resolved.uri);
+		if (stat.type & vscode.FileType.Directory) {
+			return {
+				...resolved,
+				cwd: resolved.fsPath
+			};
+		}
+	} catch {}
+
+	return {
+		...resolved,
+		cwd: path.dirname(resolved.fsPath),
+		relative: path.posix.dirname(resolved.relative) || '.',
+	};
+}
+
 export function throwIfAborted(signal?: AbortSignal): void {
 	if (signal?.aborted) {
 		const err = new Error('Операция отменена');

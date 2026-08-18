@@ -58,4 +58,8 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 	abortTurn();
 }
 
+export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
+	return confirmOrSkip(ctx, title, detail);
+}
+
 export { shouldConfirmDeletes, shouldConfirmWrites };

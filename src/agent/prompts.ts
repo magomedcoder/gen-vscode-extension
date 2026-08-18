@@ -22,10 +22,11 @@ export function buildAgentSystemPrompt(options?: {
 			'Если инструмент вернул ошибку про невалидный JSON - повтори меньшим куском через apply_patch, не повторяй тот же огромный write_file.',
 			'Навигация: open_file, reveal_line, close_file. Состояние редактора: get_active_editor, get_open_editors.',
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
+			'Тесты: run_tests (автоопределение npm/go/cargo/pytest) или run_command с allowlist (npm, go, cargo, pytest, make, ...). Команды всегда требуют подтверждения; в режиме «Чтение» запрещены.',
 			'Пути - относительно корня workspace. Не трогай node_modules, .git, ключи (.pem/.key) и файлы секретов (.env).',
 		);
 		if (authLevel === 'auto') {
-			lines.push('Сейчас режим «Чтение»: только чтение и навигация, без записи и удаления.');
+			lines.push('Сейчас режим «Чтение»: только чтение и навигация, без записи, удаления и shell-команд.');
 		} else if (authLevel === 'open') {
 			lines.push('Сейчас режим «Без спроса»: правки без диалога подтверждения. Будь осторожен.');
 		} else {

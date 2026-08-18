@@ -13,6 +13,8 @@ import { gitStatusTool } from './gitStatus';
 import { listDirTool } from './listDir';
 import { closeFileTool, openFileTool, revealLineTool } from './navigation';
 import { readFileTool } from './readFile';
+import { runCommandTool } from './runCommand';
+import { runTestsTool } from './runTests';
 import { searchFilesTool } from './searchFiles';
 import { writeFileTool } from './writeFile';
 
@@ -33,6 +35,8 @@ const TOOLS: ToolDefinition[] = [
 	revealLineTool,
 	gitStatusTool,
 	getDiagnosticsTool,
+	runCommandTool,
+	runTestsTool,
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
@@ -73,7 +77,11 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 			name,
 			status: result.denied ? 'denied' : result.ok ? 'ok' : 'error',
 			ms: Date.now() - started,
-			detail: typeof args.path === 'string' ? args.path : rawArguments,
+			detail: typeof args.command === 'string'
+				? `${args.command} ${Array.isArray(args.args) ? args.args.join(' ') : ''}`.trim()
+				: typeof args.path === 'string'
+					? args.path
+					: rawArguments,
 		});
 		return result;
 	} catch (err) {
