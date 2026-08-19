@@ -71,10 +71,6 @@ export function useGenBridge() {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
-	const closeSettings = useCallback(() => {
-		vscodeApi.postMessage({ type: 'closeSettings' });
-	}, []);
-
 	const saveSettings = useCallback((next: GenSettings, api?: { apiKey?: string }) => {
 		setSettingsStatus('Сохранение...');
 		vscodeApi.postMessage({
@@ -118,7 +114,6 @@ export function useGenBridge() {
 		models,
 		modelsStatus,
 		modelsLoading,
-		closeSettings,
 		saveSettings,
 		loadModels,
 		openLogsFolder,

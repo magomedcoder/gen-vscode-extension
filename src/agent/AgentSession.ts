@@ -179,7 +179,10 @@ export class AgentSession {
 
 			const toolCalls = result.toolCalls ?? [];
 			const content = (result.content || streamed).trim();
-			params.ui.update(assistantId, { content });
+			params.ui.update(assistantId, {
+				content,
+				usage: result.usage,
+			});
 
 			if (toolCalls.length === 0) {
 				if (!content) {

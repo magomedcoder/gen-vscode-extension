@@ -3,6 +3,7 @@ import { applyReplacement } from '../apply/applyEdit';
 import { getSettings } from '../config/settings';
 import type { CodeFragment } from '../context/selection';
 import { HttpLlmClient } from '../llm/client';
+import { formatTokenCount, type TokenUsage } from '../llm/usage';
 import { extractCommentedCode } from '../parse/extractCommentedCode';
 import { validateUnchangedCode } from '../parse/validateUnchangedCode';
 import { buildCommentMessages } from '../prompt/commentPrompt';
@@ -34,6 +35,7 @@ export async function runCommentPipeline(
 	});
 
 	let commented: string;
+	let usage: TokenUsage | undefined;
 
 	try {
 		commented = await vscode.window.withProgress(
@@ -50,6 +52,7 @@ export async function runCommentPipeline(
 					messages,
 					signal: controller.signal,
 				});
+				usage = result.usage;
 				return extractCommentedCode(result.content);
 			},
 		);
@@ -58,13 +61,15 @@ export async function runCommentPipeline(
 		return;
 	}
 
+	const usageHint = usage && usage.totalTokens > 0 ? ` ${formatTokenCount(usage.totalTokens)} ток.` : '';
+
 	if (!commented.trim()) {
 		void vscode.window.showErrorMessage('Не удалось извлечь код из ответа модели');
 		return;
 	}
 
 	if (commented === fragment.text) {
-		void vscode.window.showInformationMessage('Модель не добавила комментариев');
+		void vscode.window.showInformationMessage(`Модель не добавила комментариев${usageHint}`);
 		return;
 	}
 
@@ -101,7 +106,7 @@ export async function runCommentPipeline(
 
 	const ok = await applyReplacement(fragment.uri, fragment.range, commented);
 	if (ok) {
-		void vscode.window.showInformationMessage('Комментарии применены');
+		void vscode.window.showInformationMessage(`Комментарии применены${usageHint}`);
 	} else {
 		void vscode.window.showErrorMessage('Не удалось применить правку');
 	}

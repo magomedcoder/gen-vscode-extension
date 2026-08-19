@@ -2,7 +2,10 @@
   "name": "gen",
   "displayName": "gen",
   "description": "Gen",
-  "version": "0.0.1",
+  "publisher": "magomedcoder",
+  "icon": "media/logo.svg",
+  "license": "MIT",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -32,7 +35,7 @@
         {
           "id": "gen",
           "title": "Gen",
-          "icon": "media/gen-chat.svg"
+          "icon": "media/logo.svg"
         }
       ]
     },
@@ -42,7 +45,7 @@
           "type": "webview",
           "id": "gen.chatView",
           "name": "Чат",
-          "icon": "media/gen-chat.svg"
+          "icon": "media/logo.svg"
         }
       ]
     },

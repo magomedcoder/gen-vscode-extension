@@ -13,7 +13,7 @@ export const SETTINGS_PAGES: Array<{
 	id: SettingsPageId;
 	title: string;
 }> = [
-	{ id: 'connection', title: 'Подключение' },
+	{ id: 'connection', title: 'Основное' },
 	{ id: 'chat', title: 'Чат и агент' },
 	{ id: 'request', title: 'Запросы' },
 	{ id: 'comments', title: 'Комментарии' },

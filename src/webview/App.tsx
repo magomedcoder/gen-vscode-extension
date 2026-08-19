@@ -14,7 +14,6 @@ export function App() {
 		models,
 		modelsStatus,
 		modelsLoading,
-		closeSettings,
 		saveSettings,
 		loadModels,
 		openLogsFolder,
@@ -29,7 +28,6 @@ export function App() {
 				models={models}
 				modelsStatus={modelsStatus}
 				modelsLoading={modelsLoading}
-				onBack={closeSettings}
 				onSave={saveSettings}
 				onLoadModels={loadModels}
 				onOpenLogsFolder={openLogsFolder}
@@ -39,7 +37,7 @@ export function App() {
 
 	return (
 		<div className="app">
-			<ChatHeader mode={chat.mode} busy={chat.busy} />
+			<ChatHeader mode={chat.mode} busy={chat.busy} usage={chat.usage} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			<Composer busy={chat.busy} />
 		</div>

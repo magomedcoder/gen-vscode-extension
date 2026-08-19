@@ -2,6 +2,7 @@ import { getApiKey, buildAuthHeaders } from '../config/apiKey';
 import { getSettings, type GenSettings } from '../config/settings';
 import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
 import { logLlm } from './log';
+import { parseUsage } from './usage';
 import type {
 	ChatMessage,
 	CompleteParams,
@@ -30,6 +31,7 @@ interface ChatCompletionsResponse {
 	error?: {
 		message?: string;
 	};
+	usage?: unknown;
 }
 
 interface ModelsListResponse {
@@ -113,6 +115,7 @@ interface StreamAccum {
 	content: string;
 	finishReason?: string;
 	error?: string;
+	usage?: CompleteResult['usage'];
 	calls: Array<{
 		id: string;
 		name: string;
@@ -121,6 +124,11 @@ interface StreamAccum {
 }
 
 function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onDelta?: (chunk: string) => void): void {
+	const usage = parseUsage(parsed.usage);
+	if (usage) {
+		acc.usage = usage;
+	}
+
 	if (parsed.error?.message) {
 		acc.error = parsed.error.message;
 		return;
@@ -218,6 +226,7 @@ function accumToResult(acc: StreamAccum): CompleteResult {
 		content: acc.content,
 		toolCalls,
 		finishReason: acc.finishReason,
+		usage: acc.usage,
 	};
 }
 
@@ -259,7 +268,17 @@ export class HttpLlmClient implements LlmClient {
 			}
 
 			if (stream) {
-				return this.requestStream(body, params.signal, settings, onDelta);
+				body.stream_options = { include_usage: true };
+				try {
+					return await this.requestStream(body, params.signal, settings, onDelta);
+				} catch (err) {
+					if (!(err instanceof LlmHttpError) || err.status !== 400) {
+						throw err;
+					}
+
+					delete body.stream_options;
+					return this.requestStream(body, params.signal, settings, onDelta);
+				}
 			}
 
 			const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
@@ -292,6 +311,7 @@ export class HttpLlmClient implements LlmClient {
 				content: text,
 				toolCalls,
 				finishReason: choice?.finish_reason,
+				usage: parseUsage(data.usage),
 			};
 		};
 
@@ -519,6 +539,7 @@ export class HttpLlmClient implements LlmClient {
 						content: text,
 						toolCalls,
 						finishReason: choice?.finish_reason,
+						usage: parseUsage(data.usage),
 					},
 					status: response.status,
 				};

@@ -1,3 +1,7 @@
+import type { TokenUsage } from './usage';
+
+export type { TokenUsage };
+
 export interface ToolFunctionSchema {
 	name: string;
 	description: string;
@@ -49,6 +53,7 @@ export interface CompleteResult {
 	toolCalls?: LlmToolCall[];
 	finishReason?: string;
 	toolsFallback?: boolean; // если true запрос был повторен без инструментов, потому что сервер их отклонил
+	usage?: TokenUsage;
 }
 
 export interface ListModelsParams {

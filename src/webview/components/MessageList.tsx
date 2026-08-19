@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { ChatUiMessage } from '../../chat/protocol';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownMessage } from './MarkdownMessage';
+import { TokenMeter } from './TokenMeter';
 
 interface MessageListProps {
 	messages: ChatUiMessage[];
@@ -56,6 +57,7 @@ export function MessageList({ messages, busy }: MessageListProps) {
 								? (<span className="msg__typing">гоняю байты...</span>) 
 								: msg.role === 'assistant' ? null : (msg.content)}
 						{msg.toolCalls?.length ? (<div className="tool-calls">{msg.toolCalls.map((call) => (<ToolCallCard key={call.id} call={call} />))}</div>) : null}
+						{msg.role === 'assistant' ? <TokenMeter usage={msg.usage} /> : null}
 					</div>
 				))
 			)}

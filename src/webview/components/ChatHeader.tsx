@@ -1,12 +1,15 @@
 import type { ChatMode } from '../../chat/protocol';
+import type { TokenUsage } from '../../llm/usage';
 import { vscodeApi } from '../vscodeApi';
+import { TokenMeter } from './TokenMeter';
 
 interface ChatHeaderProps {
 	mode: ChatMode;
 	busy: boolean;
+	usage?: TokenUsage;
 }
 
-export function ChatHeader({ mode, busy }: ChatHeaderProps) {
+export function ChatHeader({ mode, busy, usage }: ChatHeaderProps) {
 	const setMode = (next: ChatMode) => {
 		if (next === mode || busy) {
 			return;
@@ -42,6 +45,7 @@ export function ChatHeader({ mode, busy }: ChatHeaderProps) {
 				</div>
 			</div>
 			<div className="header__actions">
+				<TokenMeter usage={usage} compact />
 				<button
 					className="btn btn--secondary"
 					type="button"

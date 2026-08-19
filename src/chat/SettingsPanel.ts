@@ -30,7 +30,7 @@ export class SettingsPanel {
 			retainContextWhenHidden: true,
 			localResourceRoots: [assetsRoot],
 		});
-		panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'gen-chat.svg');
+		panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'logo.svg');
 		SettingsPanel.current = new SettingsPanel(panel, assetsRoot);
 	}
 

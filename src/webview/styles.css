@@ -191,7 +191,20 @@ body {
 
 .header__actions {
 	display: flex;
+	align-items: center;
 	gap: 6px;
+}
+
+.token-meter {
+	font-size: 11px;
+	opacity: 0.75;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.token-meter--msg {
+	margin-top: 6px;
+	opacity: 0.6;
 }
 
 .messages {

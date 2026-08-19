@@ -1,4 +1,5 @@
 import type { ChatMode, GenSettings } from '../config/types';
+import type { TokenUsage } from '../llm/usage';
 
 export type { ChatMode };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
@@ -24,12 +25,14 @@ export interface ChatUiMessage {
 	toolName?: string;
 	toolArgs?: string;
 	toolStatus?: ToolCallStatus;
+	usage?: TokenUsage;
 }
 
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
 	mode: ChatMode;
+	usage?: TokenUsage;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }

@@ -1,5 +1,6 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { GenSettings } from '../../config/types';
+import { DEFAULT_SETTINGS } from '../../config/types';
 import { ChatAgentPage } from './settings/ChatAgentPage';
 import { CommentsPage } from './settings/CommentsPage';
 import { ConnectionPage } from './settings/ConnectionPage';
@@ -15,10 +16,7 @@ interface SettingsScreenProps {
 	models: string[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
-	onBack: () => void;
-	onSave: (settings: GenSettings, api?: {
-		apiKey?: string
-	}) => void;
+	onSave: (settings: GenSettings, api?: { apiKey?: string }) => void;
 	onLoadModels: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
 }
@@ -30,7 +28,6 @@ export function SettingsScreen({
 	models,
 	modelsStatus,
 	modelsLoading,
-	onBack,
 	onSave,
 	onLoadModels,
 	onOpenLogsFolder,
@@ -44,6 +41,8 @@ export function SettingsScreen({
 		setApiKeyDraft('');
 		if (settings.baseUrl.trim()) {
 			onLoadModels(settings.baseUrl);
+		} else {
+			onLoadModels('');
 		}
 	}, [settings, apiKeySet, onLoadModels]);
 
@@ -52,7 +51,7 @@ export function SettingsScreen({
 			return;
 		}
 		setDraft((prev) => {
-			if (prev.model.trim()) {
+			if (!prev.baseUrl.trim() || prev.model.trim()) {
 				return prev;
 			}
 
@@ -65,6 +64,17 @@ export function SettingsScreen({
 
 	const setField = <K extends keyof GenSettings>(key: K, value: GenSettings[K]) => {
 		setDraft((prev) => ({ ...prev, [key]: value }));
+	};
+
+	const onReset = () => {
+		const next: GenSettings = {
+			...DEFAULT_SETTINGS,
+			deniedPaths: [...DEFAULT_SETTINGS.deniedPaths],
+			secretPatterns: [...DEFAULT_SETTINGS.secretPatterns],
+		};
+		setDraft(next);
+		setApiKeyDraft('');
+		onSave(next);
 	};
 
 	const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
@@ -83,9 +93,7 @@ export function SettingsScreen({
 					<span className="header__title">Настройки</span>
 					<span className="header__subtitle">{current.title}</span>
 				</div>
-				<button className="btn btn--secondary" type="button" onClick={onBack}>
-					К чату
-				</button>
+				<button className="btn btn--secondary" type="button" onClick={onReset}>Сбросить по умолчанию</button>
 			</header>
 
 			<form className="settings-layout" onSubmit={onSubmit}>

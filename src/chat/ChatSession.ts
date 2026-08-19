@@ -9,6 +9,7 @@ import type { LlmClient } from '../llm/types';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
 import type { ChatUiMessage, ChatViewState } from './protocol';
+import { sumUsage } from '../llm/usage';
 
 const STORAGE_KEY = 'gen.chat.messages';
 const MAX_STORED = 80;
@@ -48,6 +49,7 @@ export class ChatSession {
 	private inflight?: AbortController;
 	private readonly listeners = new Set<ChatSessionListener>();
 	private readonly agent: AgentSession;
+	private clearSeq = 0;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -62,6 +64,7 @@ export class ChatSession {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
 			mode: getSettings().chatMode,
+			usage: sumUsage(this.messages),
 		};
 	}
 
@@ -96,7 +99,7 @@ export class ChatSession {
 			...msg,
 			...patch
 		} : msg));
-		if (patch.toolCalls) {
+		if (patch.toolCalls || patch.usage) {
 			this.persist();
 		}
 
@@ -104,6 +107,8 @@ export class ChatSession {
 	}
 
 	clear(): void {
+		// Версия очистки нужна, чтобы незавершенный send() после отмены не дописал сообщения обратно в историю и не перезаписал storage
+		this.clearSeq += 1;
 		this.inflight?.abort();
 		this.inflight = undefined;
 		this.messages = [];
@@ -128,6 +133,8 @@ export class ChatSession {
 		if (!trimmed || this.inflight) {
 			return;
 		}
+
+		const clearSeqAtStart = this.clearSeq;
 
 		this.append({
 			id: messageId(),
@@ -165,8 +172,18 @@ export class ChatSession {
 					plan,
 					checkpoint,
 					ui: {
-						append: (message) => this.append(message),
-						update: (id, patch) => this.update(id, patch),
+						append: (message) => {
+							if (this.clearSeq !== clearSeqAtStart) {
+								return;
+							}
+							this.append(message);
+						},
+						update: (id, patch) => {
+							if (this.clearSeq !== clearSeqAtStart) {
+								return;
+							}
+							this.update(id, patch);
+						},
 					},
 				});
 			} else {
@@ -186,17 +203,26 @@ export class ChatSession {
 					),
 					signal: controller.signal,
 					onDelta: (chunk) => {
+						if (this.clearSeq !== clearSeqAtStart) {
+							return;
+						}
 						streamed += chunk;
 						this.update(assistantId, {
 							content: streamed
 						});
 					},
 				});
-				this.update(assistantId, {
-					content: result.content.trim() || streamed
-				});
+				if (this.clearSeq === clearSeqAtStart) {
+					this.update(assistantId, {
+						content: result.content.trim() || streamed,
+						usage: result.usage,
+					});
+				}
 			}
 		} catch (err) {
+			if (this.clearSeq !== clearSeqAtStart) {
+				return;
+			}
 			const cancelled = isAbortError(err) || controller.signal.aborted;
 			this.append({
 				id: messageId(),
@@ -207,8 +233,14 @@ export class ChatSession {
 			if (this.inflight === controller) {
 				this.inflight = undefined;
 			}
-			this.persist();
-			this.emit();
+			if (this.clearSeq === clearSeqAtStart) {
+				this.persist();
+				this.emit();
+			}
+		}
+
+		if (this.clearSeq !== clearSeqAtStart) {
+			return;
 		}
 
 		if (checkpoint.size > 0) {
