@@ -33,9 +33,8 @@ export interface ChatViewState {
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
-	| { type: 'settings'; settings: GenSettings }
-	| { type: 'showScreen'; screen: PanelScreen }
-	| { type: 'settingsSaved'; settings: GenSettings }
+	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean }
+	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean }
 	| { type: 'settingsError'; message: string }
 	| { type: 'models'; models: string[]; requestId: number }
 	| { type: 'modelsError'; message: string; requestId: number };
@@ -46,6 +45,9 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'clear' }
 	| { type: 'setChatMode'; mode: ChatMode }
 	| { type: 'openExternal'; url: string }
+	| { type: 'openSettings' }
+	| { type: 'closeSettings' }
 	| { type: 'loadSettings' }
-	| { type: 'saveSettings'; settings: GenSettings }
-	| { type: 'loadModels'; baseUrl: string; requestId: number };
+	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
+	| { type: 'loadModels'; baseUrl: string; requestId: number }
+	| { type: 'openLogsFolder' };

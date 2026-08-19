@@ -4,10 +4,9 @@ import { vscodeApi } from '../vscodeApi';
 interface ChatHeaderProps {
 	mode: ChatMode;
 	busy: boolean;
-	onOpenSettings: () => void;
 }
 
-export function ChatHeader({ mode, busy, onOpenSettings }: ChatHeaderProps) {
+export function ChatHeader({ mode, busy }: ChatHeaderProps) {
 	const setMode = (next: ChatMode) => {
 		if (next === mode || busy) {
 			return;
@@ -43,7 +42,13 @@ export function ChatHeader({ mode, busy, onOpenSettings }: ChatHeaderProps) {
 				</div>
 			</div>
 			<div className="header__actions">
-				<button className="btn btn--secondary" type="button" onClick={onOpenSettings}>Настройки</button>
+				<button
+					className="btn btn--secondary"
+					type="button"
+					onClick={() => vscodeApi.postMessage({ type: 'openSettings' })}
+				>
+					Настройки
+				</button>
 				<button
 					className="btn btn--secondary"
 					type="button"

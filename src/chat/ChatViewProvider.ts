@@ -1,27 +1,24 @@
 import * as vscode from 'vscode';
-import { getSettings, updateSettings } from '../config/settings';
-import { HttpLlmClient } from '../llm/client';
 import { createNonce, renderChatHtml } from './chatHtml';
-import type { FromWebviewMessage, PanelScreen, ToWebviewMessage } from './protocol';
+import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
-
-export const CHAT_VIEW_ID = 'gen.chatView';
-
-function isAbortError(err: unknown): boolean {
-	return err instanceof Error && err.name === 'AbortError';
-}
+import { HttpLlmClient } from '../llm/client';
+import { onSettingsChanged } from '../config/settings';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private readonly session: ChatSession;
-	private readonly client: HttpLlmClient;
-	private modelsAbort?: AbortController;
 
 	constructor(private readonly context: vscode.ExtensionContext) {
-		this.client = new HttpLlmClient();
-		this.session = new ChatSession(context, this.client);
+		this.session = new ChatSession(context, new HttpLlmClient());
 		this.session.subscribe((state) => {
 			this.post({ type: 'state', state });
+		});
+		onSettingsChanged(() => {
+			this.post({
+				type: 'state',
+				state: this.session.getState(),
+			});
 		});
 	}
 
@@ -39,6 +36,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			nonce: createNonce(),
 			scriptUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.js')),
 			styleUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.css')),
+			title: 'Gen Чат',
+			screen: 'chat',
 		});
 
 		const messageSub = webviewView.webview.onDidReceiveMessage((msg: FromWebviewMessage) => {
@@ -47,16 +46,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 		webviewView.onDidDispose(() => {
 			messageSub.dispose();
-			this.modelsAbort?.abort();
 			if (this.view === webviewView) {
 				this.view = undefined;
 			}
 		});
-	}
-
-
-	showScreen(screen: PanelScreen): void {
-		this.post({ type: 'showScreen', screen });
 	}
 
 	private post(message: ToWebviewMessage): void {
@@ -70,10 +63,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					type: 'state',
 					state: this.session.getState(),
 				});
-				this.post({
-					type: 'settings',
-					settings: getSettings(),
-				});
 				return;
 			case 'clear':
 				this.session.clear();
@@ -86,10 +75,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				return;
 			case 'setChatMode':
 				await this.session.setMode(msg.mode);
-				this.post({
-					type: 'settings',
-					settings: getSettings(),
-				});
+				return;
+			case 'openSettings':
+				await vscode.commands.executeCommand('gen.openSettings');
 				return;
 			case 'openExternal': {
 				try {
@@ -99,66 +87,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					}
 				} catch {}
 				return;
-			}
-			case 'loadSettings':
-				this.post({
-					type: 'settings',
-					settings: getSettings()
-				});
-				return;
-			case 'loadModels':
-				await this.handleLoadModels(msg.baseUrl, msg.requestId);
-				return;
-			case 'saveSettings':
-				try {
-					const saved = await updateSettings(msg.settings);
-					this.post({
-						type: 'settingsSaved',
-						settings: saved,
-					});
-					this.post({
-						type: 'state',
-						state: this.session.getState(),
-					});
-				} catch (err) {
-					this.post({
-						type: 'settingsError',
-						message: err instanceof Error ? err.message : String(err),
-					});
-				}
-				return;
-		}
-	}
-
-	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {
-		this.modelsAbort?.abort();
-		const controller = new AbortController();
-		this.modelsAbort = controller;
-
-		try {
-			const models = await this.client.listModels({
-				baseUrl,
-				signal: controller.signal,
-			});
-			if (controller.signal.aborted) {
-				return;
-			}
-			this.post({
-				type: 'models',
-				models, requestId
-			});
-		} catch (err) {
-			if (isAbortError(err) || controller.signal.aborted) {
-				return;
-			}
-			this.post({
-				type: 'modelsError',
-				message: err instanceof Error ? err.message : String(err),
-				requestId,
-			});
-		} finally {
-			if (this.modelsAbort === controller) {
-				this.modelsAbort = undefined;
 			}
 		}
 	}

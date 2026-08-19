@@ -1,4 +1,7 @@
-import { getSettings } from '../config/settings';
+import { getApiKey, buildAuthHeaders } from '../config/apiKey';
+import { getSettings, type GenSettings } from '../config/settings';
+import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
+import { logLlm } from './log';
 import type {
 	ChatMessage,
 	CompleteParams,
@@ -42,14 +45,13 @@ interface ModelsListResponse {
 	};
 }
 
-function isAbortError(err: unknown): boolean {
-	return ((err instanceof Error && err.name === 'AbortError') || (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError'));
-}
+const MAX_ATTEMPTS = 4;
 
-function toAbortError(cause?: unknown): Error {
-	const err = new Error('Операция отменена', { cause });
-	err.name = 'AbortError';
-	return err;
+export interface HttpLlmClientDeps {
+	getConfig?: typeof getSettings;
+	readApiKey?: typeof getApiKey;
+	fetch?: typeof fetch;
+	sleep?: (ms: number) => Promise<void>;
 }
 
 function looksLikeTruncatedToolArgs(err: unknown): boolean {
@@ -62,7 +64,7 @@ function toTruncatedToolArgsError(err: unknown): Error | undefined {
 		return undefined;
 	}
 
-	return new Error('Модель вернула битый JSON в tool-call (часто обрезка max_tokens). Увеличь max_tokens в настройках и продолжи файл через apply_patch небольшими кусками.');
+	return new Error('Модель вернула битый JSON в tool-call (часто обрезка max_tokens). Увеличь max_tokens в настройках и продолжи файл через apply_patch небольшими кусками.', { cause: err instanceof Error ? err : undefined });
 }
 
 function looksLikeToolsUnsupported(err: unknown): boolean {
@@ -133,18 +135,18 @@ function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onD
 		acc.finishReason = choice.finish_reason;
 	}
 
-	const delta = (choice as { 
-		delta?: { 
-			content?: string | null; 
-			tool_calls?: Array<{ 
-				index?: number; 
-				id?: string; 
-				function?: { 
-					name?: string; 
-					arguments?: string 
-				} 
-			}> 
-		} 
+	const delta = (choice as {
+		delta?: {
+			content?: string | null;
+			tool_calls?: Array<{
+				index?: number;
+				id?: string;
+				function?: {
+					name?: string;
+					arguments?: string
+				}
+			}>
+		}
 	}).delta ?? choice.message;
 	const piece = delta?.content ?? choice.text;
 	if (typeof piece === 'string' && piece) {
@@ -152,17 +154,17 @@ function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onD
 		onDelta?.(piece);
 	}
 
-	const toolDeltas = (choice as { 
-		delta?: { 
-			tool_calls?: Array<{ 
-				index?: number; 
-				id?: string; 
-				function?: { 
-					name?: string; 
-					arguments?: string 
-				} 
-			}> 
-		} 
+	const toolDeltas = (choice as {
+		delta?: {
+			tool_calls?: Array<{
+				index?: number;
+				id?: string;
+				function?: {
+					name?: string;
+					arguments?: string
+				}
+			}>
+		}
 	}).delta?.tool_calls ?? choice.message?.tool_calls;
 	if (!toolDeltas) {
 		return;
@@ -171,10 +173,10 @@ function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onD
 	for (const [fallbackIndex, tc] of toolDeltas.entries()) {
 		const index = typeof (tc as { index?: number }).index === 'number' ? (tc as { index: number }).index : fallbackIndex;
 		if (!acc.calls[index]) {
-			acc.calls[index] = { 
-				id: '', 
-				name: '', 
-				arguments: '' 
+			acc.calls[index] = {
+				id: '',
+				name: '',
+				arguments: '',
 			};
 		}
 
@@ -202,9 +204,9 @@ function accumToResult(acc: StreamAccum): CompleteResult {
 		? acc.calls.filter((c) => c.name).map((c, i) => ({
 			id: c.id || `call_${i + 1}`,
 			type: 'function' as const,
-			function: { 
-				name: c.name, 
-				arguments: c.arguments || '{}' 
+			function: {
+				name: c.name,
+				arguments: c.arguments || '{}',
 			},
 		}))
 		: undefined;
@@ -220,7 +222,17 @@ function accumToResult(acc: StreamAccum): CompleteResult {
 }
 
 export class HttpLlmClient implements LlmClient {
-	constructor(private readonly getConfig = getSettings) {}
+	private readonly getConfig: typeof getSettings;
+	private readonly readApiKey: typeof getApiKey;
+	private readonly fetchFn: typeof fetch;
+	private readonly sleep: (ms: number) => Promise<void>;
+
+	constructor(deps: HttpLlmClientDeps = {}) {
+		this.getConfig = deps.getConfig ?? getSettings;
+		this.readApiKey = deps.readApiKey ?? getApiKey;
+		this.fetchFn = deps.fetch ?? fetch.bind(globalThis);
+		this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+	}
 
 	async complete(params: CompleteParams): Promise<CompleteResult> {
 		const settings = this.getConfig();
@@ -247,20 +259,17 @@ export class HttpLlmClient implements LlmClient {
 			}
 
 			if (stream) {
-				return this.requestStream(body, params.signal, settings.requestTimeoutMs, settings.baseUrl, onDelta);
+				return this.requestStream(body, params.signal, settings, onDelta);
 			}
 
 			const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify(body),
-					signal: params.signal,
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
 				},
-				settings.requestTimeoutMs,
-				settings.baseUrl,
-			);
+				body: JSON.stringify(body),
+				signal: params.signal,
+			}, settings);
 
 			if (data.error?.message) {
 				throw new Error(data.error.message);
@@ -290,10 +299,14 @@ export class HttpLlmClient implements LlmClient {
 			try {
 				return await attempt(withTools, true);
 			} catch (err) {
+				if (isTimeoutError(err)) {
+					throw err;
+				}
+
 				if (isAbortError(err) || params.signal?.aborted) {
 					throw toAbortError(err);
 				}
-				
+
 				const truncated = toTruncatedToolArgsError(err);
 				if (truncated) {
 					throw truncated;
@@ -326,7 +339,7 @@ export class HttpLlmClient implements LlmClient {
 			const fallback = await run(false);
 			return {
 				...fallback,
-				toolsFallback: true
+				toolsFallback: true,
 			};
 		}
 	}
@@ -339,12 +352,13 @@ export class HttpLlmClient implements LlmClient {
 		}
 
 		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
-				method: 'GET',
-				signal: params.signal,
-			},
-			Math.min(settings.requestTimeoutMs, 30_000),
-			baseUrl,
-		);
+			method: 'GET',
+			signal: params.signal,
+		}, { 
+			...settings, 
+			baseUrl, 
+			requestTimeoutMs: Math.min(settings.requestTimeoutMs, 30_000) 
+		});
 
 		if (data.error?.message) {
 			throw new Error(data.error.message);
@@ -374,16 +388,85 @@ export class HttpLlmClient implements LlmClient {
 		return [...ids].sort((a, b) => a.localeCompare(b));
 	}
 
+	private async authHeaders(settings: GenSettings): Promise<Record<string, string>> {
+		const key = await this.readApiKey();
+		return buildAuthHeaders(key, settings.authHeader, settings.authScheme);
+	}
+
+	private async withRetry<T>(
+		method: string,
+		url: string,
+		run: () => Promise<{ 
+			result: T; 
+			status: number 
+		}>,
+	): Promise<T> {
+		let last: unknown;
+		for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+			const started = Date.now();
+			try {
+				const { result, status } = await run();
+				logLlm({
+					method,
+					url,
+					status,
+					ms: Date.now() - started,
+					ok: true,
+					attempt,
+				});
+				return result;
+			} catch (err) {
+				last = err;
+				const status = err instanceof LlmHttpError ? err.status : undefined;
+				logLlm({
+					method,
+					url,
+					status,
+					ms: Date.now() - started,
+					ok: false,
+					error: err instanceof Error ? err.message : String(err),
+					attempt,
+				});
+				if (attempt >= MAX_ATTEMPTS || !isRetryableError(err)) {
+					throw err;
+				}
+
+				await this.sleep(retryDelayMs(attempt - 1));
+			}
+		}
+
+		throw last;
+	}
+
 	private async requestStream(
 		body: Record<string, unknown>,
 		signal: AbortSignal | undefined,
-		timeoutMs: number,
-		baseUrl: string,
+		settings: GenSettings,
 		onDelta?: (chunk: string) => void,
 	): Promise<CompleteResult> {
-		const url = new URL('/v1/chat/completions', baseUrl).toString();
+		const url = new URL('/v1/chat/completions', settings.baseUrl).toString();
+		const headers = {
+			'Content-Type': 'application/json',
+			...(await this.authHeaders(settings)),
+		};
+
+		return this.withRetry('POST', url, () => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta));
+	}
+
+	private async requestStreamOnce(
+		url: string,
+		body: Record<string, unknown>,
+		headers: Record<string, string>,
+		signal: AbortSignal | undefined,
+		timeoutMs: number,
+		onDelta?: (chunk: string) => void,
+	): Promise<{ result: CompleteResult; status: number }> {
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, timeoutMs);
 		const onAbort = () => controller.abort();
 		if (signal) {
 			if (signal.aborted) {
@@ -394,9 +477,9 @@ export class HttpLlmClient implements LlmClient {
 		}
 
 		try {
-			const response = await fetch(url, {
+			const response = await this.fetchFn(url, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers,
 				body: JSON.stringify(body),
 				signal: controller.signal,
 			});
@@ -410,12 +493,7 @@ export class HttpLlmClient implements LlmClient {
 					parsed = undefined;
 				}
 
-				const msg = (parsed as { 
-					error?: { 
-						message?: string 
-					} 
-				})?.error?.message ?? text.slice(0, 300) ?? response.statusText;
-				throw new Error(`Ошибка HTTP ${response.status}: ${msg}`);
+				throw new LlmHttpError(httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)), response.status);
 			}
 
 			if (ctype.includes('application/json') && !ctype.includes('event-stream')) {
@@ -436,10 +514,13 @@ export class HttpLlmClient implements LlmClient {
 					throw new Error('LLM-сервер вернул пустой ответ');
 				}
 
-				return { 
-					content: text, 
-					toolCalls, 
-					finishReason: choice?.finish_reason 
+				return {
+					result: {
+						content: text,
+						toolCalls,
+						finishReason: choice?.finish_reason,
+					},
+					status: response.status,
 				};
 			}
 
@@ -468,26 +549,35 @@ export class HttpLlmClient implements LlmClient {
 
 					const payload = trimmed.slice(5).trim();
 					if (payload === '[DONE]') {
-						return accumToResult(acc);
+						return {
+							result: accumToResult(acc),
+							status: response.status,
+						};
 					}
 
 					try {
 						applyStreamDelta(acc, JSON.parse(payload) as ChatCompletionsResponse, onDelta);
 					} catch {
-
 					}
 				}
 			}
-			return accumToResult(acc);
+			return {
+				result: accumToResult(acc),
+				status: response.status,
+			};
 		} catch (err) {
 			if (isAbortError(err) || controller.signal.aborted) {
+				if (timedOut && !signal?.aborted) {
+					throw toTimeoutError(timeoutMs, err);
+				}
+
 				throw toAbortError(err);
 			}
 
 			if (err instanceof Error) {
 				throw err;
 			}
-			
+
 			throw new Error(String(err));
 		} finally {
 			clearTimeout(timer);
@@ -495,24 +585,42 @@ export class HttpLlmClient implements LlmClient {
 		}
 	}
 
-	private async requestJson<T>(path: string, init: RequestInit, timeoutMs: number, baseUrl: string): Promise<T> {
-		const url = new URL(path, baseUrl).toString();
+	private async requestJson<T>(path: string, init: RequestInit, settings: GenSettings): Promise<T> {
+		const url = new URL(path, settings.baseUrl).toString();
+		const headers = {
+			...((init.headers as Record<string, string> | undefined) ?? {}),
+			...(await this.authHeaders(settings)),
+		};
+
+		return this.withRetry(init.method ?? 'GET', url, () => this.requestJsonOnce<T>(url, { ...init, headers }, init.signal ?? undefined, settings.requestTimeoutMs));
+	}
+
+	private async requestJsonOnce<T>(
+		url: string,
+		init: RequestInit,
+		signal: AbortSignal | undefined,
+		timeoutMs: number,
+	): Promise<{ result: T; status: number }> {
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, timeoutMs);
 
 		const onAbort = () => controller.abort();
-		if (init.signal) {
-			if (init.signal.aborted) {
+		if (signal) {
+			if (signal.aborted) {
 				controller.abort();
 			} else {
-				init.signal.addEventListener('abort', onAbort, {
-					once: true
+				signal.addEventListener('abort', onAbort, {
+					once: true,
 				});
 			}
 		}
 
 		try {
-			const response = await fetch(url, {
+			const response = await this.fetchFn(url, {
 				...init,
 				signal: controller.signal,
 			});
@@ -522,23 +630,25 @@ export class HttpLlmClient implements LlmClient {
 			if (text.trim()) {
 				try {
 					parsed = JSON.parse(text) as unknown;
-				} catch {
-					throw new Error(`Некорректный JSON от LLM-сервера (HTTP ${response.status}): ${text.slice(0, 200)}`);
+				} catch (cause) {
+					throw new Error(`Некорректный JSON от LLM-сервера (HTTP ${response.status}): ${text.slice(0, 200)}`, { cause: cause instanceof Error ? cause : undefined });
 				}
 			}
 
 			if (!response.ok) {
-				const msg = (parsed as {
-					error?: {
-						message?: string
-					}
-				})?.error?.message ?? text.slice(0, 300) ?? response.statusText;
-				throw new Error(`Ошибка HTTP ${response.status}: ${msg}`);
+				throw new LlmHttpError(httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)), response.status);
 			}
 
-			return (parsed ?? {}) as T;
+			return {
+				result: (parsed ?? {}) as T,
+				status: response.status,
+			};
 		} catch (err) {
 			if (isAbortError(err) || controller.signal.aborted) {
+				if (timedOut && !signal?.aborted) {
+					throw toTimeoutError(timeoutMs, err);
+				}
+
 				throw toAbortError(err);
 			}
 
@@ -549,7 +659,7 @@ export class HttpLlmClient implements LlmClient {
 			throw new Error(String(err));
 		} finally {
 			clearTimeout(timer);
-			init.signal?.removeEventListener('abort', onAbort);
+			signal?.removeEventListener('abort', onAbort);
 		}
 	}
 }

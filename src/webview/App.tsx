@@ -9,34 +9,37 @@ export function App() {
 		screen,
 		chat,
 		settings,
+		apiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
 		modelsLoading,
-		openSettings,
-		openChat,
+		closeSettings,
 		saveSettings,
 		loadModels,
+		openLogsFolder,
 	} = useGenBridge();
 
 	if (screen === 'settings') {
 		return (
 			<SettingsScreen
 				settings={settings}
+				apiKeySet={apiKeySet}
 				status={settingsStatus}
 				models={models}
 				modelsStatus={modelsStatus}
 				modelsLoading={modelsLoading}
-				onBack={openChat}
+				onBack={closeSettings}
 				onSave={saveSettings}
 				onLoadModels={loadModels}
+				onOpenLogsFolder={openLogsFolder}
 			/>
 		);
 	}
 
 	return (
 		<div className="app">
-			<ChatHeader mode={chat.mode} busy={chat.busy} onOpenSettings={openSettings} />
+			<ChatHeader mode={chat.mode} busy={chat.busy} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			<Composer busy={chat.busy} />
 		</div>

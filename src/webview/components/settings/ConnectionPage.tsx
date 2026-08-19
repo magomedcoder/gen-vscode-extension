@@ -1,0 +1,102 @@
+import type { SettingsPageProps } from './pages';
+
+interface ConnectionPageProps extends SettingsPageProps {
+	apiKeySet: boolean;
+	apiKeyDraft: string;
+	models: string[];
+	modelsStatus?: string;
+	modelsLoading: boolean;
+	onApiKeyDraft: (value: string) => void;
+	onLoadModels: (baseUrl: string) => void;
+}
+
+export function ConnectionPage({
+	draft,
+	setField,
+	apiKeySet,
+	apiKeyDraft,
+	models,
+	modelsStatus,
+	modelsLoading,
+	onApiKeyDraft,
+	onLoadModels,
+}: ConnectionPageProps) {
+	const modelOptions = draft.model && !models.includes(draft.model) ? [draft.model, ...models] : models;
+
+	return (
+		<>
+			<label className="field">
+				<span className="field__label">Базовый URL</span>
+				<input
+					className="field__input"
+					value={draft.baseUrl}
+					onChange={(e) => setField('baseUrl', e.target.value)}
+					onBlur={() => {
+						if (draft.baseUrl.trim()) {
+							onLoadModels(draft.baseUrl);
+						}
+					}}
+				/>
+			</label>
+
+			<label className="field">
+				<span className="field__label">API-ключ</span>
+				<input
+					className="field__input"
+					type="password"
+					autoComplete="off"
+					value={apiKeyDraft}
+					placeholder={apiKeySet ? 'ключ сохранён - введи новый, чтобы заменить' : ''}
+					onChange={(e) => onApiKeyDraft(e.target.value)}
+				/>
+				<span className="field__hint">Пусто - не отправлять заголовок.</span>
+			</label>
+
+			<label className="field">
+				<span className="field__label">Заголовок ключа (Например Authorization)</span>
+				<input
+					className="field__input"
+					value={draft.authHeader}
+					onChange={(e) => setField('authHeader', e.target.value)}
+				/>
+			</label>
+
+			<label className="field">
+				<span className="field__label">Схема ключа (Например Bearer</span>
+				<input
+					className="field__input"
+					value={draft.authScheme}
+					onChange={(e) => setField('authScheme', e.target.value)}
+				/>
+				<span className="field__hint">По умолчанию Authorization: Bearer и ключ.</span>
+			</label>
+
+			<label className="field">
+				<span className="field__label">Модель</span>
+				<div className="field__row">
+					<select
+						className="field__input"
+						value={draft.model}
+						disabled={modelsLoading && modelOptions.length === 0}
+						onChange={(e) => setField('model', e.target.value)}
+					>
+						{modelOptions.length === 0 ? (
+							<option value="">{modelsLoading ? 'Загрузка...' : 'Нет моделей - укажите базовый URL'}</option>
+						) : (
+							modelOptions.map((id) => (<option key={id} value={id}>{id}</option>))
+						)}
+					</select>
+					<button
+						className="btn btn--secondary"
+						type="button"
+						disabled={modelsLoading || !draft.baseUrl.trim()}
+						onClick={() => onLoadModels(draft.baseUrl)}
+					>
+						{modelsLoading ? '...' : 'Обновить'}
+					</button>
+				</div>
+				{modelsStatus ? <span className="field__hint">{modelsStatus}</span> : null}
+			</label>
+		</>
+	);
+}

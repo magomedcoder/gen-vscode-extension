@@ -10,19 +10,20 @@ const EMPTY_CHAT: ChatViewState = {
 	mode: 'ask',
 };
 
+function readInitialScreen(): PanelScreen {
+	return document.body.dataset.screen === 'settings' ? 'settings' : 'chat';
+}
+
 export function useGenBridge() {
-	const [screen, setScreen] = useState<PanelScreen>('chat');
+	const [screen] = useState<PanelScreen>(readInitialScreen);
 	const [chat, setChat] = useState<ChatViewState>(EMPTY_CHAT);
 	const [settings, setSettings] = useState<GenSettings>(DEFAULT_SETTINGS);
+	const [apiKeySet, setApiKeySet] = useState(false);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
 	const [models, setModels] = useState<string[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
 	const [modelsLoading, setModelsLoading] = useState(false);
 	const modelsRequestId = useRef(0);
-
-	const requestSettings = useCallback(() => {
-		vscodeApi.postMessage({ type: 'loadSettings' });
-	}, []);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent<ToWebviewMessage>) => {
@@ -37,17 +38,11 @@ export function useGenBridge() {
 					return;
 				case 'settings':
 					setSettings(data.settings);
-					return;
-				case 'showScreen':
-					setScreen(data.screen);
-					if (data.screen === 'settings') {
-						setSettingsStatus(undefined);
-						setModelsStatus(undefined);
-						requestSettings();
-					}
+					setApiKeySet(data.apiKeySet);
 					return;
 				case 'settingsSaved':
 					setSettings(data.settings);
+					setApiKeySet(data.apiKeySet);
 					setSettingsStatus('Сохранено');
 					return;
 				case 'settingsError':
@@ -74,22 +69,19 @@ export function useGenBridge() {
 		window.addEventListener('message', onMessage);
 		vscodeApi.postMessage({ type: 'ready' });
 		return () => window.removeEventListener('message', onMessage);
-	}, [requestSettings]);
-
-	const openSettings = useCallback(() => {
-		setScreen('settings');
-		setSettingsStatus(undefined);
-		setModelsStatus(undefined);
-		requestSettings();
-	}, [requestSettings]);
-
-	const openChat = useCallback(() => {
-		setScreen('chat');
 	}, []);
 
-	const saveSettings = useCallback((next: GenSettings) => {
+	const closeSettings = useCallback(() => {
+		vscodeApi.postMessage({ type: 'closeSettings' });
+	}, []);
+
+	const saveSettings = useCallback((next: GenSettings, api?: { apiKey?: string }) => {
 		setSettingsStatus('Сохранение...');
-		vscodeApi.postMessage({ type: 'saveSettings', settings: next });
+		vscodeApi.postMessage({
+			type: 'saveSettings',
+			settings: next,
+			apiKey: api?.apiKey,
+		});
 	}, []);
 
 	const loadModels = useCallback((baseUrl: string) => {
@@ -104,25 +96,31 @@ export function useGenBridge() {
 		const requestId = modelsRequestId.current + 1;
 		modelsRequestId.current = requestId;
 		setModelsLoading(true);
+		setSettingsStatus(undefined);
 		setModelsStatus('Загрузка моделей...');
 		vscodeApi.postMessage({
 			type: 'loadModels',
 			baseUrl: trimmed,
-			requestId
+			requestId,
 		});
+	}, []);
+
+	const openLogsFolder = useCallback(() => {
+		vscodeApi.postMessage({ type: 'openLogsFolder' });
 	}, []);
 
 	return {
 		screen,
 		chat,
 		settings,
+		apiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
 		modelsLoading,
-		openSettings,
-		openChat,
+		closeSettings,
 		saveSettings,
 		loadModels,
+		openLogsFolder,
 	};
 }

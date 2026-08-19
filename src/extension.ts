@@ -1,21 +1,19 @@
 import * as vscode from 'vscode';
 import { registerChat } from './chat';
-import { registerCommentFunction } from './commands/commentFunction';
 import { registerCommentSelection } from './commands/commentSelection';
 import { initSettings } from './config/settings';
-import { initAgentAudit } from './agent/audit';
+import { initLogger } from './log/logger';
 import { DiffContentProvider } from './preview/showDiff';
 
 export function activate(context: vscode.ExtensionContext): void {
 	initSettings(context);
-	initAgentAudit(context);
+	initLogger(context);
 
 	const diffProvider = new DiffContentProvider();
 
 	context.subscriptions.push(
 		vscode.workspace.registerTextDocumentContentProvider('gen-comment', diffProvider),
 		registerCommentSelection(diffProvider),
-		registerCommentFunction(diffProvider),
 		registerChat(context),
 	);
 }

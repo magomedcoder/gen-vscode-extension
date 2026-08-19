@@ -19,10 +19,6 @@
         "title": "Gen - Прокомментировать выделение"
       },
       {
-        "command": "gen.commentFunction",
-        "title": "Gen - Прокомментировать текущую функцию"
-      },
-      {
         "command": "gen.openChat",
         "title": "Gen - Открыть чат"
       },
@@ -56,11 +52,6 @@
           "command": "gen.commentSelection",
           "when": "editorHasSelection && editorTextFocus",
           "group": "gen@1"
-        },
-        {
-          "command": "gen.commentFunction",
-          "when": "editorTextFocus",
-          "group": "gen@2"
         }
       ]
     }

@@ -74,6 +74,21 @@ export interface GenSettings {
 	 * Пусто - не маскировать.
 	 */
 	secretPatterns: string[];
+	/**
+	 * Имя HTTP-заголовка с ключом.
+	 * Пусто - Authorization.
+	 */
+	authHeader: string;
+	/**
+	 * Схема значения (Bearer). 
+	 * Пусто - сырой ключ без префикса.
+	 */
+	authScheme: string;
+	/**
+	 * Писать логи в Output и в файлы. 
+	 * По умолчанию выключено.
+	 */
+	loggingEnabled: boolean;
 }
 
 export const EXAMPLE_DENIED_PATHS: string[] = [
@@ -116,4 +131,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	previewBeforeApply: true,
 	deniedPaths: [],
 	secretPatterns: [],
+	authHeader: 'Authorization',
+	authScheme: 'Bearer',
+	loggingEnabled: false,
 };

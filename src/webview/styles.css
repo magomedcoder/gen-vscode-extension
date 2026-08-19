@@ -417,6 +417,66 @@ body {
 	cursor: default;
 }
 
+.header__subtitle {
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+.settings-layout {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.settings-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 220px;
+	flex-shrink: 0;
+	padding: 8px;
+	overflow-y: auto;
+	border-right: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
+	background: var(--vscode-sideBar-background, transparent);
+}
+
+.settings-nav__item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	width: 100%;
+	padding: 8px 10px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.settings-nav__item:hover {
+	background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+}
+
+.settings-nav__item--active {
+	background: var(--vscode-list-activeSelectionBackground, var(--vscode-button-background));
+	color: var(--vscode-list-activeSelectionForeground, var(--vscode-button-foreground));
+}
+
+.settings-nav__title {
+	font-size: 13px;
+}
+
+.settings-main {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
 .settings {
 	flex: 1;
 	overflow-y: auto;
@@ -424,6 +484,23 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+
+body[data-screen='settings'] .settings {
+	max-width: 720px;
+	width: 100%;
+	padding: 16px 24px 16px;
+	box-sizing: border-box;
+}
+
+.settings-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	flex-shrink: 0;
+	padding: 8px 24px 12px;
+	border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border));
 }
 
 .field {

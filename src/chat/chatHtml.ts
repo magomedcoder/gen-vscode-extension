@@ -5,8 +5,12 @@ export function renderChatHtml(params: {
 	nonce: string;
 	scriptUri: Uri;
 	styleUri: Uri;
+	title?: string;
+	screen?: 'chat' | 'settings';
 }): string {
 	const { cspSource, nonce, scriptUri, styleUri } = params;
+	const title = params.title ?? 'Gen Чат';
+	const screen = params.screen ?? 'chat';
 
 	return `<!DOCTYPE html>
 <html lang="ru">
@@ -14,10 +18,10 @@ export function renderChatHtml(params: {
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}'; img-src https: data:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Gen Чат</title>
+	<title>${title}</title>
 	<link href="${styleUri}" rel="stylesheet">
 </head>
-<body>
+<body data-screen="${screen}">
 	<div id="root"></div>
 	<script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

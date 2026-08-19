@@ -1,0 +1,54 @@
+import { join } from 'node:path';
+import * as vscode from 'vscode';
+import { getSettings } from '../config/settings';
+import { LogFileWriter, nodeLogFs } from './fileWriter';
+
+export type LogStream = 'llm' | 'agent';
+
+let writer: LogFileWriter | undefined;
+let logsDir: string | undefined;
+const channels: Partial<Record<LogStream, vscode.OutputChannel>> = {};
+let ready = false;
+
+export function initLogger(context: vscode.ExtensionContext): void {
+	if (ready) {
+		return;
+	}
+
+	ready = true;
+	logsDir = join(context.globalStorageUri.fsPath, 'logs');
+	writer = new LogFileWriter(nodeLogFs);
+	channels.llm = vscode.window.createOutputChannel('Gen LLM');
+	channels.agent = vscode.window.createOutputChannel('Gen Agent');
+	context.subscriptions.push(channels.llm, channels.agent);
+}
+
+export function getLogsDir(): string | undefined {
+	return logsDir;
+}
+
+export function writeLog(stream: LogStream, line: string): void {
+	if (!getSettings().loggingEnabled) {
+		return;
+	}
+
+	channels[stream]?.appendLine(line);
+	if (!writer || !logsDir) {
+		return;
+	}
+
+	writer.enqueue(join(logsDir, `${stream}.log`), line);
+}
+
+export async function revealLogsFolder(): Promise<void> {
+	if (!logsDir) {
+		return;
+	}
+
+	const uri = vscode.Uri.file(logsDir);
+	try {
+		await vscode.workspace.fs.createDirectory(uri);
+	} catch {}
+
+	await vscode.commands.executeCommand('revealFileInOS', uri);
+}

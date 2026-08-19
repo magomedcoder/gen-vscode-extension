@@ -1,12 +1,15 @@
 import type { ExtensionContext, Memento } from 'vscode';
+import { initApiKeyStore } from './apiKey';
 import { DEFAULT_SETTINGS, type AgentAuthLevel, type GenSettings } from './types';
 
 export type { AgentAuthLevel, ChatMode, CommentStyle, GenSettings } from './types';
 export { DEFAULT_SETTINGS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from './types';
+export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 
 const STORAGE_KEY = 'gen.settings';
 
 let store: Memento | undefined;
+const listeners = new Set<() => void>();
 
 function asNumber(value: unknown, fallback: number): number {
 	const n = typeof value === 'number' ? value : Number(value);
@@ -74,11 +77,15 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		previewBeforeApply: Boolean(raw.previewBeforeApply ?? DEFAULT_SETTINGS.previewBeforeApply),
 		deniedPaths: normalizeStringList(raw.deniedPaths),
 		secretPatterns: normalizeStringList(raw.secretPatterns),
+		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,
+		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),
+		loggingEnabled: raw.loggingEnabled === true,
 	};
 }
 
 export function initSettings(context: ExtensionContext): void {
 	store = context.globalState;
+	initApiKeyStore(context);
 }
 
 export function getSettings(): GenSettings {
@@ -93,5 +100,18 @@ export async function updateSettings(next: GenSettings): Promise<GenSettings> {
 
 	const normalized = normalize(next);
 	await store.update(STORAGE_KEY, normalized);
+	for (const listener of listeners) {
+		listener();
+	}
+	
 	return normalized;
+}
+
+export function onSettingsChanged(listener: () => void): { dispose(): void } {
+	listeners.add(listener);
+	return {
+		dispose: () => {
+			listeners.delete(listener);
+		},
+	};
 }
