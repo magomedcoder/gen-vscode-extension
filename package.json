@@ -1,11 +1,12 @@
 {
   "name": "gen",
-  "displayName": "gen",
-  "description": "Gen",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
   "publisher": "magomedcoder",
   "icon": "media/logo.svg",
   "license": "MIT",
   "version": "0.1.0",
+  "l10n": "./l10n",
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -19,22 +20,33 @@
     "commands": [
       {
         "command": "gen.commentSelection",
-        "title": "Gen - Прокомментировать выделение"
+        "title": "%command.commentSelection.title%",
+        "category": "%extension.category%"
       },
       {
         "command": "gen.openChat",
-        "title": "Gen - Открыть чат"
+        "title": "%command.openChat.title%",
+        "category": "%extension.category%"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "gen.openChat",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
       },
       {
-        "command": "gen.openSettings",
-        "title": "Gen - Открыть настройки"
+        "command": "gen.commentSelection",
+        "key": "ctrl+alt+/",
+        "mac": "cmd+alt+/",
+        "when": "editorHasSelection && editorTextFocus"
       }
     ],
     "viewsContainers": {
       "panel": [
         {
           "id": "gen",
-          "title": "Gen",
+          "title": "%viewsContainers.panel.gen.title%",
           "icon": "media/logo.svg"
         }
       ]
@@ -44,7 +56,7 @@
         {
           "type": "webview",
           "id": "gen.chatView",
-          "name": "Чат",
+          "name": "%views.gen.chatView.name%",
           "icon": "media/logo.svg"
         }
       ]

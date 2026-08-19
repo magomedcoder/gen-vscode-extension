@@ -4,6 +4,7 @@ import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
 import { onSettingsChanged } from '../config/settings';
+import { SettingsPanel } from './SettingsPanel';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -77,7 +78,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				await this.session.setMode(msg.mode);
 				return;
 			case 'openSettings':
-				await vscode.commands.executeCommand('gen.openSettings');
+				SettingsPanel.show(this.context);
 				return;
 			case 'openExternal': {
 				try {

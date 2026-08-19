@@ -87,16 +87,20 @@ export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promi
 		return;
 	}
 
-	const choice = await vscode.window.showInformationMessage(`Агент изменил файлов: ${checkpoint.size}. Восстановить снимок до правок?`, 'Восстановить снимок');
-	if (choice !== 'Восстановить снимок') {
+	const restoreSnapshot = vscode.l10n.t('agent.restoreSnapshot');
+	const choice = await vscode.window.showInformationMessage(
+		vscode.l10n.t('agent.checkpointOffer', checkpoint.size),
+		restoreSnapshot,
+	);
+	if (choice !== restoreSnapshot) {
 		return;
 	}
 
 	const restored = await checkpoint.restore();
 	if (restored.length === 0) {
-		void vscode.window.showWarningMessage('Не удалось восстановить снимок.');
+		void vscode.window.showWarningMessage(vscode.l10n.t('agent.restoreFailed'));
 		return;
 	}
 
-	void vscode.window.showInformationMessage(`Восстановлено файлов: ${restored.length}`);
+	void vscode.window.showInformationMessage(vscode.l10n.t('agent.restoredFiles', restored.length));
 }

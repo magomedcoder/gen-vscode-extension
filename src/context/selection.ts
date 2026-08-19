@@ -8,6 +8,7 @@ export interface CodeFragment {
 	text: string;
 	languageId: string;
 	fileName: string;
+	documentVersion: number;
 }
 
 // Активный текстовый редактор или undefined
@@ -38,5 +39,6 @@ export function toFragment(editor: vscode.TextEditor, range: vscode.Range, text:
 		text,
 		languageId: editor.document.languageId,
 		fileName: path.basename(editor.document.fileName),
+		documentVersion: editor.document.version,
 	};
 }

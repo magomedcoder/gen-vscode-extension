@@ -16,11 +16,12 @@ export async function offerAgentUndo(uris: vscode.Uri[]): Promise<void> {
 		counts.set(key, cur);
 	}
 
+	const undo = vscode.l10n.t('agent.undo');
 	const choice = await vscode.window.showInformationMessage(
-		`Агент изменил файлов: ${counts.size}. Отменить правки?`,
-		'Отменить',
+		vscode.l10n.t('agent.undoOffer', counts.size),
+		undo,
 	);
-	if (choice !== 'Отменить') {
+	if (choice !== undo) {
 		return;
 	}
 

@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { stripComments } from './comments';
 
 export type { CommentStyleConfig, CommentStyleId } from './comments';
@@ -19,7 +20,7 @@ export function validateUnchangedCode(original: string, commented: string, langu
 
 	return {
 		ok: false,
-		message: 'Модель изменила код (не только комментарии). Проверьте diff перед применением.',
+		message: vscode.l10n.t('comment.validationChangedCode'),
 	};
 }
 

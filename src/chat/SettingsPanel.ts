@@ -24,7 +24,7 @@ export class SettingsPanel {
 		}
 
 		const assetsRoot = vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview');
-		const panel = vscode.window.createWebviewPanel(VIEW_TYPE, 'Настройки Gen', vscode.ViewColumn.Active, {
+		const panel = vscode.window.createWebviewPanel(VIEW_TYPE, vscode.l10n.t('settings.panelTitle'), vscode.ViewColumn.Active, {
 			enableScripts: true,
 			enableFindWidget: true,
 			retainContextWhenHidden: true,

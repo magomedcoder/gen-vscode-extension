@@ -1,10 +1,11 @@
+import * as vscode from 'vscode';
 import { previewText } from '../policy';
 import { shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
 import { throwIfAborted } from '../workspacePath';
 import type { ConfirmChoice, ToolContext, ToolResult } from '../types';
 
 export function abortTurn(): never {
-	const err = new Error('Операция отменена');
+	const err = new Error(vscode.l10n.t('agent.operationCancelled'));
 	err.name = 'AbortError';
 	throw err;
 }
@@ -15,13 +16,13 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 		return {
 			ok: false,
 			denied: true,
-			content: 'Действие требует подтверждения, но UI недоступен',
+			content: vscode.l10n.t('agent.confirmUiUnavailable'),
 		};
 	}
 
 	const choice: ConfirmChoice = await new Promise((resolve, reject) => {
 		const onAbort = () => {
-			const err = new Error('Операция отменена');
+			const err = new Error(vscode.l10n.t('agent.operationCancelled'));
 			err.name = 'AbortError';
 			reject(err);
 		};
@@ -51,7 +52,7 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 		return {
 			ok: false,
 			denied: true,
-			content: 'Пользователь отклонил действие',
+			content: vscode.l10n.t('agent.userDenied'),
 		};
 	}
 

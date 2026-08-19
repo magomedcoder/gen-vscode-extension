@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { applyReplacement } from '../apply/applyEdit';
+import { isSelectionStale } from '../apply/staleEdit';
 import { getSettings } from '../config/settings';
 import type { CodeFragment } from '../context/selection';
 import { HttpLlmClient } from '../llm/client';
@@ -23,7 +24,9 @@ export async function runCommentPipeline(
 	const { fragment } = params;
 
 	if (fragment.text.length > settings.maxInputChars) {
-		void vscode.window.showErrorMessage(`Фрагмент слишком большой (${fragment.text.length} символов, лимит ${settings.maxInputChars}). Выделите меньший участок.`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('comment.fragmentTooLarge', fragment.text.length, settings.maxInputChars),
+		);
 		return;
 	}
 
@@ -41,7 +44,7 @@ export async function runCommentPipeline(
 		commented = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: 'Gen: генерация комментариев...',
+				title: vscode.l10n.t('comment.generatingProgress'),
 				cancellable: true,
 			},
 			async (_progress, token) => {
@@ -61,26 +64,35 @@ export async function runCommentPipeline(
 		return;
 	}
 
-	const usageHint = usage && usage.totalTokens > 0 ? ` ${formatTokenCount(usage.totalTokens)} ток.` : '';
+	const usageHint = usage && usage.totalTokens > 0
+		? vscode.l10n.t('comment.tokensSuffix', formatTokenCount(usage.totalTokens))
+		: '';
 
 	if (!commented.trim()) {
-		void vscode.window.showErrorMessage('Не удалось извлечь код из ответа модели');
+		void vscode.window.showErrorMessage(vscode.l10n.t('comment.extractFailed'));
 		return;
 	}
 
 	if (commented === fragment.text) {
-		void vscode.window.showInformationMessage(`Модель не добавила комментариев${usageHint}`);
+		void vscode.window.showInformationMessage(vscode.l10n.t('comment.noCommentsAdded', usageHint));
 		return;
 	}
 
 	const validation = validateUnchangedCode(fragment.text, commented, fragment.languageId);
+	const codeMayHaveChanged = vscode.l10n.t('comment.codeMayHaveChanged');
+	const applyAnyway = vscode.l10n.t('comment.applyAnyway');
+	const cancel = vscode.l10n.t('comment.cancel');
 
 	if (!validation.ok) {
 		if (settings.previewBeforeApply) {
-			void vscode.window.showWarningMessage(validation.message ?? 'Код мог измениться');
+			void vscode.window.showWarningMessage(validation.message ?? codeMayHaveChanged);
 		} else {
-			const proceed = await vscode.window.showWarningMessage(validation.message ?? 'Код мог измениться', 'Применить всё равно', 'Отмена');
-			if (proceed !== 'Применить всё равно') {
+			const proceed = await vscode.window.showWarningMessage(
+				validation.message ?? codeMayHaveChanged,
+				applyAnyway,
+				cancel,
+			);
+			if (proceed !== applyAnyway) {
 				return;
 			}
 		}
@@ -100,14 +112,26 @@ export async function runCommentPipeline(
 	}
 
 	if (!shouldApply) {
-		void vscode.window.showInformationMessage('Комментарии не применены');
+		void vscode.window.showInformationMessage(vscode.l10n.t('comment.notApplied'));
 		return;
+	}
+
+	if (await isSelectionStale(fragment)) {
+		const proceed = await vscode.window.showWarningMessage(
+			vscode.l10n.t('comment.staleEditWarning'),
+			applyAnyway,
+			cancel,
+		);
+		if (proceed !== applyAnyway) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('comment.notApplied'));
+			return;
+		}
 	}
 
 	const ok = await applyReplacement(fragment.uri, fragment.range, commented);
 	if (ok) {
-		void vscode.window.showInformationMessage(`Комментарии применены${usageHint}`);
+		void vscode.window.showInformationMessage(vscode.l10n.t('comment.applied', usageHint));
 	} else {
-		void vscode.window.showErrorMessage('Не удалось применить правку');
+		void vscode.window.showErrorMessage(vscode.l10n.t('comment.applyFailed'));
 	}
 }

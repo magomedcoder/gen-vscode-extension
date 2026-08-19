@@ -8,13 +8,13 @@ export function registerCommentSelection(diffProvider: DiffContentProvider): vsc
 	return vscode.commands.registerCommand('gen.commentSelection', async () => {
 		const editor = getActiveEditor();
 		if (!editor) {
-			void vscode.window.showErrorMessage('Нет активного редактора');
+			void vscode.window.showErrorMessage(vscode.l10n.t('comment.noActiveEditor'));
 			return;
 		}
 
 		const fragment = getSelectionFragment(editor);
 		if (!fragment) {
-			void vscode.window.showErrorMessage('Выделите код для комментирования');
+			void vscode.window.showErrorMessage(vscode.l10n.t('comment.selectCode'));
 			return;
 		}
 

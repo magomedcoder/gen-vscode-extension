@@ -50,19 +50,26 @@ export async function showCommentDiff(
 	params.provider.set(leftUri, params.original);
 	params.provider.set(rightUri, params.commented);
 
-	await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, `Gen: ${params.fileName} (исходник <-> с комментариями)`);
+	await vscode.commands.executeCommand(
+		'vscode.diff',
+		leftUri,
+		rightUri,
+		vscode.l10n.t('comment.diffTitle', params.fileName),
+	);
 
+	const apply = vscode.l10n.t('comment.apply');
+	const reject = vscode.l10n.t('comment.reject');
 	const choice = await vscode.window.showInformationMessage(
-		'Применить комментарии?',
+		vscode.l10n.t('comment.applyCommentsQuestion'),
 		{
 			modal: false
-		}, 
-		'Применить',
-		'Отклонить'
+		},
+		apply,
+		reject,
 	);
 
 	params.provider.clear(leftUri);
 	params.provider.clear(rightUri);
 
-	return choice === 'Применить' ? 'apply' : 'reject';
+	return choice === apply ? 'apply' : 'reject';
 }

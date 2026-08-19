@@ -19,19 +19,22 @@ function messageId(): string {
 }
 
 async function confirmAgentAction(request: { title: string; detail?: string }): Promise<ConfirmChoice> {
+	const apply = vscode.l10n.t('agent.confirmApply');
+	const skip = vscode.l10n.t('agent.confirmSkip');
+	const stop = vscode.l10n.t('agent.confirmStop');
 	const choice = await vscode.window.showWarningMessage(
 		request.title,
 		{ modal: true, detail: request.detail },
-		'Применить',
-		'Пропустить',
-		'Стоп',
+		apply,
+		skip,
+		stop,
 	);
 
-	if (choice === 'Применить') {
+	if (choice === apply) {
 		return 'apply';
 	}
 
-	if (choice === 'Пропустить') {
+	if (choice === skip) {
 		return 'skip';
 	}
 	

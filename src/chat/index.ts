@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './ChatViewProvider';
 import { CHAT_VIEW_ID } from './ids';
-import { SettingsPanel } from './SettingsPanel';
 
 export function registerChat(context: vscode.ExtensionContext): vscode.Disposable {
 	const provider = new ChatViewProvider(context);
@@ -12,9 +11,6 @@ export function registerChat(context: vscode.ExtensionContext): vscode.Disposabl
 		}),
 		vscode.commands.registerCommand('gen.openChat', async () => {
 			await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
-		}),
-		vscode.commands.registerCommand('gen.openSettings', () => {
-			SettingsPanel.show(context);
 		}),
 	);
 }
