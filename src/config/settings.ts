@@ -75,6 +75,7 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		maxInputChars: Math.max(500, Math.floor(asNumber(raw.maxInputChars, DEFAULT_SETTINGS.maxInputChars))),
 		commentStyle,
 		previewBeforeApply: Boolean(raw.previewBeforeApply ?? DEFAULT_SETTINGS.previewBeforeApply),
+		commentSystemPrompt: String(raw.commentSystemPrompt ?? DEFAULT_SETTINGS.commentSystemPrompt).trim(),
 		deniedPaths: normalizeStringList(raw.deniedPaths),
 		secretPatterns: normalizeStringList(raw.secretPatterns),
 		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,

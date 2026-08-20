@@ -3,6 +3,7 @@
 	"extension.description": "AI-чат и агент для программирования в VS Code",
 	"extension.category": "Gen",
 	"command.commentSelection.title": "Прокомментировать выделение",
+	"command.commentFile.title": "Прокомментировать файл",
 	"command.openChat.title": "Открыть чат",
 	"viewsContainers.panel.gen.title": "Gen",
 	"views.gen.chatView.name": "Чат"

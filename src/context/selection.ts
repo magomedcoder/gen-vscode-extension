@@ -31,6 +31,19 @@ export function getSelectionFragment(editor: vscode.TextEditor): CodeFragment | 
 	return toFragment(editor, selection, text);
 }
 
+// Фрагмент по всему открытому файлу; undefined если файл пустой
+export function getFileFragment(editor: vscode.TextEditor): CodeFragment | undefined {
+	const doc = editor.document;
+	const text = doc.getText();
+	if (!text.trim()) {
+		return undefined;
+	}
+
+	const lastLine = Math.max(0, doc.lineCount - 1);
+	const range = new vscode.Range(0, 0, lastLine, doc.lineAt(lastLine).text.length);
+	return toFragment(editor, range, text);
+}
+
 // Собирает CodeFragment из редактора и диапазона
 export function toFragment(editor: vscode.TextEditor, range: vscode.Range, text: string): CodeFragment {
 	return {

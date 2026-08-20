@@ -11,6 +11,13 @@ import { buildCommentMessages } from '../prompt/commentPrompt';
 import type { DiffContentProvider } from '../preview/showDiff';
 import { showCommentDiff } from '../preview/showDiff';
 
+async function confirmUnsafeApplyWithoutPreview(message: string): Promise<boolean> {
+	const applyAnyway = vscode.l10n.t('comment.applyAnyway');
+	const cancel = vscode.l10n.t('comment.cancel');
+	const proceed = await vscode.window.showWarningMessage(message, applyAnyway, cancel);
+	return proceed === applyAnyway;
+}
+
 // Общий пайплайн: промпт -> llm -> разбор -> валидация -> diff -> apply
 export async function runCommentPipeline(
 	params: {
@@ -35,6 +42,7 @@ export async function runCommentPipeline(
 		fileName: fragment.fileName,
 		code: fragment.text,
 		commentStyle: settings.commentStyle,
+		commentSystemPrompt: settings.commentSystemPrompt,
 	});
 
 	let commented: string;
@@ -47,13 +55,20 @@ export async function runCommentPipeline(
 				title: vscode.l10n.t('comment.generatingProgress'),
 				cancellable: true,
 			},
-			async (_progress, token) => {
+			async (progress, token) => {
 				const controller = new AbortController();
 				token.onCancellationRequested(() => controller.abort());
 
+				let streamedChars = 0;
 				const result = await client.complete({
 					messages,
 					signal: controller.signal,
+					onDelta: (chunk) => {
+						streamedChars += chunk.length;
+						progress.report({
+							message: vscode.l10n.t('comment.streamingProgress', streamedChars),
+						});
+					},
 				});
 				usage = result.usage;
 				return extractCommentedCode(result.content);
@@ -79,22 +94,14 @@ export async function runCommentPipeline(
 	}
 
 	const validation = validateUnchangedCode(fragment.text, commented, fragment.languageId);
-	const codeMayHaveChanged = vscode.l10n.t('comment.codeMayHaveChanged');
+	const validationMessage = validation.message ?? vscode.l10n.t('comment.codeMayHaveChanged');
 	const applyAnyway = vscode.l10n.t('comment.applyAnyway');
 	const cancel = vscode.l10n.t('comment.cancel');
 
-	if (!validation.ok) {
-		if (settings.previewBeforeApply) {
-			void vscode.window.showWarningMessage(validation.message ?? codeMayHaveChanged);
-		} else {
-			const proceed = await vscode.window.showWarningMessage(
-				validation.message ?? codeMayHaveChanged,
-				applyAnyway,
-				cancel,
-			);
-			if (proceed !== applyAnyway) {
-				return;
-			}
+	if (!validation.ok && !settings.previewBeforeApply) {
+		const proceed = await confirmUnsafeApplyWithoutPreview(validationMessage);
+		if (!proceed) {
+			return;
 		}
 	}
 
@@ -107,6 +114,7 @@ export async function runCommentPipeline(
 			languageId: fragment.languageId,
 			original: fragment.text,
 			commented,
+			unsafeApply: !validation.ok,
 		});
 		shouldApply = decision === 'apply';
 	}

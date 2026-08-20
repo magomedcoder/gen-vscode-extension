@@ -5,9 +5,9 @@ export function extractCommentedCode(raw: string): string {
 		return '';
 	}
 
-	const fence = trimmed.match(/```(?:[\w.+-]*)?\r?\n([\s\S]*?)```/);
-	if (fence?.[1] !== undefined) {
-		return stripTrailingNewline(fence[1]);
+	const fences = [...trimmed.matchAll(/```(?:[\w.+-]*)?\r?\n([\s\S]*?)```/g)];
+	if (fences.length > 0) {
+		return stripTrailingNewline(fences[fences.length - 1][1] ?? '');
 	}
 
 	// Иногда модель открывает блок без закрытия - берём всё после первой строки ```

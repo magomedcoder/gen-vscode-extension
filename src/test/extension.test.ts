@@ -11,6 +11,15 @@ suite('extractCommentedCode', () => {
 	test('возвращает сырой текст без ограждения', () => {
 		assert.strictEqual(extractCommentedCode('const x = 1;'), 'const x = 1;');
 	});
+
+	test('берёт последний fenced block при нескольких', () => {
+		const raw = '```js\nold\n```\n\n```ts\nconst x = 1;\n```';
+		assert.strictEqual(extractCommentedCode(raw), 'const x = 1;');
+	});
+
+	test('пустой fenced block -> пустая строка', () => {
+		assert.strictEqual(extractCommentedCode('```\n```'), '');
+	});
 });
 
 suite('resolveCommentStyleId', () => {

@@ -65,6 +65,11 @@ export interface GenSettings {
 	commentStyle: CommentStyle;
 	previewBeforeApply: boolean;
 	/**
+	 * Дополнительные инструкции к system prompt для комментариев.
+	 * Пусто - только стандартный prompt
+	 */
+	commentSystemPrompt: string;
+	/**
 	 * Glob-шаблоны запрещённых путей (по одному на строку). 
 	 * Пусто - ничего не запрещать.
 	 */
@@ -129,6 +134,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	maxInputChars: 8000,
 	commentStyle: 'inline',
 	previewBeforeApply: true,
+	commentSystemPrompt: '',
 	deniedPaths: [],
 	secretPatterns: [],
 	authHeader: 'Authorization',

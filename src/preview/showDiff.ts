@@ -1,6 +1,63 @@
 import * as vscode from 'vscode';
 
-const SCHEME = 'gen-comment';
+export const GEN_COMMENT_SCHEME = 'gen-comment';
+
+function languageIdFromUri(uri: vscode.Uri): string | undefined {
+	const lang = new URLSearchParams(uri.query).get('lang');
+	return lang?.trim() || undefined;
+}
+
+function diffTabUsesUri(tab: vscode.Tab, uri: vscode.Uri): boolean {
+	const input = tab.input;
+	if (!(input instanceof vscode.TabInputTextDiff)) {
+		return false;
+	}
+
+	const key = uri.toString();
+	return input.original.toString() === key || input.modified.toString() === key;
+}
+
+function isDiffOpenForUris(uris: vscode.Uri[]): boolean {
+	for (const group of vscode.window.tabGroups.all) {
+		for (const tab of group.tabs) {
+			if (uris.some((uri) => diffTabUsesUri(tab, uri))) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+async function waitUntilDiffClosed(uris: vscode.Uri[]): Promise<void> {
+	if (!isDiffOpenForUris(uris)) {
+		return;
+	}
+
+	await new Promise<void>((resolve) => {
+		const sub = vscode.window.tabGroups.onDidChangeTabs(() => {
+			if (!isDiffOpenForUris(uris)) {
+				sub.dispose();
+				resolve();
+			}
+		});
+	});
+}
+
+async function applyVirtualDocumentLanguage(doc: vscode.TextDocument): Promise<void> {
+	if (doc.uri.scheme !== GEN_COMMENT_SCHEME) {
+		return;
+	}
+
+	const languageId = languageIdFromUri(doc.uri);
+	if (!languageId || doc.languageId === languageId) {
+		return;
+	}
+
+	try {
+		await vscode.languages.setTextDocumentLanguage(doc, languageId);
+	} catch {}
+}
 
 // Провайдер виртуальных документов для vscode.diff
 export class DiffContentProvider implements vscode.TextDocumentContentProvider {
@@ -23,6 +80,34 @@ export class DiffContentProvider implements vscode.TextDocumentContentProvider {
 	clear(uri: vscode.Uri): void {
 		this.contents.delete(uri.toString());
 	}
+
+	scheduleClearAfterDiffClosed(...uris: vscode.Uri[]): void {
+		void waitUntilDiffClosed(uris).then(() => {
+			for (const uri of uris) {
+				this.clear(uri);
+			}
+		});
+	}
+}
+
+export function registerDiffContentProvider(provider: DiffContentProvider): vscode.Disposable {
+	const languageSub = vscode.workspace.onDidOpenTextDocument((doc) => {
+		void applyVirtualDocumentLanguage(doc);
+	});
+
+	for (const doc of vscode.workspace.textDocuments) {
+		void applyVirtualDocumentLanguage(doc);
+	}
+
+	return vscode.Disposable.from(vscode.workspace.registerTextDocumentContentProvider(GEN_COMMENT_SCHEME, provider), languageSub);
+}
+
+function buildVirtualUri(side: 'original' | 'commented', stamp: number, fileName: string, languageId: string): vscode.Uri {
+	return vscode.Uri.from({
+		scheme: GEN_COMMENT_SCHEME,
+		path: `/${side}/${stamp}/${fileName}`,
+		query: `lang=${encodeURIComponent(languageId)}`,
+	});
 }
 
 // Показывает diff исходник <-> с комментариями и спрашивает решение пользователя
@@ -33,19 +118,12 @@ export async function showCommentDiff(
 		languageId: string;
 		original: string;
 		commented: string;
+		unsafeApply?: boolean;
 	}
 ): Promise<'apply' | 'reject'> {
 	const stamp = Date.now();
-	const leftUri = vscode.Uri.from({
-		scheme: SCHEME,
-		path: `/original/${stamp}/${params.fileName}`,
-		query: `lang=${params.languageId}`,
-	});
-	const rightUri = vscode.Uri.from({
-		scheme: SCHEME,
-		path: `/commented/${stamp}/${params.fileName}`,
-		query: `lang=${params.languageId}`,
-	});
+	const leftUri = buildVirtualUri('original', stamp, params.fileName, params.languageId);
+	const rightUri = buildVirtualUri('commented', stamp, params.fileName, params.languageId);
 
 	params.provider.set(leftUri, params.original);
 	params.provider.set(rightUri, params.commented);
@@ -55,21 +133,27 @@ export async function showCommentDiff(
 		leftUri,
 		rightUri,
 		vscode.l10n.t('comment.diffTitle', params.fileName),
+		{ preview: false },
 	);
 
-	const apply = vscode.l10n.t('comment.apply');
+	const apply = params.unsafeApply
+		? vscode.l10n.t('comment.applyAnyway')
+		: vscode.l10n.t('comment.apply');
 	const reject = vscode.l10n.t('comment.reject');
-	const choice = await vscode.window.showInformationMessage(
+	const detail = params.unsafeApply
+		? vscode.l10n.t('comment.applyCommentsUnsafeDetail')
+		: vscode.l10n.t('comment.applyCommentsDetail');
+	const choice = await vscode.window.showWarningMessage(
 		vscode.l10n.t('comment.applyCommentsQuestion'),
 		{
-			modal: false
+			modal: true,
+			detail,
 		},
 		apply,
 		reject,
 	);
 
-	params.provider.clear(leftUri);
-	params.provider.clear(rightUri);
+	params.provider.scheduleClearAfterDiffClosed(leftUri, rightUri);
 
 	return choice === apply ? 'apply' : 'reject';
 }

@@ -24,6 +24,11 @@
         "category": "%extension.category%"
       },
       {
+        "command": "gen.commentFile",
+        "title": "%command.commentFile.title%",
+        "category": "%extension.category%"
+      },
+      {
         "command": "gen.openChat",
         "title": "%command.openChat.title%",
         "category": "%extension.category%"
@@ -67,6 +72,11 @@
           "command": "gen.commentSelection",
           "when": "editorHasSelection && editorTextFocus",
           "group": "gen@1"
+        },
+        {
+          "command": "gen.commentFile",
+          "when": "editorTextFocus",
+          "group": "gen@2"
         }
       ]
     }

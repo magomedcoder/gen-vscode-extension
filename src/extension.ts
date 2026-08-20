@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { registerChat } from './chat';
 import { registerCommentSelection } from './commands/commentSelection';
+import { registerCommentFile } from './commands/commentFile';
 import { initSettings } from './config/settings';
 import { initLogger } from './log/logger';
-import { DiffContentProvider } from './preview/showDiff';
+import { DiffContentProvider, registerDiffContentProvider } from './preview/showDiff';
 
 export function activate(context: vscode.ExtensionContext): void {
 	initSettings(context);
@@ -12,8 +13,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	const diffProvider = new DiffContentProvider();
 
 	context.subscriptions.push(
-		vscode.workspace.registerTextDocumentContentProvider('gen-comment', diffProvider),
+		registerDiffContentProvider(diffProvider),
 		registerCommentSelection(diffProvider),
+		registerCommentFile(diffProvider),
 		registerChat(context),
 	);
 }

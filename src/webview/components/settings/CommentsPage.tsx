@@ -24,6 +24,17 @@ export function CommentsPage({ draft, setField }: SettingsPageProps) {
 				/>
 				<span className="field__label">Показывать diff перед применением комментариев</span>
 			</label>
+
+			<label className="field">
+				<span className="field__label">Дополнительный system prompt для комментариев</span>
+				<textarea
+					className="field__input field__input--multiline"
+					rows={4}
+					placeholder="Необязательно. Добавляется к стандартным инструкциям."
+					value={draft.commentSystemPrompt}
+					onChange={(e) => setField('commentSystemPrompt', e.target.value)}
+				/>
+			</label>
 		</>
 	);
 }
