@@ -1,5 +1,6 @@
 import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
+import { ConfirmCard } from './components/ConfirmCard';
 import { MessageList } from './components/MessageList';
 import { SettingsScreen } from './components/SettingsScreen';
 import { useGenBridge } from './useGenBridge';
@@ -35,11 +36,14 @@ export function App() {
 		);
 	}
 
+	const confirming = Boolean(chat.pendingConfirm);
+
 	return (
 		<div className="app">
 			<ChatHeader mode={chat.mode} busy={chat.busy} usage={chat.usage} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
-			<Composer busy={chat.busy} />
+			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
+			<Composer busy={chat.busy || confirming} />
 		</div>
 	);
 }

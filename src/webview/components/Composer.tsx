@@ -30,21 +30,31 @@ export function Composer({ busy }: ComposerProps) {
 		}
 	};
 
+	const canSend = Boolean(draft.trim()) && !busy;
+
 	return (
 		<form className="composer" onSubmit={onSubmit}>
-			<textarea
-				className="composer__input"
-				rows={2}
-				value={draft}
-				placeholder={busy ? 'Идёт запрос...' : 'Сообщение... Enter - отправить, Shift+Enter - строка'}
-				onChange={(e) => setDraft(e.target.value)}
-				onKeyDown={onKeyDown}
-			/>
-			{busy ? (
-				<button className="btn" type="button" onClick={() => vscodeApi.postMessage({ type: 'cancel' })}>Стоп</button>
-			) : (
-				<button className="btn" type="submit" disabled={!draft.trim()}>Отправить</button>
-			)}
+			<div className={`composer__box${busy ? ' composer__box--disabled' : ''}`}>
+				<textarea
+					className="composer__input"
+					rows={2}
+					value={draft}
+					placeholder={busy ? 'Идёт запрос или подтверждение...' : 'Спросите Gen...'}
+					disabled={busy}
+					onChange={(e) => setDraft(e.target.value)}
+					onKeyDown={onKeyDown}
+				/>
+				<div className="composer__footer">
+					<span className="composer__hint">
+						{busy ? 'Ожидание...' : 'Enter - отправить, Shift+Enter - новая строка'}
+					</span>
+					{busy ? (
+						<button className="btn btn--secondary composer__btn" type="button" onClick={() => vscodeApi.postMessage({ type: 'cancel' })}>Стоп</button>
+					) : (
+						<button className="btn composer__btn" type="submit" disabled={!canSend}>Отправить</button>
+					)}
+				</div>
+			</div>
 		</form>
 	);
 }

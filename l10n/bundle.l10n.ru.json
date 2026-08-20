@@ -34,5 +34,7 @@
 	"agent.operationCancelled": "Операция отменена",
 	"agent.confirmUiUnavailable": "Действие требует подтверждения, но UI недоступен",
 	"agent.userDenied": "Пользователь отклонил действие",
-	"settings.panelTitle": "Настройки Gen"
+	"settings.panelTitle": "Настройки Gen",
+	"confirm.panelTitle": "Подтверждение Gen",
+	"confirm.panelHint": "Выберите действие в панели чата Gen."
 }

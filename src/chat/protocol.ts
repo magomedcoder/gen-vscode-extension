@@ -1,10 +1,12 @@
 import type { ChatMode, GenSettings } from '../config/types';
 import type { TokenUsage } from '../llm/usage';
+import type { ConfirmChoice } from '../agent/types';
 
-export type { ChatMode };
+export type { ChatMode, ConfirmChoice };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
 export type ToolCallStatus = 'pending' | 'ok' | 'error' | 'denied';
+export type ConfirmVariant = 'agent' | 'binary';
 
 export interface ToolCallUi {
 	id: string;
@@ -28,11 +30,24 @@ export interface ChatUiMessage {
 	usage?: TokenUsage;
 }
 
+export interface PendingConfirm {
+	id: string;
+	title: string;
+	detail?: string;
+	hint?: string;
+	variant: ConfirmVariant;
+	applyLabel: string;
+	skipLabel: string;
+	stopLabel: string;
+	rejectLabel: string;
+}
+
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
 	mode: ChatMode;
 	usage?: TokenUsage;
+	pendingConfirm?: PendingConfirm;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -53,4 +68,5 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'loadSettings' }
 	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
-	| { type: 'openLogsFolder' };
+	| { type: 'openLogsFolder' }
+	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice };

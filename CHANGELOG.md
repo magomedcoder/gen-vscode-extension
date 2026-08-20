@@ -13,10 +13,12 @@
   - diff-preview для правок в режиме комментариев (и patch-first подход)
   - multi-file plan: `propose_plan` -> ожидание подтверждения пользователя
   - checkpoints: снапшот файлов до agent turn и предложение восстановления
+  - своё подтверждение: карточка в чате Gen для agent, комментариев и checkpoint (без отдельной вкладки и без native MessageBox)
   - аудита в `Output` (`Gen Agent`): tool, путь/детали (с redaction), длительность, ok/error/denied
 - Workspace tools (sandboxed)
   - `list_dir`, `read_file`, `search_files`, `write_file`, `apply_patch`, `delete_file`, `create_dir`
   - path sandbox: запрет выхода за workspace (`..`, symlink escape, пути вне workspace)
+  - `.gitignore` / `.genignore` в корне workspace (пакет `ignore`, без `git check-ignore` на каждый tool)
   - подтверждение для опасных операций (write/patch/delete и т.п.)
   - git tools в read-only режиме (`git_status`), диагностика (`get_diagnostics`)
   - команды/терминал с allow/denylist политиками

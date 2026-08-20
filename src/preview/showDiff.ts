@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { showConfirmDialog } from '../ui/confirmDialog';
 
 export const GEN_COMMENT_SCHEME = 'gen-comment';
 
@@ -136,24 +137,19 @@ export async function showCommentDiff(
 		{ preview: false },
 	);
 
-	const apply = params.unsafeApply
-		? vscode.l10n.t('comment.applyAnyway')
-		: vscode.l10n.t('comment.apply');
-	const reject = vscode.l10n.t('comment.reject');
-	const detail = params.unsafeApply
-		? vscode.l10n.t('comment.applyCommentsUnsafeDetail')
-		: vscode.l10n.t('comment.applyCommentsDetail');
-	const choice = await vscode.window.showWarningMessage(
-		vscode.l10n.t('comment.applyCommentsQuestion'),
-		{
-			modal: true,
-			detail,
-		},
-		apply,
-		reject,
-	);
+	const choice = await showConfirmDialog({
+		title: vscode.l10n.t('comment.applyCommentsQuestion'),
+		detail: params.unsafeApply
+			? vscode.l10n.t('comment.applyCommentsUnsafeDetail')
+			: vscode.l10n.t('comment.applyCommentsDetail'),
+		variant: 'binary',
+		applyLabel: params.unsafeApply
+			? vscode.l10n.t('comment.applyAnyway')
+			: vscode.l10n.t('comment.apply'),
+		rejectLabel: vscode.l10n.t('comment.reject'),
+	});
 
 	params.provider.scheduleClearAfterDiffClosed(leftUri, rightUri);
 
-	return choice === apply ? 'apply' : 'reject';
+	return choice === 'apply' ? 'apply' : 'reject';
 }

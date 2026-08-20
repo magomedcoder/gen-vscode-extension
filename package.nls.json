@@ -2,8 +2,8 @@
 	"extension.displayName": "Gen",
 	"extension.description": "AI chat and coding agent for VS Code",
 	"extension.category": "Gen",
-	"command.commentSelection.title": "Comment selection",
-	"command.commentFile.title": "Comment entire file",
+	"command.commentSelection.title": "Gen: Comment selection",
+	"command.commentFile.title": "Gen: Comment entire file",
 	"command.openChat.title": "Open chat",
 	"viewsContainers.panel.gen.title": "Gen",
 	"views.gen.chatView.name": "Chat"

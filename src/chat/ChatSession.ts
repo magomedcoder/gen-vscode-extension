@@ -6,10 +6,11 @@ import type { ConfirmChoice } from '../agent/types';
 import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
 import type { LlmClient } from '../llm/types';
+import { sumUsage } from '../llm/usage';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
-import type { ChatUiMessage, ChatViewState } from './protocol';
-import { sumUsage } from '../llm/usage';
+import { CHAT_VIEW_ID } from './ids';
+import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
 
 const STORAGE_KEY = 'gen.chat.messages';
 const MAX_STORED = 80;
@@ -18,34 +19,15 @@ function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-async function confirmAgentAction(request: { title: string; detail?: string }): Promise<ConfirmChoice> {
-	const apply = vscode.l10n.t('agent.confirmApply');
-	const skip = vscode.l10n.t('agent.confirmSkip');
-	const stop = vscode.l10n.t('agent.confirmStop');
-	const choice = await vscode.window.showWarningMessage(
-		request.title,
-		{ modal: true, detail: request.detail },
-		apply,
-		skip,
-		stop,
-	);
-
-	if (choice === apply) {
-		return 'apply';
-	}
-
-	if (choice === skip) {
-		return 'skip';
-	}
-	
-	return 'abort';
-}
-
 async function revealAgentFile(uri: vscode.Uri): Promise<void> {
 	await vscode.window.showTextDocument(uri, { preview: true });
 }
 
 type ChatSessionListener = (state: ChatViewState) => void;
+
+interface PendingConfirmInternal extends PendingConfirm {
+	resolve: (choice: ConfirmChoice) => void;
+}
 
 export class ChatSession {
 	private messages: ChatUiMessage[];
@@ -53,6 +35,7 @@ export class ChatSession {
 	private readonly listeners = new Set<ChatSessionListener>();
 	private readonly agent: AgentSession;
 	private clearSeq = 0;
+	private pendingConfirm?: PendingConfirmInternal;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -68,6 +51,19 @@ export class ChatSession {
 			busy: Boolean(this.inflight),
 			mode: getSettings().chatMode,
 			usage: sumUsage(this.messages),
+			pendingConfirm: this.pendingConfirm
+				? {
+					id: this.pendingConfirm.id,
+					title: this.pendingConfirm.title,
+					detail: this.pendingConfirm.detail,
+					hint: this.pendingConfirm.hint,
+					variant: this.pendingConfirm.variant,
+					applyLabel: this.pendingConfirm.applyLabel,
+					skipLabel: this.pendingConfirm.skipLabel,
+					stopLabel: this.pendingConfirm.stopLabel,
+					rejectLabel: this.pendingConfirm.rejectLabel,
+				}
+				: undefined,
 		};
 	}
 
@@ -109,11 +105,60 @@ export class ChatSession {
 		this.emit();
 	}
 
+	private settleConfirm(choice: ConfirmChoice): void {
+		const pending = this.pendingConfirm;
+		if (!pending) {
+			return;
+		}
+		this.pendingConfirm = undefined;
+		this.emit();
+		pending.resolve(choice);
+	}
+
+	resolveConfirm(id: string, choice: ConfirmChoice): void {
+		if (!this.pendingConfirm || this.pendingConfirm.id !== id) {
+			return;
+		}
+		this.settleConfirm(choice);
+	}
+
+	async requestConfirm(request: {
+		title: string;
+		detail?: string;
+		hint?: string;
+		variant?: PendingConfirm['variant'];
+		applyLabel?: string;
+		rejectLabel?: string;
+	}): Promise<ConfirmChoice> {
+		if (this.pendingConfirm) {
+			this.settleConfirm('abort');
+		}
+
+		void vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+
+		const variant = request.variant ?? 'agent';
+		return new Promise<ConfirmChoice>((resolve) => {
+			this.pendingConfirm = {
+				id: messageId(),
+				title: request.title,
+				detail: request.detail,
+				hint: request.hint,
+				variant,
+				applyLabel: request.applyLabel ?? vscode.l10n.t('agent.confirmApply'),
+				skipLabel: vscode.l10n.t('agent.confirmSkip'),
+				stopLabel: vscode.l10n.t('agent.confirmStop'),
+				rejectLabel: request.rejectLabel ?? vscode.l10n.t('comment.reject'),
+				resolve,
+			};
+			this.emit();
+		});
+	}
+
 	clear(): void {
-		// Версия очистки нужна, чтобы незавершенный send() после отмены не дописал сообщения обратно в историю и не перезаписал storage
 		this.clearSeq += 1;
 		this.inflight?.abort();
 		this.inflight = undefined;
+		this.settleConfirm('abort');
 		this.messages = [];
 		this.persist();
 		this.emit();
@@ -121,6 +166,7 @@ export class ChatSession {
 
 	cancel(): void {
 		this.inflight?.abort();
+		this.settleConfirm('abort');
 	}
 
 	async setMode(mode: ChatMode): Promise<void> {
@@ -170,7 +216,7 @@ export class ChatSession {
 					userText: trimmed,
 					editorContext: getEditorChatContext(),
 					signal: controller.signal,
-					confirm: confirmAgentAction,
+					confirm: (req) => this.requestConfirm(req),
 					revealFile: revealAgentFile,
 					plan,
 					checkpoint,

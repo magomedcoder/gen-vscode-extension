@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { isIgnoredByGitIgnore } from './gitIgnore';
 import { assertAllowedPath, findContainingFolder, PathPolicyError, pathIsInside, resolveAgainstFolders } from './policy';
 
 export interface ResolvedWorkspacePath {
@@ -70,6 +71,10 @@ export async function resolveWorkspacePath(input: string): Promise<ResolvedWorks
 	const checked = await followToWorkspace(fsPath, folders);
 	const containing = findContainingFolder(checked, folders) ?? folder;
 	const relative = assertAllowedPath(checked, containing);
+	if (await isIgnoredByGitIgnore(containing, relative)) {
+		throw new PathPolicyError(`Путь игнорируется (.gitignore/.genignore): ${relative || '.'}`);
+	}
+
 	const uri = vscode.Uri.file(checked);
 	return {
 		uri,

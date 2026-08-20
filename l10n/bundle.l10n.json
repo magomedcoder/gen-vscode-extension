@@ -34,5 +34,7 @@
 	"agent.operationCancelled": "Operation cancelled",
 	"agent.confirmUiUnavailable": "Action requires confirmation, but UI is unavailable",
 	"agent.userDenied": "User rejected the action",
-	"settings.panelTitle": "Gen settings"
+	"settings.panelTitle": "Gen settings",
+	"confirm.panelTitle": "Gen confirmation",
+	"confirm.panelHint": "Choose an action in the Gen chat panel."
 }

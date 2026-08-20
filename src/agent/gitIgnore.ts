@@ -1,0 +1,76 @@
+import ignore, { type Ignore } from 'ignore';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+export type IgnoreMatcher = Ignore;
+
+// Кэш матчера на корень workspace за turn агента.
+const cache = new Map<string, IgnoreMatcher>();
+
+export function clearIgnoreCache(): void {
+	cache.clear();
+}
+
+export function createIgnoreMatcher(patterns: readonly string[]): IgnoreMatcher {
+	const ig = ignore();
+	// Каталог .git никогда не часть рабочего дерева для агента
+	ig.add('.git');
+	for (const line of patterns) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith('#')) {
+			continue;
+		}
+		ig.add(trimmed);
+	}
+
+	return ig;
+}
+
+export function ignoresRelative(matcher: IgnoreMatcher, relativePosix: string): boolean {
+	const normalized = relativePosix.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+	if (!normalized || normalized === '.') {
+		return false;
+	}
+
+	if (matcher.ignores(normalized)) {
+		return true;
+	}
+
+	// Шаблоны вида dist/ требуют trailing slash для каталога
+	return matcher.ignores(`${normalized}/`);
+}
+
+async function readIgnoreLines(folderFsPath: string, fileName: string): Promise<string[]> {
+	try {
+		const text = await fs.readFile(path.join(folderFsPath, fileName), 'utf8');
+		return text.split(/\r?\n/);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Матчер корня workspace: `.gitignore` + `.genignore` (+ встроенный `.git`).
+ * Не spawn'ит `git check-ignore`.
+ */
+export async function getFolderIgnoreMatcher(folderFsPath: string): Promise<IgnoreMatcher> {
+	const key = path.resolve(folderFsPath);
+	const cached = cache.get(key);
+	if (cached) {
+		return cached;
+	}
+
+	const [gitignore, genignore] = await Promise.all([
+		readIgnoreLines(key, '.gitignore'),
+		readIgnoreLines(key, '.genignore'),
+	]);
+
+	const matcher = createIgnoreMatcher([...gitignore, ...genignore]);
+	cache.set(key, matcher);
+	return matcher;
+}
+
+export async function isIgnoredByGitIgnore(folderFsPath: string, relativePosix: string): Promise<boolean> {
+	const matcher = await getFolderIgnoreMatcher(folderFsPath);
+	return ignoresRelative(matcher, relativePosix);
+}

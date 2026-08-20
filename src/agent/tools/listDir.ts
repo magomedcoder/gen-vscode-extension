@@ -1,4 +1,6 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { getFolderIgnoreMatcher, ignoresRelative } from '../gitIgnore';
 import { AGENT_LIMITS } from '../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
@@ -38,7 +40,14 @@ export const listDirTool: ToolDefinition = {
 			};
 		}
 
-		const sliced = entries.slice(0, cap).map(([name, type]) => {
+		const matcher = await getFolderIgnoreMatcher(resolved.folder.uri.fsPath);
+		const parentRel = resolved.relative === '.' ? '' : resolved.relative;
+		const visible = entries.filter(([name]) => {
+			const childRel = parentRel ? path.posix.join(parentRel, name) : name;
+			return !ignoresRelative(matcher, childRel);
+		});
+
+		const sliced = visible.slice(0, cap).map(([name, type]) => {
 			const kind = type & vscode.FileType.Directory ? 'dir' : type & vscode.FileType.SymbolicLink ? 'link' : 'file';
 			return { name, kind };
 		});
@@ -47,7 +56,7 @@ export const listDirTool: ToolDefinition = {
 			ok: true,
 			content: JSON.stringify({
 				path: resolved.relative,
-				truncated: entries.length > cap,
+				truncated: visible.length > cap,
 				entries: sliced,
 			}, null, 2),
 		};

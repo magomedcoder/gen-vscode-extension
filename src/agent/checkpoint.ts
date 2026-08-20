@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { showConfirmDialog } from '../ui/confirmDialog';
 import { AGENT_LIMITS } from './policy';
 
 interface CheckpointEntry {
@@ -87,12 +88,13 @@ export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promi
 		return;
 	}
 
-	const restoreSnapshot = vscode.l10n.t('agent.restoreSnapshot');
-	const choice = await vscode.window.showInformationMessage(
-		vscode.l10n.t('agent.checkpointOffer', checkpoint.size),
-		restoreSnapshot,
-	);
-	if (choice !== restoreSnapshot) {
+	const choice = await showConfirmDialog({
+		title: vscode.l10n.t('agent.checkpointOffer', checkpoint.size),
+		variant: 'binary',
+		applyLabel: vscode.l10n.t('agent.restoreSnapshot'),
+		rejectLabel: vscode.l10n.t('comment.cancel'),
+	});
+	if (choice !== 'apply') {
 		return;
 	}
 

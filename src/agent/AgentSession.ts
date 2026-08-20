@@ -3,6 +3,7 @@ import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { pathFromToolArguments } from './diff';
 import { AgentCheckpoint } from './checkpoint';
+import { clearIgnoreCache } from './gitIgnore';
 import { TurnPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
 import { redactSecrets } from './secrets';
@@ -115,6 +116,7 @@ export class AgentSession {
 		let toolsEnabled = true;
 		const plan = params.plan ?? new TurnPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
+		clearIgnoreCache();
 
 		const userContent = params.editorContext
 			? `${params.userText}\n\n---\nКонтекст редактора:\n${params.editorContext}`

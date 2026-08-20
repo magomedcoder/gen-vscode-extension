@@ -10,12 +10,16 @@ import { validateUnchangedCode } from '../parse/validateUnchangedCode';
 import { buildCommentMessages } from '../prompt/commentPrompt';
 import type { DiffContentProvider } from '../preview/showDiff';
 import { showCommentDiff } from '../preview/showDiff';
+import { showConfirmDialog } from '../ui/confirmDialog';
 
 async function confirmUnsafeApplyWithoutPreview(message: string): Promise<boolean> {
-	const applyAnyway = vscode.l10n.t('comment.applyAnyway');
-	const cancel = vscode.l10n.t('comment.cancel');
-	const proceed = await vscode.window.showWarningMessage(message, applyAnyway, cancel);
-	return proceed === applyAnyway;
+	const choice = await showConfirmDialog({
+		title: message,
+		variant: 'binary',
+		applyLabel: vscode.l10n.t('comment.applyAnyway'),
+		rejectLabel: vscode.l10n.t('comment.cancel'),
+	});
+	return choice === 'apply';
 }
 
 // Общий пайплайн: промпт -> llm -> разбор -> валидация -> diff -> apply
@@ -95,8 +99,6 @@ export async function runCommentPipeline(
 
 	const validation = validateUnchangedCode(fragment.text, commented, fragment.languageId);
 	const validationMessage = validation.message ?? vscode.l10n.t('comment.codeMayHaveChanged');
-	const applyAnyway = vscode.l10n.t('comment.applyAnyway');
-	const cancel = vscode.l10n.t('comment.cancel');
 
 	if (!validation.ok && !settings.previewBeforeApply) {
 		const proceed = await confirmUnsafeApplyWithoutPreview(validationMessage);
@@ -125,12 +127,8 @@ export async function runCommentPipeline(
 	}
 
 	if (await isSelectionStale(fragment)) {
-		const proceed = await vscode.window.showWarningMessage(
-			vscode.l10n.t('comment.staleEditWarning'),
-			applyAnyway,
-			cancel,
-		);
-		if (proceed !== applyAnyway) {
+		const proceed = await confirmUnsafeApplyWithoutPreview(vscode.l10n.t('comment.staleEditWarning'));
+		if (!proceed) {
 			void vscode.window.showInformationMessage(vscode.l10n.t('comment.notApplied'));
 			return;
 		}

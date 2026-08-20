@@ -5,6 +5,7 @@ import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
 import { onSettingsChanged } from '../config/settings';
 import { SettingsPanel } from './SettingsPanel';
+import type { ConfirmDialogOptions } from '../ui/confirmDialog';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -20,6 +21,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				type: 'state',
 				state: this.session.getState(),
 			});
+		});
+	}
+
+	requestConfirm(options: ConfirmDialogOptions) {
+		return this.session.requestConfirm({
+			title: options.title,
+			detail: options.detail,
+			hint: vscode.l10n.t('confirm.panelHint'),
+			variant: options.variant,
+			applyLabel: options.applyLabel,
+			rejectLabel: options.rejectLabel,
 		});
 	}
 
@@ -79,6 +91,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				return;
 			case 'openSettings':
 				SettingsPanel.show(this.context);
+				return;
+			case 'confirmChoice':
+				this.session.resolveConfirm(msg.id, msg.choice);
 				return;
 			case 'openExternal': {
 				try {
