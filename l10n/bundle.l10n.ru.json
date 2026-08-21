@@ -34,6 +34,9 @@
 	"agent.operationCancelled": "Операция отменена",
 	"agent.confirmUiUnavailable": "Действие требует подтверждения, но UI недоступен",
 	"agent.userDenied": "Пользователь отклонил действие",
+	"agent.overwriteUserEditsTitle": "Перезаписать правки пользователя в {0}?",
+	"agent.overwriteUserEditsBatchTitle": "Перезаписать правки пользователя в файлах: {0}?",
+	"agent.overwriteUserEditsDetail": "Файл изменился после последней записи агента. Применение правки пойдёт поверх изменений пользователя.",
 	"settings.panelTitle": "Настройки Gen",
 	"confirm.panelTitle": "Подтверждение Gen",
 	"confirm.panelHint": "Выберите действие в панели чата Gen."

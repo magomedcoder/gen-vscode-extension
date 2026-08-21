@@ -3,6 +3,7 @@ import { AgentSession, isAbortError } from '../agent';
 import { AgentCheckpoint, offerCheckpointRestore } from '../agent/checkpoint';
 import { TurnPlan } from '../agent/plan';
 import type { ConfirmChoice } from '../agent/types';
+import { AgentWriteTracker } from '../agent/userEdits';
 import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
 import type { LlmClient } from '../llm/types';
@@ -34,6 +35,7 @@ export class ChatSession {
 	private inflight?: AbortController;
 	private readonly listeners = new Set<ChatSessionListener>();
 	private readonly agent: AgentSession;
+	private readonly writes = new AgentWriteTracker();
 	private clearSeq = 0;
 	private pendingConfirm?: PendingConfirmInternal;
 
@@ -159,6 +161,7 @@ export class ChatSession {
 		this.inflight?.abort();
 		this.inflight = undefined;
 		this.settleConfirm('abort');
+		this.writes.clear();
 		this.messages = [];
 		this.persist();
 		this.emit();
@@ -220,6 +223,7 @@ export class ChatSession {
 					revealFile: revealAgentFile,
 					plan,
 					checkpoint,
+					writes: this.writes,
 					ui: {
 						append: (message) => {
 							if (this.clearSeq !== clearSeqAtStart) {
@@ -293,7 +297,10 @@ export class ChatSession {
 		}
 
 		if (checkpoint.size > 0) {
-			await offerCheckpointRestore(checkpoint);
+			const restored = await offerCheckpointRestore(checkpoint);
+			if (restored.length > 0) {
+				this.writes.clear();
+			}
 		}
 	}
 }

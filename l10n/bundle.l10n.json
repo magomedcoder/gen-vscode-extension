@@ -34,6 +34,9 @@
 	"agent.operationCancelled": "Operation cancelled",
 	"agent.confirmUiUnavailable": "Action requires confirmation, but UI is unavailable",
 	"agent.userDenied": "User rejected the action",
+	"agent.overwriteUserEditsTitle": "Overwrite user edits in {0}?",
+	"agent.overwriteUserEditsBatchTitle": "Overwrite user edits in {0} file(s)?",
+	"agent.overwriteUserEditsDetail": "The file changed after the agent's last write. Applying will edit on top of those user changes.",
 	"settings.panelTitle": "Gen settings",
 	"confirm.panelTitle": "Gen confirmation",
 	"confirm.panelHint": "Choose an action in the Gen chat panel."

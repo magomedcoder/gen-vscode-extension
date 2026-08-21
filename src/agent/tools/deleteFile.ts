@@ -50,6 +50,7 @@ export const deleteFileTool: ToolDefinition = {
 		await vscode.workspace.fs.delete(resolved.uri, {
 			useTrash: true
 		});
+		ctx.writes?.forget(resolved.uri);
 		ctx.trackMutation?.(resolved.uri);
 		return {
 			ok: true,

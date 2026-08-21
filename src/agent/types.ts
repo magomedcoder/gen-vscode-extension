@@ -2,6 +2,7 @@ import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
 import type { AgentCheckpoint } from './checkpoint';
 import type { TurnPlan } from './plan';
+import type { AgentWriteTracker } from './userEdits';
 
 export type ConfirmChoice = 'apply' | 'skip' | 'abort';
 
@@ -12,6 +13,7 @@ export interface ToolContext {
 	trackMutation?(uri: Uri): void;
 	plan?: TurnPlan;
 	checkpoint?: AgentCheckpoint;
+	writes?: AgentWriteTracker;
 }
 
 export interface ToolResult {

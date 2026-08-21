@@ -19,6 +19,12 @@ Comment command
 2. `deniedPaths` (`policy.ts`)  
 3. `.gitignore` + `.genignore` (`gitIgnore.ts`, кэш на turn)
 
+## Совместное редактирование
+
+- После успешного `write_file` / `apply_patch` / `apply_workspace_edit` сессия хранит снимок «как агент оставил» (`AgentWriteTracker`).
+- Если буфер расходится со снимком: полный `write_file` запрещён; `apply_patch` / `apply_workspace_edit` - поверх актуального текста + confirm при конфликте.
+- В system prompt на ход подмешивается краткий user-diff по затронутым файлам.
+
 ## Сборка
 
 - Extension host: esbuild -> `dist/extension.js`

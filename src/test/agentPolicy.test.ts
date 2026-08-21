@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'node:path';
+import * as vscode from 'vscode';
 import { applySearchReplace, PatchError } from '../agent/patch';
 import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy';
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit';
@@ -8,6 +9,7 @@ import { formatMiniDiff, pathFromToolArguments } from '../agent/diff';
 import { formatPlan, mutationPathsFromArgs, parsePlanArgs, TurnPlan } from '../agent/plan';
 import { redactSecrets } from '../agent/secrets';
 import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types';
+import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits';
 import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../config/types';
 
 suite('path sandbox', () => {
@@ -259,5 +261,24 @@ suite('redactSecrets', () => {
 		assert.ok(count >= 1);
 		assert.ok(!text.includes('supersecretvalue'));
 		assert.ok(text.includes('[REDACTED]'));
+	});
+});
+
+suite('AgentWriteTracker', () => {
+	test('ловит drift после снимка агента', () => {
+		const tracker = new AgentWriteTracker();
+		const uri = vscode.Uri.file('/tmp/gen-p11-user-edits.ts');
+		tracker.remember(uri, 'gen-p11-user-edits.ts', 'const a = 1;\n');
+		assert.ok(!tracker.hasUserEdits(uri, 'const a = 1;\n'));
+		assert.ok(tracker.hasUserEdits(uri, 'const a = 2;\n'));
+		const diff = tracker.userDiff(uri, 'const a = 2;\n');
+		assert.ok(diff && diff.includes('-') && diff.includes('+'));
+	});
+
+	test('denyWriteOverUserEdits указывает на apply_patch', () => {
+		const msg = denyWriteOverUserEdits('src/a.ts', '-old\n+new');
+		assert.ok(msg.includes('write_file'));
+		assert.ok(msg.includes('apply_patch'));
+		assert.ok(msg.includes('src/a.ts'));
 	});
 });

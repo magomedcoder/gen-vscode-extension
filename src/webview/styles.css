@@ -516,16 +516,6 @@ body {
 	gap: 8px;
 }
 
-.composer__hint {
-	min-width: 0;
-	font-size: 11px;
-	line-height: 1.3;
-	color: var(--vscode-descriptionForeground);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
 .composer__btn {
 	flex-shrink: 0;
 	min-width: 84px;

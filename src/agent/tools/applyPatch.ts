@@ -4,11 +4,11 @@ import { applySearchReplace } from '../patch';
 import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../workspacePath';
-import { confirmOrSkip, shouldConfirmWrites } from './confirm';
+import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from './confirm';
 
 export const applyPatchTool: ToolDefinition = {
 	name: 'apply_patch',
-	description: 'Точечная правка файла: заменить old_string на new_string. Для нового файла используйте write_file.',
+	description: 'Точечная правка файла: заменить old_string на new_string по актуальному содержимому. Для нового файла используйте write_file. Не откатывай правки пользователя без явной необходимости.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -35,37 +35,38 @@ export const applyPatchTool: ToolDefinition = {
 	async execute(args, ctx: ToolContext): Promise<ToolResult> {
 		throwIfAborted(ctx.signal);
 		const resolved = await resolveWorkspacePath(asString(args, 'path'));
-		if (!await pathExists(resolved.uri)) {
+		if (!(await pathExists(resolved.uri))) {
 			return {
 				ok: false,
-				content: `Файл не найден: ${resolved.relative}`
+				content: `Файл не найден: ${resolved.relative}`,
 			};
 		}
 
-		const doc = await vscode.workspace.openTextDocument(resolved.uri);
+		const oldString = asString(args, 'old_string');
+		const newString = asString(args, 'new_string');
+		const replaceAll = asBoolean(args, 'replace_all');
+
+		let doc = await vscode.workspace.openTextDocument(resolved.uri);
 		if (new TextEncoder().encode(doc.getText()).byteLength > AGENT_LIMITS.maxReadBytes) {
 			return {
 				ok: false,
-				content: `Файл слишком большой для patch: ${resolved.relative}`
+				content: `Файл слишком большой для patch: ${resolved.relative}`,
 			};
 		}
 
-		const original = doc.getText();
+		let original = doc.getText();
+		const userDiffBefore = ctx.writes?.userDiff(resolved.uri, original);
+
 		let next: {
 			text: string;
 			count: number
 		};
 		try {
-			next = applySearchReplace(
-				original,
-				asString(args, 'old_string'),
-				asString(args, 'new_string'),
-				asBoolean(args, 'replace_all'),
-			);
+			next = applySearchReplace(original, oldString, newString, replaceAll);
 		} catch (err) {
 			return {
 				ok: false,
-				content: err instanceof Error ? err.message : String(err)
+				content: err instanceof Error ? err.message : String(err),
 			};
 		}
 
@@ -73,18 +74,42 @@ export const applyPatchTool: ToolDefinition = {
 		if (encoded.byteLength > AGENT_LIMITS.maxWriteBytes) {
 			return {
 				ok: false,
-				content: 'Результат patch превышает лимит записи'
+				content: 'Результат patch превышает лимит записи',
 			};
 		}
 
-		if (shouldConfirmWrites()) {
-			const denied = await confirmOrSkip(ctx, `Применить правку к ${resolved.relative}? (${next.count} замен)`, asString(args, 'new_string'));
+		if (userDiffBefore) {
+			const denied = await confirmAlwaysOrSkip(
+				ctx,
+				vscode.l10n.t('agent.overwriteUserEditsTitle', resolved.relative),
+				`${vscode.l10n.t('agent.overwriteUserEditsDetail')}\n\n${userDiffBefore}`,
+			);
 			if (denied) {
-				return { 
+				return {
 					...denied,
-					path: resolved.relative
+					path: resolved.relative,
 				};
 			}
+		} else if (shouldConfirmWrites()) {
+			const denied = await confirmOrSkip(ctx, `Применить правку к ${resolved.relative}? (${next.count} замен)`, newString);
+			if (denied) {
+				return {
+					...denied,
+					path: resolved.relative,
+				};
+			}
+		}
+
+		doc = await vscode.workspace.openTextDocument(resolved.uri);
+		original = doc.getText();
+		try {
+			next = applySearchReplace(original, oldString, newString, replaceAll);
+		} catch (err) {
+			return {
+				ok: false,
+				path: resolved.relative,
+				content: `${err instanceof Error ? err.message : String(err)} (файл изменился после подтверждения - сделай read_file и повтори patch)`,
+			};
 		}
 
 		const last = Math.max(0, doc.lineCount - 1);
@@ -94,21 +119,24 @@ export const applyPatchTool: ToolDefinition = {
 		if (!applied) {
 			return {
 				ok: false,
-				content: `Не удалось применить правку: ${resolved.relative}`
+				content: `Не удалось применить правку: ${resolved.relative}`,
 			};
 		}
 
 		await ctx.checkpoint?.remember(doc.uri, resolved.relative, original);
+		ctx.writes?.remember(doc.uri, resolved.relative, next.text);
 		ctx.trackMutation?.(doc.uri);
 		if (ctx.revealFile) {
 			await ctx.revealFile(doc.uri);
 		}
 
+		const note = userDiffBefore ? '\nУчтены правки пользователя (патч поверх актуального буфера).' : '';
+
 		return {
 			ok: true,
 			path: resolved.relative,
 			diff: formatMiniDiff(original, next.text),
-			content: `Правка применена: ${resolved.relative} (${next.count} замен)`,
+			content: `Правка применена: ${resolved.relative} (${next.count} замен)${note}`,
 		};
 	},
 };

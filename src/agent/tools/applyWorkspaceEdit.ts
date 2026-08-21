@@ -5,7 +5,7 @@ import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asObjectArray, asString} from '../types';
 import type { ToolContext, ToolDefinition, ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
-import { confirmOrSkip, shouldConfirmWrites } from './confirm';
+import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from './confirm';
 
 export interface SearchReplaceEdit {
 	path: string;
@@ -74,21 +74,26 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			};
 		}
 
-		const prepared: Array<{
+		type Prepared = {
+			old_string: string;
+			new_string: string;
+			replace_all: boolean;
 			uri: vscode.Uri;
 			relative: string;
-			range: vscode.Range;
 			original: string;
 			text: string;
 			count: number;
-		}> = [];
+			userDiff?: string;
+		};
+
+		const prepared: Prepared[] = [];
 
 		for (const item of parsed) {
 			throwIfAborted(ctx.signal);
 			if (!item.path || !item.old_string) {
 				return {
 					ok: false,
-					content: 'У каждой правки нужны path и old_string'
+					content: 'У каждой правки нужны path и old_string',
 				};
 			}
 
@@ -107,14 +112,76 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			if (new TextEncoder().encode(next.text).byteLength > AGENT_LIMITS.maxWriteBytes) {
 				return {
 					ok: false,
-					content: `Результат слишком большой: ${resolved.relative}`
+					content: `Результат слишком большой: ${resolved.relative}`,
+				};
+			}
+
+			prepared.push({
+				old_string: item.old_string,
+				new_string: item.new_string,
+				replace_all: item.replace_all,
+				uri: doc.uri,
+				relative: resolved.relative,
+				original,
+				text: next.text,
+				count: next.count,
+				userDiff: ctx.writes?.userDiff(doc.uri, original),
+			});
+		}
+
+		const drifted = prepared.filter((p) => p.userDiff);
+		if (drifted.length > 0) {
+			const detail = drifted.map((p) => `${p.relative}:\n${p.userDiff}`).join('\n\n');
+			const denied = await confirmAlwaysOrSkip(
+				ctx,
+				vscode.l10n.t('agent.overwriteUserEditsBatchTitle', drifted.length),
+				`${vscode.l10n.t('agent.overwriteUserEditsDetail')}\n\n${detail}`,
+			);
+			if (denied) {
+				return {
+					...denied,
+					path: prepared.map((p) => p.relative).join(', '),
+				};
+			}
+		} else if (shouldConfirmWrites()) {
+			const summary = prepared.map((p) => `${p.relative} (${p.count} замен)`).join('\n');
+			const denied = await confirmOrSkip(ctx, `Применить ${prepared.length} правок атомарно?`, summary);
+			if (denied) {
+				return {
+					...denied,
+					path: prepared.map((p) => p.relative).join(', '),
+				};
+			}
+		}
+
+		const refreshed: Array<{
+			uri: vscode.Uri;
+			relative: string;
+			range: vscode.Range;
+			original: string;
+			text: string;
+			count: number;
+		}> = [];
+
+		for (const item of prepared) {
+			throwIfAborted(ctx.signal);
+			const doc = await vscode.workspace.openTextDocument(item.uri);
+			const original = doc.getText();
+			let next: { text: string; count: number };
+			try {
+				next = applySearchReplace(original, item.old_string, item.new_string, item.replace_all);
+			} catch (err) {
+				return {
+					ok: false,
+					path: item.relative,
+					content: `${item.relative}: ${err instanceof Error ? err.message : String(err)} (файл изменился - сделай read_file и повтори)`,
 				};
 			}
 
 			const last = Math.max(0, doc.lineCount - 1);
-			prepared.push({
+			refreshed.push({
 				uri: doc.uri,
-				relative: resolved.relative,
+				relative: item.relative,
 				range: new vscode.Range(0, 0, last, doc.lineAt(last).text.length),
 				original,
 				text: next.text,
@@ -122,19 +189,8 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			});
 		}
 
-		if (shouldConfirmWrites()) {
-			const summary = prepared.map((p) => `${p.relative} (${p.count} замен)`).join('\n');
-			const denied = await confirmOrSkip(ctx, `Применить ${prepared.length} правок атомарно?`, summary);
-			if (denied) {
-				return { 
-					...denied,
-					path: prepared.map((p) => p.relative).join(', ')
-				};
-			}
-		}
-
 		const ws = new vscode.WorkspaceEdit();
-		for (const item of prepared) {
+		for (const item of refreshed) {
 			ws.replace(item.uri, item.range, item.text);
 		}
 
@@ -142,24 +198,26 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 		if (!ok) {
 			return {
 				ok: false,
-				content: 'WorkspaceEdit не применён'
+				content: 'WorkspaceEdit не применён',
 			};
 		}
 
-		if (ctx.revealFile && prepared[0]) {
-			await ctx.revealFile(prepared[0].uri);
+		if (ctx.revealFile && refreshed[0]) {
+			await ctx.revealFile(refreshed[0].uri);
 		}
 
-		for (const item of prepared) {
+		for (const item of refreshed) {
 			await ctx.checkpoint?.remember(item.uri, item.relative, item.original);
+			ctx.writes?.remember(item.uri, item.relative, item.text);
 			ctx.trackMutation?.(item.uri);
 		}
 
+		const note = drifted.length > 0 ? '\nУчтены правки пользователя на части файлов.' : '';
 		return {
 			ok: true,
-			path: prepared.map((p) => p.relative).join(', '),
-			diff: prepared.map((p) => `--- ${p.relative}\n${formatMiniDiff(p.original, p.text)}`).join('\n\n'),
-			content: `Применено правок: ${prepared.length}\n${prepared.map((p) => `${p.relative}: ${p.count}`).join('\n')}`,
+			path: refreshed.map((p) => p.relative).join(', '),
+			diff: refreshed.map((p) => `--- ${p.relative}\n${formatMiniDiff(p.original, p.text)}`).join('\n\n'),
+			content: `Применено правок: ${refreshed.length}\n${refreshed.map((p) => `${p.relative}: ${p.count}`).join('\n')}${note}`,
 		};
 	},
 };

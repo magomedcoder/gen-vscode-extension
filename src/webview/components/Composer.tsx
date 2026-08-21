@@ -1,12 +1,25 @@
 import { useState, type KeyboardEvent, type SubmitEvent } from 'react';
+import type { ChatMode } from '../../chat/protocol';
 import { vscodeApi } from '../vscodeApi';
 
 interface ComposerProps {
 	busy: boolean;
+	mode: ChatMode;
 }
 
-export function Composer({ busy }: ComposerProps) {
+export function Composer({ busy, mode }: ComposerProps) {
 	const [draft, setDraft] = useState('');
+
+	const setMode = (next: ChatMode) => {
+		if (next === mode || busy) {
+			return;
+		}
+
+		vscodeApi.postMessage({
+			type: 'setChatMode',
+			mode: next,
+		});
+	};
 
 	const submit = () => {
 		const text = draft.trim();
@@ -39,17 +52,38 @@ export function Composer({ busy }: ComposerProps) {
 					className="composer__input"
 					rows={2}
 					value={draft}
-					placeholder={busy ? 'Идёт запрос или подтверждение...' : 'Спросите Gen...'}
+					placeholder={busy ? 'Идёт запрос...' : 'Сообщение... Enter - отправить, Shift+Enter - строка'}
 					disabled={busy}
 					onChange={(e) => setDraft(e.target.value)}
 					onKeyDown={onKeyDown}
 				/>
 				<div className="composer__footer">
-					<span className="composer__hint">
-						{busy ? 'Ожидание...' : 'Enter - отправить, Shift+Enter - новая строка'}
-					</span>
+					<div className="mode-toggle" role="group" aria-label="Режим чата">
+						<button
+							type="button"
+							className={`mode-toggle__btn${mode === 'ask' ? ' mode-toggle__btn--active' : ''}`}
+							disabled={busy}
+							onClick={() => setMode('ask')}
+						>
+							Просто чат
+						</button>
+						<button
+							type="button"
+							className={`mode-toggle__btn${mode === 'agent' ? ' mode-toggle__btn--active' : ''}`}
+							disabled={busy}
+							onClick={() => setMode('agent')}
+						>
+							Агент
+						</button>
+					</div>
 					{busy ? (
-						<button className="btn btn--secondary composer__btn" type="button" onClick={() => vscodeApi.postMessage({ type: 'cancel' })}>Стоп</button>
+						<button
+							className="btn btn--secondary composer__btn"
+							type="button"
+							onClick={() => vscodeApi.postMessage({ type: 'cancel' })}
+						>
+							Стоп
+						</button>
 					) : (
 						<button className="btn composer__btn" type="submit" disabled={!canSend}>Отправить</button>
 					)}

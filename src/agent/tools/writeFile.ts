@@ -2,12 +2,13 @@ import * as vscode from 'vscode';
 import { formatMiniDiff } from '../diff';
 import { AGENT_LIMITS } from '../policy';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
+import { denyWriteOverUserEdits } from '../userEdits';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 import { confirmOrSkip, shouldConfirmWrites } from './confirm';
 
 export const writeFileTool: ToolDefinition = {
 	name: 'write_file',
-	description: 'Создать или полностью перезаписать короткий текстовый файл (UTF-8). Для длинных файлов сначала заготовка, затем apply_patch кусками - большой content в JSON обрежется.',
+	description: 'Создать или полностью перезаписать короткий текстовый файл (UTF-8). Для длинных файлов сначала заготовка, затем apply_patch кусками - большой content в JSON обрежется. Если файл уже правил пользователь после агента - write_file запрещён, используй apply_patch.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -37,34 +38,51 @@ export const writeFileTool: ToolDefinition = {
 
 		const exists = await pathExists(resolved.uri);
 		let before = '';
-		let existingDoc: vscode.TextDocument | undefined;
 		if (exists) {
-			existingDoc = await vscode.workspace.openTextDocument(resolved.uri);
+			const existingDoc = await vscode.workspace.openTextDocument(resolved.uri);
 			before = existingDoc.getText();
+			const userDiff = ctx.writes?.userDiff(resolved.uri, before);
+			if (userDiff !== undefined) {
+				return {
+					ok: false,
+					path: resolved.relative,
+					content: denyWriteOverUserEdits(resolved.relative, userDiff),
+				};
+			}
 		}
 
 		if (exists && shouldConfirmWrites()) {
-			const denied = await confirmOrSkip(
-				ctx,
-				`Перезаписать файл ${resolved.relative}?`,
-				content,
-			);
+			const denied = await confirmOrSkip(ctx, `Перезаписать файл ${resolved.relative}?`, content);
 			if (denied) {
 				return {
 					...denied,
-					path: resolved.relative
+					path: resolved.relative,
+				};
+			}
+		}
+
+		let doc: vscode.TextDocument | undefined;
+		if (exists) {
+			doc = await vscode.workspace.openTextDocument(resolved.uri);
+			before = doc.getText();
+			const userDiff = ctx.writes?.userDiff(resolved.uri, before);
+			if (userDiff !== undefined) {
+				return {
+					ok: false,
+					path: resolved.relative,
+					content: denyWriteOverUserEdits(resolved.relative, userDiff),
 				};
 			}
 		}
 
 		const edit = new vscode.WorkspaceEdit();
-		if (existingDoc) {
-			const last = Math.max(0, existingDoc.lineCount - 1);
-			edit.replace(existingDoc.uri, new vscode.Range(0, 0, last, existingDoc.lineAt(last).text.length), content);
+		if (doc) {
+			const last = Math.max(0, doc.lineCount - 1);
+			edit.replace(doc.uri, new vscode.Range(0, 0, last, doc.lineAt(last).text.length), content);
 		} else {
 			edit.createFile(resolved.uri, {
 				ignoreIfExists: false,
-				contents: bytes
+				contents: bytes,
 			});
 		}
 
@@ -72,11 +90,12 @@ export const writeFileTool: ToolDefinition = {
 		if (!applied) {
 			return {
 				ok: false,
-				content: `Не удалось записать: ${resolved.relative}`
+				content: `Не удалось записать: ${resolved.relative}`,
 			};
 		}
 
 		await ctx.checkpoint?.remember(resolved.uri, resolved.relative, exists ? before : undefined);
+		ctx.writes?.remember(resolved.uri, resolved.relative, content);
 		ctx.trackMutation?.(resolved.uri);
 		if (ctx.revealFile) {
 			await ctx.revealFile(resolved.uri);

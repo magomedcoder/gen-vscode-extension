@@ -83,9 +83,9 @@ export class AgentCheckpoint {
 	}
 }
 
-export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promise<void> {
+export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promise<string[]> {
 	if (checkpoint.size === 0) {
-		return;
+		return [];
 	}
 
 	const choice = await showConfirmDialog({
@@ -95,14 +95,15 @@ export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promi
 		rejectLabel: vscode.l10n.t('comment.cancel'),
 	});
 	if (choice !== 'apply') {
-		return;
+		return [];
 	}
 
 	const restored = await checkpoint.restore();
 	if (restored.length === 0) {
 		void vscode.window.showWarningMessage(vscode.l10n.t('agent.restoreFailed'));
-		return;
+		return [];
 	}
 
 	void vscode.window.showInformationMessage(vscode.l10n.t('agent.restoredFiles', restored.length));
+	return restored;
 }

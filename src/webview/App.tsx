@@ -40,10 +40,10 @@ export function App() {
 
 	return (
 		<div className="app">
-			<ChatHeader mode={chat.mode} busy={chat.busy} usage={chat.usage} />
+			<ChatHeader usage={chat.usage} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
-			<Composer busy={chat.busy || confirming} />
+			<Composer busy={chat.busy || confirming} mode={chat.mode} />
 		</div>
 	);
 }

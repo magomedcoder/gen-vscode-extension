@@ -4,6 +4,7 @@ export function buildAgentSystemPrompt(options?: {
 	toolsAvailable: boolean;
 	authLevel?: AgentAuthLevel;
 	deniedPaths?: readonly string[];
+	userEditsAppendix?: string;
 }): string {
 	const toolsAvailable = options?.toolsAvailable ?? true;
 	const authLevel = options?.authLevel ?? 'ask';
@@ -19,7 +20,8 @@ export function buildAgentSystemPrompt(options?: {
 	if (toolsAvailable) {
 		lines.push(
 			'У тебя есть инструменты. Вызывай их, когда нужны факты о файлах или правки.',
-			'Не выдумывай содержимое файлов - сначала read_file / list_dir / search_files.',
+			'Не выдумывай содержимое файлов - перед любой записью заново read_file / get_active_editor; не опирайся на старый снимок из истории tools.',
+			'Правки пользователя важнее: не откатывай их, если задача явно не требует. Если файл расходится со снимком агента - полный write_file запрещён, только apply_patch / apply_workspace_edit по актуальному тексту.',
 			'Для нового файла: write_file только если файл короткий. Большой файл: короткая заготовка write_file, дальше apply_patch небольшими фрагментами. Несколько файлов сразу: apply_workspace_edit. Не клади весь большой файл в один write_file: JSON аргументов обрежется.',
 			'Если инструмент вернул ошибку про невалидный JSON - повтори меньшим куском через apply_patch, не повторяй тот же огромный write_file.',
 			'Навигация: open_file, reveal_line, close_file. Состояние редактора: get_active_editor, get_open_editors.',
@@ -41,6 +43,11 @@ export function buildAgentSystemPrompt(options?: {
 		lines.push('Когда задача решена, дай итоговый текстовый ответ без лишних tool-вызовов.');
 	} else {
 		lines.push('Сервер LLM не поддерживает tools в этом запросе - отвечай только текстом, без попыток вызвать инструменты.');
+	}
+
+	const appendix = options?.userEditsAppendix?.trim();
+	if (appendix) {
+		lines.push(appendix);
 	}
 
 	return lines.join(' ');

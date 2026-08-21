@@ -9,6 +9,7 @@ import { buildAgentSystemPrompt } from './prompts';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
 import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
+import type { AgentWriteTracker } from './userEdits';
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -110,18 +111,21 @@ export class AgentSession {
 		trackMutation?: ToolContext['trackMutation'];
 		plan?: TurnPlan;
 		checkpoint?: AgentCheckpoint;
+		writes?: AgentWriteTracker;
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
 		let toolsEnabled = true;
 		const plan = params.plan ?? new TurnPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
+		const writes = params.writes;
 		clearIgnoreCache();
 
 		const userContent = params.editorContext
 			? `${params.userText}\n\n---\nКонтекст редактора:\n${params.editorContext}`
 			: params.userText;
 
+		const userEditsAppendix = writes ? await writes.buildPromptAppendix() : '';
 		const apiMessages: ChatMessage[] = [
 			{
 				role: 'system',
@@ -129,6 +133,7 @@ export class AgentSession {
 					toolsAvailable: true,
 					authLevel: settings.agentAuthLevel,
 					deniedPaths: settings.deniedPaths,
+					userEditsAppendix,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -170,6 +175,7 @@ export class AgentSession {
 					role: 'system',
 					content: buildAgentSystemPrompt({
 						toolsAvailable: false,
+						userEditsAppendix,
 					}),
 				};
 				params.ui.append({
@@ -238,6 +244,7 @@ export class AgentSession {
 					trackMutation: params.trackMutation,
 					plan,
 					checkpoint,
+					writes,
 				});
 				const lengthHint = !toolResult.ok && result.finishReason === 'length'
 					? '\nОтвет модели обрезан по max_tokens. Увеличь лимит в настройках или пиши файл частями через apply_patch.'
