@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { AgentSession, isAbortError } from '../agent';
 import { AgentCheckpoint, offerCheckpointRestore } from '../agent/checkpoint';
-import { TurnPlan } from '../agent/plan';
+import { StickyPlan, type StickyPlanSnapshot } from '../agent/plan';
+import { WorkspacePlanStore } from '../agent/planStore';
 import type { ConfirmChoice } from '../agent/types';
 import { AgentWriteTracker } from '../agent/userEdits';
 import { getSettings, updateSettings } from '../config/settings';
@@ -14,6 +15,7 @@ import { CHAT_VIEW_ID } from './ids';
 import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
 
 const STORAGE_KEY = 'gen.chat.messages';
+const PLAN_STORAGE_KEY = 'gen.agent.stickyPlan';
 const MAX_STORED = 80;
 
 function messageId(): string {
@@ -36,15 +38,30 @@ export class ChatSession {
 	private readonly listeners = new Set<ChatSessionListener>();
 	private readonly agent: AgentSession;
 	private readonly writes = new AgentWriteTracker();
+	private readonly stickyPlan = new StickyPlan();
+	private readonly planStore: WorkspacePlanStore;
 	private clearSeq = 0;
 	private pendingConfirm?: PendingConfirmInternal;
+	private planBootstrapped = false;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
 		private readonly client: LlmClient,
 	) {
 		this.messages = this.context.workspaceState.get<ChatUiMessage[]>(STORAGE_KEY, []);
+		const legacy = this.context.workspaceState.get<StickyPlanSnapshot>('gen.chat.stickyPlan');
+		const stored = this.context.workspaceState.get<StickyPlanSnapshot>(PLAN_STORAGE_KEY) ?? legacy;
+		this.stickyPlan.restore(stored);
 		this.agent = new AgentSession(client);
+		this.planStore = new WorkspacePlanStore(() => {
+			void this.onPlanFileExternallyChanged();
+		});
+		this.planStore.startWatching();
+		void this.bootstrapPlan();
+	}
+
+	dispose(): void {
+		this.planStore.dispose();
 	}
 
 	getState(): ChatViewState {
@@ -53,6 +70,7 @@ export class ChatSession {
 			busy: Boolean(this.inflight),
 			mode: getSettings().chatMode,
 			usage: sumUsage(this.messages),
+			stickyPlan: this.stickyPlan.toUi(),
 			pendingConfirm: this.pendingConfirm
 				? {
 					id: this.pendingConfirm.id,
@@ -87,6 +105,73 @@ export class ChatSession {
 
 	private persist(): void {
 		void this.context.workspaceState.update(STORAGE_KEY, this.messages.slice(-MAX_STORED));
+	}
+
+	private persistPlan(): void {
+		void this.context.workspaceState.update(PLAN_STORAGE_KEY, this.stickyPlan.snapshot());
+		void this.context.workspaceState.update('gen.chat.stickyPlan', undefined);
+	}
+
+	private onPlanChanged(): void {
+		void this.flushPlan();
+	}
+
+	private async flushPlan(): Promise<void> {
+		this.persistPlan();
+		await this.planStore.writeSnapshot(this.stickyPlan.snapshot());
+		this.emit();
+	}
+
+	private async bootstrapPlan(): Promise<void> {
+		const fromState = this.stickyPlan.snapshot();
+		this.planStore.seedCanonicalFromPlan(fromState);
+		const raw = await this.planStore.readRaw();
+		if ((raw === undefined || !raw.trim()) && fromState?.steps.length) {
+			await this.planStore.writeSnapshot(fromState);
+		} else {
+			const result = await this.planStore.reload(this.stickyPlan);
+			if (result.parseError) {
+				// оставляем план из workspaceState в памяти
+				this.planStore.seedCanonicalFromPlan(fromState);
+			}
+		}
+		this.persistPlan();
+		this.planBootstrapped = true;
+		this.emit();
+	}
+
+	private async onPlanFileExternallyChanged(): Promise<void> {
+		if (!this.planBootstrapped || this.inflight) {
+			return;
+		}
+
+		const result = await this.planStore.reload(this.stickyPlan);
+		this.persistPlan();
+		this.emit();
+		if (result.parseError) {
+			void vscode.window.showWarningMessage(`Gen: не удалось разобрать ${result.relativePath}: ${result.parseError}`);
+		}
+	}
+
+	private async reloadPlanForTurn(): Promise<{ planEditsAppendix?: string; parseError?: string }> {
+		const result = await this.planStore.reload(this.stickyPlan);
+		this.persistPlan();
+		this.emit();
+		if (result.parseError) {
+			return { parseError: `${result.relativePath}: ${result.parseError}` };
+		}
+
+		if (!result.userDiff) {
+			return {};
+		}
+
+		return {
+			planEditsAppendix: [
+				`Пользователь изменил файл плана ${result.relativePath}.`,
+				'Актуальный файл - канон: прими эти правки плана, не откатывай их без явной просьбы.',
+				result.userDiff,
+			].join('\n'),
+		};
 	}
 
 	private append(message: ChatUiMessage): void {
@@ -167,6 +252,10 @@ export class ChatSession {
 		this.emit();
 	}
 
+	async openPlan(): Promise<void> {
+		await this.planStore.openInEditor();
+	}
+
 	cancel(): void {
 		this.inflight?.abort();
 		this.settleConfirm('abort');
@@ -209,11 +298,18 @@ export class ChatSession {
 		this.emit();
 
 		const historyBeforeUser = this.messages.slice(0, -1);
-		const plan = new TurnPlan();
 		const checkpoint = new AgentCheckpoint();
 
 		try {
 			if (settings.chatMode === 'agent') {
+				const planReload = await this.reloadPlanForTurn();
+				if (planReload.parseError) {
+					this.append({
+						id: messageId(),
+						role: 'error',
+						content: `Не удалось прочитать план: ${planReload.parseError}. Исправь ${this.planStore.relativePath} или отмени план.`,
+					});
+				}
 				await this.agent.run({
 					history: historyBeforeUser,
 					userText: trimmed,
@@ -221,9 +317,11 @@ export class ChatSession {
 					signal: controller.signal,
 					confirm: (req) => this.requestConfirm(req),
 					revealFile: revealAgentFile,
-					plan,
+					plan: this.stickyPlan,
+					onPlanChanged: () => this.onPlanChanged(),
 					checkpoint,
 					writes: this.writes,
+					planEditsAppendix: planReload.planEditsAppendix,
 					ui: {
 						append: (message) => {
 							if (this.clearSeq !== clearSeqAtStart) {

@@ -5,7 +5,7 @@ import type { ConfirmVariant } from '../chat/protocol';
 export interface ConfirmDialogOptions {
 	title: string;
 	detail?: string;
-	// agent: Применить / Пропустить / Стоп; binary: Применить / Отклонить 
+	// Режим agent: Применить / Пропустить / Стоп; binary: Применить / Отклонить
 	variant?: ConfirmVariant;
 	applyLabel?: string;
 	rejectLabel?: string;

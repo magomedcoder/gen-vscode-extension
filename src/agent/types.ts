@@ -1,7 +1,7 @@
 import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
 import type { AgentCheckpoint } from './checkpoint';
-import type { TurnPlan } from './plan';
+import type { StickyPlan } from './plan';
 import type { AgentWriteTracker } from './userEdits';
 
 export type ConfirmChoice = 'apply' | 'skip' | 'abort';
@@ -11,7 +11,8 @@ export interface ToolContext {
 	confirm?(request: { title: string; detail?: string }): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;
 	trackMutation?(uri: Uri): void;
-	plan?: TurnPlan;
+	plan?: StickyPlan;
+	onPlanChanged?(): void;
 	checkpoint?: AgentCheckpoint;
 	writes?: AgentWriteTracker;
 }

@@ -11,7 +11,7 @@
   - LLM -> tool calls -> выполнение tools -> возврат результатов
   - карточки tool-call в чате (pending/ok/denied/error)
   - diff-preview для правок в режиме комментариев (и patch-first подход)
-  - multi-file plan: `propose_plan` -> ожидание подтверждения пользователя
+  - multi-file plan: `propose_plan` -> `.gen/plan.md` (sticky, переживает clear чата) + `update_plan` + карточка «Открыть» / ручной edit с diff для модели
   - checkpoints: снапшот файлов до agent turn и предложение восстановления
   - своё подтверждение: карточка в чате Gen для agent, комментариев и checkpoint (без отдельной вкладки и без native MessageBox)
   - совместное редактирование: снимок после write/patch, запрет full `write_file` поверх user-diff, confirm при patch поверх правок пользователя

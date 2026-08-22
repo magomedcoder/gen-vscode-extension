@@ -13,7 +13,7 @@ import { getWorkspaceInfoTool } from './getWorkspaceInfo';
 import { gitStatusTool } from './gitStatus';
 import { listDirTool } from './listDir';
 import { closeFileTool, openFileTool, revealLineTool } from './navigation';
-import { proposePlanTool } from './proposePlan';
+import { proposePlanTool, updatePlanTool } from './proposePlan';
 import { readFileTool } from './readFile';
 import { runCommandTool } from './runCommand';
 import { runTestsTool } from './runTests';
@@ -28,6 +28,7 @@ const TOOLS: ToolDefinition[] = [
 	readFileTool,
 	searchFilesTool,
 	proposePlanTool,
+	updatePlanTool,
 	writeFileTool,
 	applyPatchTool,
 	applyWorkspaceEditTool,
@@ -89,6 +90,10 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 		}
 
 		const result = await tool.execute(args, ctx);
+		if (result.ok && isMutatingTool(name) && ctx.plan?.isApproved) {
+			ctx.plan.markDoneByPaths(mutationPathsFromArgs(name, args));
+			ctx.onPlanChanged?.();
+		}
 		logAgentTool({
 			name,
 			status: result.denied ? 'denied' : result.ok ? 'ok' : 'error',

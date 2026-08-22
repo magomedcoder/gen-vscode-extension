@@ -25,6 +25,12 @@ Comment command
 - Если буфер расходится со снимком: полный `write_file` запрещён; `apply_patch` / `apply_workspace_edit` - поверх актуального текста + confirm при конфликте.
 - В system prompt на ход подмешивается краткий user-diff по затронутым файлам.
 
+## Sticky plan
+
+- После approve `propose_plan` план пишется в **`.gen/plan.md`** (+ кэш `workspaceState`).
+- «Очистить» чат **не** сбрасывает план; сброс - `update_plan clear` / удаление `.gen/plan.md`.
+- Перед agent turn файл перечитывается; ручной diff -> system prompt; карточка «Открыть» / watcher для UI.
+
 ## Сборка
 
 - Extension host: esbuild -> `dist/extension.js`

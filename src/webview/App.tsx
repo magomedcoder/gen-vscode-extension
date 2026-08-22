@@ -2,6 +2,7 @@ import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
 import { ConfirmCard } from './components/ConfirmCard';
 import { MessageList } from './components/MessageList';
+import { PlanCard } from './components/PlanCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { useGenBridge } from './useGenBridge';
 
@@ -42,6 +43,7 @@ export function App() {
 		<div className="app">
 			<ChatHeader usage={chat.usage} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
+			{chat.stickyPlan ? <PlanCard plan={chat.stickyPlan} /> : null}
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
 			<Composer busy={chat.busy || confirming} mode={chat.mode} />
 		</div>

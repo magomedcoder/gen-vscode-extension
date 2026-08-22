@@ -6,7 +6,8 @@ import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFo
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy';
 import { formatMiniDiff, pathFromToolArguments } from '../agent/diff';
-import { formatPlan, mutationPathsFromArgs, parsePlanArgs, TurnPlan } from '../agent/plan';
+import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../agent/plan';
+import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../agent/planFile';
 import { redactSecrets } from '../agent/secrets';
 import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types';
 import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits';
@@ -196,15 +197,15 @@ suite('commandPolicy', () => {
 	});
 });
 
-suite('TurnPlan', () => {
+suite('StickyPlan', () => {
 	test('один файл без плана разрешён', () => {
-		const plan = new TurnPlan();
+		const plan = new StickyPlan();
 		assert.strictEqual(plan.guard(['src/a.ts']), undefined);
 		assert.strictEqual(plan.guard(['src/a.ts']), undefined);
 	});
 
 	test('второй файл без плана запрещён', () => {
-		const plan = new TurnPlan();
+		const plan = new StickyPlan();
 		assert.ok(!plan.guard(['a.ts']));
 		const denied = plan.guard(['b.ts']);
 		assert.ok(denied?.denied);
@@ -212,7 +213,7 @@ suite('TurnPlan', () => {
 	});
 
 	test('apply_workspace_edit на два файла требует план', () => {
-		const plan = new TurnPlan();
+		const plan = new StickyPlan();
 		const paths = mutationPathsFromArgs('apply_workspace_edit', {
 			edits: [{ path: 'a.ts' }, { path: 'b.ts' }],
 		});
@@ -220,10 +221,122 @@ suite('TurnPlan', () => {
 		assert.ok(plan.guard(paths)?.denied);
 	});
 
-	test('после approve несколько файлов можно', () => {
-		const plan = new TurnPlan();
-		plan.approve();
+	test('после approve пути из плана можно на следующих «ходах»', () => {
+		const plan = new StickyPlan();
+		plan.approve({
+			title: 'Фича',
+			steps: [
+				{ 
+					title: 'a', 
+					path: 'a.ts' 
+				},
+				{ 
+					title: 'b', 
+					path: 'b.ts' 
+				},
+			],
+		});
 		assert.ok(!plan.guard(['a.ts', 'b.ts']));
+		assert.ok(plan.guard(['c.ts'])?.denied);
+	});
+
+	test('markDoneByPaths и prompt appendix', () => {
+		const plan = new StickyPlan();
+		plan.approve({
+			title: 'Фича',
+			steps: [
+				{ 
+					title: 'a', 
+					path: 'a.ts' 
+				},
+				{ 
+					title: 'b', 
+					path: 'b.ts' 
+				},
+			],
+		});
+		plan.markDoneByPaths(['a.ts']);
+		const snap = plan.snapshot()!;
+		assert.strictEqual(snap.steps[0].status, 'done');
+		assert.strictEqual(snap.steps[1].status, 'pending');
+		const text = formatStickyPlanForPrompt(snap);
+		assert.ok(text.includes('Активный план'));
+		assert.ok(text.includes('[done]'));
+	});
+});
+
+suite('plan markdown file', () => {
+	test('serialize/parse roundtrip', () => {
+		const snap = {
+			title: 'Фича',
+			approved: true,
+			steps: [
+				{ 
+					title: 'handler', 
+					path: 'a.go', 
+					action: 'write', 
+					status: 'pending' as const 
+				},
+				{ 
+					title: 'тесты', 
+					path: 'a_test.go', 
+					status: 'done' as const 
+				},
+				{ 
+					title: 'пропуск', 
+					status: 'skipped' as const 
+				},
+				{ 
+					title: 'в работе', 
+					path: 'b.go', 
+					status: 'in_progress' as const 
+				},
+			],
+		};
+		const md = serializePlanMarkdown(snap);
+		assert.ok(md.includes('# Фича'));
+		assert.ok(md.includes('[x]'));
+		const parsed = parsePlanMarkdown(md);
+		assert.strictEqual(parsed.title, 'Фича');
+		assert.strictEqual(parsed.steps.length, 4);
+		assert.strictEqual(parsed.steps[0].path, 'a.go');
+		assert.strictEqual(parsed.steps[1].status, 'done');
+		assert.strictEqual(parsed.steps[2].status, 'skipped');
+		assert.strictEqual(parsed.steps[3].status, 'in_progress');
+	});
+
+	test('applyPlanFileText отдаёт userDiff при ручной правке', () => {
+		const plan = new StickyPlan();
+		const first = serializePlanMarkdown({
+			title: 'A',
+			approved: true,
+			steps: [{ 
+				title: 'one', 
+				path: 'a.ts', 
+				status: 'pending' 
+			}],
+		});
+		applyPlanFileText(plan, first, '');
+		const edited = first.replace('one', 'one edited');
+		const result = applyPlanFileText(plan, edited, first);
+		assert.ok(!result.empty);
+		assert.ok(result.userDiff);
+		assert.ok(plan.snapshot()?.steps[0].title.includes('edited'));
+	});
+
+	test('пустой файл / без шагов', () => {
+		const plan = new StickyPlan();
+		plan.approve({ 
+			title: 'x', 
+			steps: [{ 
+				title: 'a', 
+				path: 'a.ts' 
+			}] 
+		});
+		const empty = applyPlanFileText(plan, '', 'old');
+		assert.ok(empty.empty);
+		assert.ok(!plan.hasPlan);
+		assert.throws(() => parsePlanMarkdown('# Only title\n\n'));
 	});
 });
 

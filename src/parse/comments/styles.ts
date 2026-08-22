@@ -20,7 +20,7 @@ const sqlStrings = [
 
 // Предустановленные семейства - новый синтаксис = новый id + конфиг
 export const COMMENT_STYLES: Record<CommentStyleId, CommentStyleConfig> = {
-	// TypeScript/JS-подобные: // и /* */ - также fallback для неизвестных языков
+	// TypeScript/JS-подобные: // и /* */ - также запасной вариант для неизвестных языков
 	tsStyle: {
 		line: ['//'],
 		block: [{ open: '/*', close: '*/' }],
@@ -116,7 +116,7 @@ const LANGUAGE_STYLE: Record<string, CommentStyleId> = {
 	gitignore: 'hash',
 	ignore: 'hash',
 
-	// HTML-like
+	// HTML-подобные (<!-- -->)
 	html: 'html',
 	xml: 'html',
 	svg: 'html',

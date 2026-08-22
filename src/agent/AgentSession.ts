@@ -4,7 +4,7 @@ import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol
 import { pathFromToolArguments } from './diff';
 import { AgentCheckpoint } from './checkpoint';
 import { clearIgnoreCache } from './gitIgnore';
-import { TurnPlan } from './plan';
+import { formatStickyPlanForPrompt, StickyPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
@@ -109,14 +109,16 @@ export class AgentSession {
 		confirm?: ToolContext['confirm'];
 		revealFile?: ToolContext['revealFile'];
 		trackMutation?: ToolContext['trackMutation'];
-		plan?: TurnPlan;
+		plan?: StickyPlan;
+		onPlanChanged?: ToolContext['onPlanChanged'];
 		checkpoint?: AgentCheckpoint;
 		writes?: AgentWriteTracker;
+		planEditsAppendix?: string;
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
 		let toolsEnabled = true;
-		const plan = params.plan ?? new TurnPlan();
+		const plan = params.plan ?? new StickyPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
 		const writes = params.writes;
 		clearIgnoreCache();
@@ -126,6 +128,9 @@ export class AgentSession {
 			: params.userText;
 
 		const userEditsAppendix = writes ? await writes.buildPromptAppendix() : '';
+		const planSnap = plan.snapshot();
+		const planAppendix = planSnap?.approved ? formatStickyPlanForPrompt(planSnap) : '';
+		const planEditsAppendix = params.planEditsAppendix?.trim() ?? '';
 		const apiMessages: ChatMessage[] = [
 			{
 				role: 'system',
@@ -134,6 +139,8 @@ export class AgentSession {
 					authLevel: settings.agentAuthLevel,
 					deniedPaths: settings.deniedPaths,
 					userEditsAppendix,
+					planAppendix,
+					planEditsAppendix,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -176,6 +183,8 @@ export class AgentSession {
 					content: buildAgentSystemPrompt({
 						toolsAvailable: false,
 						userEditsAppendix,
+						planAppendix,
+						planEditsAppendix,
 					}),
 				};
 				params.ui.append({
@@ -243,6 +252,7 @@ export class AgentSession {
 					revealFile: params.revealFile,
 					trackMutation: params.trackMutation,
 					plan,
+					onPlanChanged: params.onPlanChanged,
 					checkpoint,
 					writes,
 				});

@@ -42,12 +42,25 @@ export interface PendingConfirm {
 	rejectLabel: string;
 }
 
+export type PlanStepStatus = 'pending' | 'in_progress' | 'done' | 'skipped';
+
+export interface StickyPlanUi {
+	title: string;
+	steps: Array<{
+		title: string;
+		path?: string;
+		action?: string;
+		status: PlanStepStatus;
+	}>;
+}
+
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
 	mode: ChatMode;
 	usage?: TokenUsage;
 	pendingConfirm?: PendingConfirm;
+	stickyPlan?: StickyPlanUi;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -61,6 +74,7 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'send'; text: string }
 	| { type: 'cancel' }
 	| { type: 'clear' }
+	| { type: 'openPlan' }
 	| { type: 'setChatMode'; mode: ChatMode }
 	| { type: 'openExternal'; url: string }
 	| { type: 'openSettings' }

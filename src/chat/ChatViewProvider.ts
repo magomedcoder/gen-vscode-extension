@@ -80,6 +80,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'clear':
 				this.session.clear();
 				return;
+			case 'openPlan':
+				await this.session.openPlan();
+				return;
 			case 'cancel':
 				this.session.cancel();
 				return;

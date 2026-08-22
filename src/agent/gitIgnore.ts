@@ -36,7 +36,7 @@ export function ignoresRelative(matcher: IgnoreMatcher, relativePosix: string): 
 		return true;
 	}
 
-	// Шаблоны вида dist/ требуют trailing slash для каталога
+	// Шаблоны вида dist/ требуют завершающий слэш для каталога
 	return matcher.ignores(`${normalized}/`);
 }
 

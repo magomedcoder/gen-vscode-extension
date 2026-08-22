@@ -386,6 +386,103 @@ body {
 	text-align: center;
 }
 
+.plan-card {
+	flex-shrink: 0;
+	margin: 0 var(--pad) 6px;
+	padding: 8px 10px;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+}
+
+.plan-card__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.plan-card__heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.plan-card__title {
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.plan-card__badge {
+	flex-shrink: 0;
+	font-size: 11px;
+	opacity: 0.75;
+}
+
+.plan-card__cancel {
+	flex-shrink: 0;
+	padding: 2px 8px;
+	font-size: 11px;
+	min-width: 0;
+}
+
+.plan-card__steps {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 140px;
+	overflow: auto;
+}
+
+.plan-card__step {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.plan-card__step-status {
+	flex-shrink: 0;
+	min-width: 64px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	opacity: 0.7;
+	padding-top: 1px;
+}
+
+.plan-card__step--done .plan-card__step-status,
+.plan-card__step--skipped .plan-card__step-status {
+	opacity: 0.55;
+}
+
+.plan-card__step--done .plan-card__step-title {
+	text-decoration: line-through;
+	opacity: 0.7;
+}
+
+.plan-card__step-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.plan-card__step-path {
+	font-size: 11px;
+	opacity: 0.65;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .confirm-card {
 	flex-shrink: 0;
 	margin: 0 var(--pad);
