@@ -31,6 +31,12 @@ Comment command
 - «Очистить» чат **не** сбрасывает план; сброс - `update_plan clear` / удаление `.gen/plan.md`.
 - Перед agent turn файл перечитывается; ручной diff -> system prompt; карточка «Открыть» / watcher для UI.
 
+## Индекс кодовой базы
+
+- Фоновая индексация в `.gen/index/manifest.json` (`src/index/`).
+- Инкремент по hash файла; `.gen/` не индексируется.
+- Tool `codebase_search` - триграммный поиск по chunks. Подробнее: [codebase-index.md](codebase-index.md).
+
 ## Сборка
 
 - Extension host: esbuild -> `dist/extension.js`

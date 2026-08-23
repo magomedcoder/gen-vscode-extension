@@ -1,17 +1,17 @@
 import * as assert from 'assert';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { applySearchReplace, PatchError } from '../agent/patch';
-import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy';
-import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit';
-import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy';
-import { formatMiniDiff, pathFromToolArguments } from '../agent/diff';
-import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../agent/plan';
-import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../agent/planFile';
-import { redactSecrets } from '../agent/secrets';
-import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types';
-import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits';
-import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../config/types';
+import { applySearchReplace, PatchError } from '../agent/patch.js';
+import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy.js';
+import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit.js';
+import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy.js';
+import { formatMiniDiff, pathFromToolArguments } from '../agent/diff.js';
+import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../agent/plan.js';
+import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../agent/planFile.js';
+import { redactSecrets } from '../agent/secrets.js';
+import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types.js';
+import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits.js';
+import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../config/types.js';
 
 suite('path sandbox', () => {
 	const root = path.resolve('/tmp/ws');

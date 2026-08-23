@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { createIgnoreMatcher, ignoresRelative } from '../agent/gitIgnore';
+import { createIgnoreMatcher, ignoresRelative } from '../agent/gitIgnore.js';
 
 suite('gitIgnore matcher', () => {
 	test('пусто - ничего не игнорирует кроме .git', () => {

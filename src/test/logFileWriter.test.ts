@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { LogFileWriter, type LogFs } from '../log/fileWriter';
+import { LogFileWriter, type LogFs } from '../log/fileWriter.js';
 
 function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
 	let resolve!: (value: T) => void;

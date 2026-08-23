@@ -18,6 +18,7 @@ import { readFileTool } from './readFile';
 import { runCommandTool } from './runCommand';
 import { runTestsTool } from './runTests';
 import { searchFilesTool } from './searchFiles';
+import { codebaseSearchTool } from './codebaseSearch';
 import { writeFileTool } from './writeFile';
 
 const TOOLS: ToolDefinition[] = [
@@ -27,6 +28,7 @@ const TOOLS: ToolDefinition[] = [
 	listDirTool,
 	readFileTool,
 	searchFilesTool,
+	codebaseSearchTool,
 	proposePlanTool,
 	updatePlanTool,
 	writeFileTool,

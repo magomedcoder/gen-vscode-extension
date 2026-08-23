@@ -1,9 +1,9 @@
 import * as assert from 'assert';
-import { buildAuthHeaders } from '../config/apiKey';
-import { HttpLlmClient } from '../llm/client';
-import { isRetryableError, LlmHttpError, retryDelayMs, withCause } from '../llm/errors';
-import type { GenSettings } from '../config/types';
-import { DEFAULT_SETTINGS } from '../config/types';
+import { buildAuthHeaders } from '../config/apiKey.js';
+import { HttpLlmClient } from '../llm/client.js';
+import { isRetryableError, LlmHttpError, retryDelayMs, withCause } from '../llm/errors.js';
+import type { GenSettings } from '../config/types.js';
+import { DEFAULT_SETTINGS } from '../config/types.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
