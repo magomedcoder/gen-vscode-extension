@@ -38,7 +38,7 @@ export const applyPatchTool: ToolDefinition = {
 		if (!(await pathExists(resolved.uri))) {
 			return {
 				ok: false,
-				content: `Файл не найден: ${resolved.relative}`,
+				content: vscode.l10n.t('tool.fileNotFound', resolved.relative),
 			};
 		}
 
@@ -50,7 +50,7 @@ export const applyPatchTool: ToolDefinition = {
 		if (new TextEncoder().encode(doc.getText()).byteLength > AGENT_LIMITS.maxReadBytes) {
 			return {
 				ok: false,
-				content: `Файл слишком большой для patch: ${resolved.relative}`,
+				content: vscode.l10n.t('tool.fileTooLargeForPatch', resolved.relative),
 			};
 		}
 
@@ -74,7 +74,7 @@ export const applyPatchTool: ToolDefinition = {
 		if (encoded.byteLength > AGENT_LIMITS.maxWriteBytes) {
 			return {
 				ok: false,
-				content: 'Результат patch превышает лимит записи',
+				content: vscode.l10n.t('tool.patchResultTooLarge'),
 			};
 		}
 
@@ -91,7 +91,7 @@ export const applyPatchTool: ToolDefinition = {
 				};
 			}
 		} else if (shouldConfirmWrites()) {
-			const denied = await confirmOrSkip(ctx, `Применить правку к ${resolved.relative}? (${next.count} замен)`, newString);
+			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.applyPatch', resolved.relative, next.count), newString);
 			if (denied) {
 				return {
 					...denied,
@@ -108,7 +108,7 @@ export const applyPatchTool: ToolDefinition = {
 			return {
 				ok: false,
 				path: resolved.relative,
-				content: `${err instanceof Error ? err.message : String(err)} (файл изменился после подтверждения - сделай read_file и повтори patch)`,
+				content: vscode.l10n.t('tool.patchStale', err instanceof Error ? err.message : String(err)),
 			};
 		}
 
@@ -119,7 +119,7 @@ export const applyPatchTool: ToolDefinition = {
 		if (!applied) {
 			return {
 				ok: false,
-				content: `Не удалось применить правку: ${resolved.relative}`,
+				content: vscode.l10n.t('tool.patchApplyFailed', resolved.relative),
 			};
 		}
 
@@ -130,13 +130,13 @@ export const applyPatchTool: ToolDefinition = {
 			await ctx.revealFile(doc.uri);
 		}
 
-		const note = userDiffBefore ? '\nУчтены правки пользователя (патч поверх актуального буфера).' : '';
+		const note = userDiffBefore ? vscode.l10n.t('tool.userEditsNotedPatch') : '';
 
 		return {
 			ok: true,
 			path: resolved.relative,
 			diff: formatMiniDiff(original, next.text),
-			content: `Правка применена: ${resolved.relative} (${next.count} замен)${note}`,
+			content: vscode.l10n.t('tool.patchApplied', resolved.relative, next.count, note),
 		};
 	},
 };

@@ -1,3 +1,5 @@
+import * as vscode from 'vscode';
+
 export class PatchError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -7,11 +9,11 @@ export class PatchError extends Error {
 
 export function applySearchReplace(content: string, oldString: string, newString: string, replaceAll: boolean): { text: string; count: number } {
 	if (!oldString) {
-		throw new PatchError('old_string не должен быть пустым - для нового файла используйте write_file');
+		throw new PatchError(vscode.l10n.t('patch.emptyOld'));
 	}
 
 	if (oldString === newString) {
-		throw new PatchError('old_string и new_string совпадают - правок нет');
+		throw new PatchError(vscode.l10n.t('patch.same'));
 	}
 
 	let count = 0;
@@ -27,11 +29,11 @@ export function applySearchReplace(content: string, oldString: string, newString
 	}
 
 	if (count === 0) {
-		throw new PatchError('Фрагмент old_string не найден в файле');
+		throw new PatchError(vscode.l10n.t('patch.notFound'));
 	}
 
 	if (count > 1 && !replaceAll) {
-		throw new PatchError(`Найдено ${count} вхождений old_string - уточните фрагмент или включите replace_all`);
+		throw new PatchError(vscode.l10n.t('patch.multiMatch', count));
 	}
 
 	const text = replaceAll

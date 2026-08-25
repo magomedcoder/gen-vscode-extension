@@ -63,14 +63,14 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 		if (parsed.length === 0) {
 			return {
 				ok: false,
-				content: 'Нужен непустой массив edits'
+				content: vscode.l10n.t('tool.needEdits')
 			};
 		}
 
 		if (parsed.length > AGENT_LIMITS.maxWorkspaceEdits) {
 			return {
 				ok: false,
-				content: `Слишком много правок (${parsed.length}, лимит ${AGENT_LIMITS.maxWorkspaceEdits})`,
+				content: vscode.l10n.t('tool.tooManyEdits', parsed.length, AGENT_LIMITS.maxWorkspaceEdits),
 			};
 		}
 
@@ -93,7 +93,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			if (!item.path || !item.old_string) {
 				return {
 					ok: false,
-					content: 'У каждой правки нужны path и old_string',
+					content: vscode.l10n.t('tool.editNeedsPathOld'),
 				};
 			}
 
@@ -112,7 +112,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			if (new TextEncoder().encode(next.text).byteLength > AGENT_LIMITS.maxWriteBytes) {
 				return {
 					ok: false,
-					content: `Результат слишком большой: ${resolved.relative}`,
+					content: vscode.l10n.t('tool.resultTooLarge', resolved.relative),
 				};
 			}
 
@@ -144,8 +144,8 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 				};
 			}
 		} else if (shouldConfirmWrites()) {
-			const summary = prepared.map((p) => `${p.relative} (${p.count} замен)`).join('\n');
-			const denied = await confirmOrSkip(ctx, `Применить ${prepared.length} правок атомарно?`, summary);
+			const summary = prepared.map((p) => vscode.l10n.t('tool.replacementsSummary', p.relative, p.count)).join('\n');
+			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.applyWorkspaceEdit', prepared.length), summary);
 			if (denied) {
 				return {
 					...denied,
@@ -174,7 +174,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 				return {
 					ok: false,
 					path: item.relative,
-					content: `${item.relative}: ${err instanceof Error ? err.message : String(err)} (файл изменился - сделай read_file и повтори)`,
+					content: vscode.l10n.t('tool.editStale', item.relative, err instanceof Error ? err.message : String(err)),
 				};
 			}
 
@@ -198,7 +198,7 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 		if (!ok) {
 			return {
 				ok: false,
-				content: 'WorkspaceEdit не применён',
+				content: vscode.l10n.t('tool.workspaceEditFailed'),
 			};
 		}
 
@@ -212,12 +212,12 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 			ctx.trackMutation?.(item.uri);
 		}
 
-		const note = drifted.length > 0 ? '\nУчтены правки пользователя на части файлов.' : '';
+		const note = drifted.length > 0 ? vscode.l10n.t('tool.userEditsNotedBatch') : '';
 		return {
 			ok: true,
 			path: refreshed.map((p) => p.relative).join(', '),
 			diff: refreshed.map((p) => `--- ${p.relative}\n${formatMiniDiff(p.original, p.text)}`).join('\n\n'),
-			content: `Применено правок: ${refreshed.length}\n${refreshed.map((p) => `${p.relative}: ${p.count}`).join('\n')}${note}`,
+			content: vscode.l10n.t('tool.editsApplied', refreshed.length, refreshed.map((p) => `${p.relative}: ${p.count}`).join('\n'), note),
 		};
 	},
 };

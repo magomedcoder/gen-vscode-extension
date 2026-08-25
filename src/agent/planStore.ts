@@ -134,13 +134,13 @@ export class WorkspacePlanStore {
 	async openInEditor(): Promise<void> {
 		const uri = this.resolveUri();
 		if (!uri) {
-			void vscode.window.showWarningMessage('Нет открытого workspace для файла плана');
+			void vscode.window.showWarningMessage(vscode.l10n.t('plan.noWorkspace'));
 			return;
 		}
 
 		const snapExists = await this.readRaw();
 		if (snapExists === undefined) {
-			void vscode.window.showWarningMessage(`Файл плана ещё не создан: ${DEFAULT_PLAN_RELATIVE}`);
+			void vscode.window.showWarningMessage(vscode.l10n.t('plan.fileNotCreated', DEFAULT_PLAN_RELATIVE));
 			return;
 		}
 

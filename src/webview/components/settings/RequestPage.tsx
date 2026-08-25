@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { parseNumberInput } from './parseNumber';
 
@@ -5,7 +6,7 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 	return (
 		<>
 			<label className="field">
-				<span className="field__label">Температура (лучше держать низкой для стабильного формата)</span>
+				<span className="field__label">{t('settings.temperature.label')}</span>
 				<input
 					className="field__input"
 					type="number"
@@ -18,7 +19,7 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 			</label>
 
 			<label className="field">
-				<span className="field__label">Максимум токенов в ответе модели</span>
+				<span className="field__label">{t('settings.maxTokens.label')}</span>
 				<input
 					className="field__input"
 					type="number"
@@ -30,7 +31,7 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 			</label>
 
 			<label className="field">
-				<span className="field__label">Таймаут (мс)</span>
+				<span className="field__label">{t('settings.timeout.label')}</span>
 				<input
 					className="field__input"
 					type="number"
@@ -42,7 +43,7 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 			</label>
 
 			<label className="field">
-				<span className="field__label">Максимальное количество символов на входе</span>
+				<span className="field__label">{t('settings.maxInputChars.label')}</span>
 				<input
 					className="field__input"
 					type="number"

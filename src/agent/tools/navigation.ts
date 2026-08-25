@@ -49,7 +49,7 @@ export const openFileTool: ToolDefinition = {
 		await showAt(resolved.uri, asOptionalInt(args, 'line'), undefined, asBoolean(args, 'preview', true));
 		return {
 			ok: true,
-			content: `Открыт: ${resolved.relative}`
+			content: vscode.l10n.t('tool.opened', resolved.relative)
 		};
 	},
 };
@@ -83,14 +83,14 @@ export const revealLineTool: ToolDefinition = {
 		if (!line || line < 1) {
 			return {
 				ok: false,
-				content: 'Укажите line >= 1'
+				content: vscode.l10n.t('tool.needLine')
 			};
 		}
 
 		await showAt(resolved.uri, line, asOptionalInt(args, 'end_line'), true);
 		return {
 			ok: true,
-			content: `Показано: ${resolved.relative}:${line}`
+			content: vscode.l10n.t('tool.revealed', resolved.relative, line)
 		};
 	},
 };
@@ -125,21 +125,21 @@ export const closeFileTool: ToolDefinition = {
 		if (tabs.length === 0) {
 			return {
 				ok: false,
-				content: `Вкладка не открыта: ${resolved.relative}`
+				content: vscode.l10n.t('tool.tabNotOpen', resolved.relative)
 			};
 		}
 
 		if (tabs.some((tab) => tab.isDirty)) {
 			return {
 				ok: false,
-				content: `Файл не сохранён, закрытие отменено: ${resolved.relative}`
+				content: vscode.l10n.t('tool.unsavedCloseDenied', resolved.relative)
 			};
 		}
 
 		await vscode.window.tabGroups.close(tabs, true);
 		return {
 			ok: true,
-			content: `Закрыто: ${resolved.relative}`
+			content: vscode.l10n.t('tool.closed', resolved.relative)
 		};
 	},
 };

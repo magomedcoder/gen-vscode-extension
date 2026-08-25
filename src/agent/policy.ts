@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 
 export const AGENT_LIMITS = {
@@ -105,7 +106,7 @@ export function findContainingFolder(fsPath: string, folderFsPaths: string[]): s
 
 export function resolveAgainstFolders(input: string, folderFsPaths: string[]): { fsPath: string; folder: string } {
 	if (folderFsPaths.length === 0) {
-		throw new PathPolicyError('Нет открытого workspace');
+		throw new PathPolicyError(vscode.l10n.t('policy.noWorkspace'));
 	}
 
 	const trimmed = input.trim() || '.';
@@ -114,7 +115,7 @@ export function resolveAgainstFolders(input: string, folderFsPaths: string[]): {
 	if (path.isAbsolute(trimmed)) {
 		const folder = findContainingFolder(trimmed, folders);
 		if (!folder) {
-			throw new PathPolicyError('Путь вне workspace');
+			throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
 		}
 
 		return {
@@ -127,7 +128,7 @@ export function resolveAgainstFolders(input: string, folderFsPaths: string[]): {
 	const candidate = path.resolve(first, trimmed);
 	const folder = findContainingFolder(candidate, folders);
 	if (!folder) {
-		throw new PathPolicyError('Путь вне workspace');
+		throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
 	}
 
 	return {
@@ -138,12 +139,12 @@ export function resolveAgainstFolders(input: string, folderFsPaths: string[]): {
 
 export function assertAllowedPath(fsPath: string, folder: string): string {
 	if (!pathIsInside(fsPath, folder)) {
-		throw new PathPolicyError('Путь вне workspace');
+		throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
 	}
 
 	const relative = toPosixRelative(path.relative(folder, fsPath));
 	if (isDeniedRelativePath(relative, getSettings().deniedPaths)) {
-		throw new PathPolicyError(`Путь запрещён политикой: ${relative || '.'}`);
+		throw new PathPolicyError(vscode.l10n.t('policy.pathDenied', relative || '.'));
 	}
 
 	return relative || '.';
@@ -154,7 +155,7 @@ export function previewText(text: string, max: number = AGENT_LIMITS.maxConfirmP
 		return text;
 	}
 
-	return `${text.slice(0, max)}\n... [обрезано ${text.length - max} символов]`;
+	return `${text.slice(0, max)}\n${vscode.l10n.t('agent.truncatedChars', text.length - max)}`;
 }
 
 export function looksBinary(bytes: Uint8Array): boolean {

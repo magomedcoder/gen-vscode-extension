@@ -9,38 +9,40 @@ export interface MentionSuggestion {
 	detail?: string;
 }
 
-const KINDS: Array<{ 
-	kind: 'file' | 'folder' | 'codebase'; 
-	label: string; 
-	insert: string; 
-	detail: string 
-}> = [
-	{ 
-		kind: 'file', 
-		label: '@file', 
-		insert: '@file ', 
-		detail: 'Прикрепить файл' 
-	},
-	{ 
-		kind: 'folder', 
-		label: '@folder', 
-		insert: '@folder ', 
-		detail: 'Прикрепить папку' 
-	},
-	{ 
-		kind: 'codebase', 
-		label: '@codebase', 
-		insert: '@codebase ', 
-		detail: 'Поиск по индексу' 
-	},
-];
+function kindTemplates(): Array<{
+	kind: 'file' | 'folder' | 'codebase';
+	label: string;
+	insert: string;
+	detail: string;
+}> {
+	return [
+		{
+			kind: 'file',
+			label: '@file',
+			insert: '@file ',
+			detail: vscode.l10n.t('chat.mention.detail.file'),
+		},
+		{
+			kind: 'folder',
+			label: '@folder',
+			insert: '@folder ',
+			detail: vscode.l10n.t('chat.mention.detail.folder'),
+		},
+		{
+			kind: 'codebase',
+			label: '@codebase',
+			insert: '@codebase ',
+			detail: vscode.l10n.t('chat.mention.detail.codebase'),
+		},
+	];
+}
 
 export async function suggestMentions(query: string): Promise<MentionSuggestion[]> {
 	const q = query.trim().toLowerCase();
 	const prefix = q.replace(/^@/, '');
 
 	if (!prefix || 'file'.startsWith(prefix) || 'folder'.startsWith(prefix) || 'codebase'.startsWith(prefix)) {
-		const kindHits = KINDS.filter((k) => k.kind.startsWith(prefix) || prefix.length === 0);
+		const kindHits = kindTemplates().filter((k) => k.kind.startsWith(prefix) || prefix.length === 0);
 		if (prefix.length === 0 || kindHits.length > 0 && !prefix.includes('/') && !prefix.includes('.')) {
 			if (!prefix.includes(' ') && !/[./]/.test(prefix)) {
 				return kindHits.map((k) => ({
@@ -92,14 +94,14 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 				kind: 'folder',
 				label: dir,
 				insert: `@folder ${dir} `,
-				detail: 'папка',
+				detail: vscode.l10n.t('chat.mention.kind.folder'),
 			});
 		} else {
 			out.push({
 				kind: 'file',
 				label: relative,
 				insert: `@file ${relative} `,
-				detail: 'файл',
+				detail: vscode.l10n.t('chat.mention.kind.file'),
 			});
 		}
 

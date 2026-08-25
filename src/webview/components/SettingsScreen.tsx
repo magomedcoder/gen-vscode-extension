@@ -1,11 +1,12 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { GenSettings } from '../../config/types';
 import { DEFAULT_SETTINGS } from '../../config/types';
+import { t } from '../i18n';
 import { ChatAgentPage } from './settings/ChatAgentPage';
 import { CommentsPage } from './settings/CommentsPage';
 import { ConnectionPage } from './settings/ConnectionPage';
 import { LoggingPage } from './settings/LoggingPage';
-import { SETTINGS_PAGES, type SettingsPageId } from './settings/pages';
+import { SETTINGS_PAGE_IDS, settingsNavTitleKey, type SettingsPageId } from './settings/pages';
 import { RequestPage } from './settings/RequestPage';
 import { SecurityPage } from './settings/SecurityPage';
 
@@ -85,28 +86,28 @@ export function SettingsScreen({
 		});
 	};
 
-	const current = SETTINGS_PAGES.find((item) => item.id === page) ?? SETTINGS_PAGES[0];
+	const currentTitle = t(settingsNavTitleKey(page));
 
 	return (
 		<div className="app">
 			<header className="header">
 				<div className="header__left">
-					<span className="header__title">Настройки</span>
-					<span className="header__subtitle">{current.title}</span>
+					<span className="header__title">{t('settings.title')}</span>
+					<span className="header__subtitle">{currentTitle}</span>
 				</div>
-				<button className="btn btn--secondary" type="button" onClick={onReset}>Сбросить по умолчанию</button>
+				<button className="btn btn--secondary" type="button" onClick={onReset}>{t('settings.reset')}</button>
 			</header>
 
 			<form className="settings-layout" onSubmit={onSubmit}>
-				<nav className="settings-nav" aria-label="Разделы настроек">
-					{SETTINGS_PAGES.map((item) => (
+				<nav className="settings-nav" aria-label={t('settings.navAria')}>
+					{SETTINGS_PAGE_IDS.map((id) => (
 						<button
-							key={item.id}
+							key={id}
 							type="button"
-							className={`settings-nav__item${item.id === page ? ' settings-nav__item--active' : ''}`}
-							onClick={() => setPage(item.id)}
+							className={`settings-nav__item${id === page ? ' settings-nav__item--active' : ''}`}
+							onClick={() => setPage(id)}
 						>
-							<span className="settings-nav__title">{item.title}</span>
+							<span className="settings-nav__title">{t(settingsNavTitleKey(id))}</span>
 						</button>
 					))}
 				</nav>
@@ -141,7 +142,7 @@ export function SettingsScreen({
 
 					<div className="settings-footer">
 						{status ? <div className="settings__status">{status}</div> : null}
-						<button className="btn" type="submit">Сохранить</button>
+						<button className="btn" type="submit">{t('settings.save')}</button>
 					</div>
 				</div>
 			</form>

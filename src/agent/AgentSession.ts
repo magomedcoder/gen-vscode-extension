@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
@@ -20,7 +21,7 @@ export function isAbortError(err: unknown): boolean {
 }
 
 function toAbortError(): Error {
-	const err = new Error('Операция отменена');
+	const err = new Error(vscode.l10n.t('agent.operationCancelled'));
 	err.name = 'AbortError';
 	return err;
 }
@@ -30,7 +31,7 @@ function truncate(text: string, max = 4000): string {
 		return text;
 	}
 
-	return `${text.slice(0, max)}\n... [обрезано ${text.length - max} символов]`;
+	return `${text.slice(0, max)}\n${vscode.l10n.t('agent.truncatedChars', text.length - max)}`;
 }
 
 function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
@@ -191,7 +192,7 @@ export class AgentSession {
 				params.ui.append({
 					id: messageId(),
 					role: 'error',
-					content: 'Сервер не поддерживает tools - продолжаю без инструментов.',
+					content: vscode.l10n.t('agent.toolsUnsupported'),
 				});
 			}
 
@@ -205,7 +206,7 @@ export class AgentSession {
 			if (toolCalls.length === 0) {
 				if (!content) {
 					params.ui.update(assistantId, {
-						content: 'Пустой ответ модели'
+						content: vscode.l10n.t('agent.emptyModelReply'),
 					});
 				}
 				return;
@@ -258,7 +259,7 @@ export class AgentSession {
 					writes,
 				});
 				const lengthHint = !toolResult.ok && result.finishReason === 'length'
-					? '\nОтвет модели обрезан по max_tokens. Увеличь лимит в настройках или пиши файл частями через apply_patch.'
+					? vscode.l10n.t('agent.responseTruncated')
 					: '';
 				const resultText = truncate(`${toolResult.content}${lengthHint}`);
 				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
@@ -300,7 +301,7 @@ export class AgentSession {
 		params.ui.append({
 			id: messageId(),
 			role: 'error',
-			content: `Достигнут лимит итераций агента (${maxIterations}).`,
+			content: vscode.l10n.t('agent.iterationLimit', maxIterations),
 		});
 	}
 }

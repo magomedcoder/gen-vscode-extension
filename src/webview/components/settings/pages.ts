@@ -9,14 +9,15 @@ export interface SettingsPageProps {
 	setField: SetSettingsField;
 }
 
-export const SETTINGS_PAGES: Array<{
-	id: SettingsPageId;
-	title: string;
-}> = [
-	{ id: 'connection', title: 'Основное' },
-	{ id: 'chat', title: 'Чат и агент' },
-	{ id: 'request', title: 'Запросы' },
-	{ id: 'comments', title: 'Комментарии' },
-	{ id: 'security', title: 'Безопасность' },
-	{ id: 'logging', title: 'Логи' },
+export const SETTINGS_PAGE_IDS: SettingsPageId[] = [
+	'connection',
+	'chat',
+	'request',
+	'comments',
+	'security',
+	'logging',
 ];
+
+export function settingsNavTitleKey(id: SettingsPageId): string {
+	return `settings.nav.${id}`;
+}

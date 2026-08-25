@@ -1,4 +1,9 @@
 import type { Uri } from 'vscode';
+import type { WebviewL10nPack } from '../l10n/loadBundle';
+
+function escapeScriptJson(value: unknown): string {
+	return JSON.stringify(value).replace(/</g, '\\u003c');
+}
 
 export function renderChatHtml(params: {
 	cspSource: string;
@@ -7,13 +12,15 @@ export function renderChatHtml(params: {
 	styleUri: Uri;
 	title?: string;
 	screen?: 'chat' | 'settings';
+	l10n: WebviewL10nPack;
 }): string {
-	const { cspSource, nonce, scriptUri, styleUri } = params;
-	const title = params.title ?? 'Gen Чат';
+	const { cspSource, nonce, scriptUri, styleUri, l10n } = params;
+	const title = params.title ?? l10n.strings['chat.webviewTitle'] ?? 'Gen Chat';
 	const screen = params.screen ?? 'chat';
+	const lang = l10n.locale || 'en';
 
 	return `<!DOCTYPE html>
-<html lang="ru">
+<html lang="${lang}">
 <head>
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}'; img-src https: data:;">
@@ -23,6 +30,7 @@ export function renderChatHtml(params: {
 </head>
 <body data-screen="${screen}">
 	<div id="root"></div>
+	<script nonce="${nonce}">window.__GEN_L10N__=${escapeScriptJson(l10n)};</script>
 	<script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

@@ -13,7 +13,7 @@ export const getWorkspaceInfoTool: ToolDefinition = {
 		if (ctx.signal?.aborted) {
 			return {
 				ok: false,
-				content: 'Отменено'
+				content: vscode.l10n.t('tool.cancelled')
 			};
 		}
 

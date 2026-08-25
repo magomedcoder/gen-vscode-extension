@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type SubmitEvent } from 'react';
 import type { ChatMode, MentionSuggestion } from '../../chat/protocol';
+import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 
 interface ComposerProps {
@@ -175,7 +176,7 @@ export function Composer({ busy, mode }: ComposerProps) {
 					className="composer__input"
 					rows={2}
 					value={draft}
-					placeholder={busy ? 'Идёт запрос...' : 'Сообщение... @file @folder @codebase'}
+					placeholder={busy ? t('chat.composer.placeholderBusy') : t('chat.composer.placeholder')}
 					disabled={busy}
 					onChange={(e) => {
 						const next = e.target.value;
@@ -193,14 +194,14 @@ export function Composer({ busy, mode }: ComposerProps) {
 					onKeyDown={onKeyDown}
 				/>
 				<div className="composer__footer">
-					<div className="mode-toggle" role="group" aria-label="Режим чата">
+					<div className="mode-toggle" role="group" aria-label={t('chat.composer.modeAria')}>
 						<button
 							type="button"
 							className={`mode-toggle__btn${mode === 'ask' ? ' mode-toggle__btn--active' : ''}`}
 							disabled={busy}
 							onClick={() => setMode('ask')}
 						>
-							Просто чат
+							{t('chat.composer.modeAsk')}
 						</button>
 						<button
 							type="button"
@@ -208,7 +209,7 @@ export function Composer({ busy, mode }: ComposerProps) {
 							disabled={busy}
 							onClick={() => setMode('agent')}
 						>
-							Агент
+							{t('chat.composer.modeAgent')}
 						</button>
 					</div>
 					{busy ? (
@@ -217,10 +218,12 @@ export function Composer({ busy, mode }: ComposerProps) {
 							type="button"
 							onClick={() => vscodeApi.postMessage({ type: 'cancel' })}
 						>
-							Стоп
+							{t('chat.composer.stop')}
 						</button>
 					) : (
-						<button className="btn composer__btn" type="submit" disabled={!canSend}>Отправить</button>
+						<button className="btn composer__btn" type="submit" disabled={!canSend}>
+							{t('chat.composer.send')}
+						</button>
 					)}
 				</div>
 			</div>

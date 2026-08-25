@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveCommandCwd, throwIfAborted } from '../workspacePath';
 import { runShellCommand } from '../shellExec';
@@ -47,7 +48,7 @@ export const runCommandTool: ToolDefinition = {
 		const timeoutMs = asOptionalInt(args, 'timeout_ms');
 		const cwd = resolved.cwd;
 
-		const denied = await confirmAlwaysOrSkip(ctx, `Запустить команду в ${resolved.relative || '.'}?`, `${command} ${cmdArgs.join(' ')}`.trim());
+		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runCommand', resolved.relative || '.'), `${command} ${cmdArgs.join(' ')}`.trim());
 		if (denied) {
 			return {
 				...denied,

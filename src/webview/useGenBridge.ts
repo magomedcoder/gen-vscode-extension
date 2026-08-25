@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatViewState, PanelScreen, ToWebviewMessage } from '../chat/protocol';
 import type { GenSettings } from '../config/types';
 import { DEFAULT_SETTINGS } from '../config/types';
+import { t } from './i18n';
 import { vscodeApi } from './vscodeApi';
 
 const EMPTY_CHAT: ChatViewState = {
@@ -43,7 +44,7 @@ export function useGenBridge() {
 				case 'settingsSaved':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
-					setSettingsStatus('Сохранено');
+					setSettingsStatus(t('settings.status.saved'));
 					return;
 				case 'settingsError':
 					setSettingsStatus(data.message);
@@ -54,7 +55,11 @@ export function useGenBridge() {
 					}
 					setModels(data.models);
 					setModelsLoading(false);
-					setModelsStatus(data.models.length === 0 ? 'Сервер не вернул моделей' : `Загружено: ${data.models.length}`);
+					setModelsStatus(
+						data.models.length === 0
+							? t('settings.models.empty')
+							: t('settings.models.loaded', data.models.length),
+					);
 					return;
 				case 'modelsError':
 					if (data.requestId !== modelsRequestId.current) {
@@ -72,7 +77,7 @@ export function useGenBridge() {
 	}, []);
 
 	const saveSettings = useCallback((next: GenSettings, api?: { apiKey?: string }) => {
-		setSettingsStatus('Сохранение...');
+		setSettingsStatus(t('settings.status.saving'));
 		vscodeApi.postMessage({
 			type: 'saveSettings',
 			settings: next,
@@ -85,7 +90,7 @@ export function useGenBridge() {
 		if (!trimmed) {
 			setModels([]);
 			setModelsLoading(false);
-			setModelsStatus('Укажите базовый URL');
+			setModelsStatus(t('settings.models.needUrl'));
 			return;
 		}
 
@@ -93,7 +98,7 @@ export function useGenBridge() {
 		modelsRequestId.current = requestId;
 		setModelsLoading(true);
 		setSettingsStatus(undefined);
-		setModelsStatus('Загрузка моделей...');
+		setModelsStatus(t('settings.models.loading'));
 		vscodeApi.postMessage({
 			type: 'loadModels',
 			baseUrl: trimmed,

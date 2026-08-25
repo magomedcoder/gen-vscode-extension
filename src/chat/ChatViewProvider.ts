@@ -5,6 +5,7 @@ import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
 import { onSettingsChanged } from '../config/settings';
+import { loadWebviewL10n } from '../l10n/loadBundle';
 import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../ui/confirmDialog';
 
@@ -45,13 +46,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			localResourceRoots: [assetsRoot],
 		};
 
+		const l10n = loadWebviewL10n(this.context.extensionUri);
 		webviewView.webview.html = renderChatHtml({
 			cspSource: webviewView.webview.cspSource,
 			nonce: createNonce(),
 			scriptUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.js')),
 			styleUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.css')),
-			title: 'Gen Чат',
+			title: l10n.strings['chat.webviewTitle'],
 			screen: 'chat',
+			l10n,
 		});
 
 		const messageSub = webviewView.webview.onDidReceiveMessage((msg: FromWebviewMessage) => {

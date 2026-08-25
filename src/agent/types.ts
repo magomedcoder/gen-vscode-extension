@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
 import type { AgentCheckpoint } from './checkpoint';
@@ -73,11 +74,11 @@ export function sanitizeToolArgumentsForApi(raw: string): string {
 function invalidToolArgsMessage(raw: string): string {
 	const path = extractPathFromPartialJson(raw);
 	const parts = [
-		'Аргументы инструмента обрезаны или это невалидный JSON (часто лимит max_tokens или кавычки внутри файла).',
-		path ? `Путь: ${path}.` : '',
-		'Файл не записан.',
-		'Повтори: короткий write_file (заготовка), затем apply_patch небольшими кусками. Не клади большой файл целиком в один write_file.',
-		`Длина аргументов: ${raw.length} символов.`,
+		vscode.l10n.t('tool.invalidJsonArgs'),
+		path ? vscode.l10n.t('tool.invalidJsonPath', path) : '',
+		vscode.l10n.t('tool.fileNotWritten'),
+		vscode.l10n.t('tool.invalidJsonRetry'),
+		vscode.l10n.t('tool.argsLength', raw.length),
 	];
 
 	return parts.filter(Boolean).join(' ');

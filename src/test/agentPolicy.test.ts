@@ -112,7 +112,7 @@ suite('formatMiniDiff', () => {
 		const before = Array.from({ length: 120 }, (_, i) => `L${i}`).join('\n');
 		const after = Array.from({ length: 120 }, (_, i) => `R${i}`).join('\n');
 		const diff = formatMiniDiff(before, after);
-		assert.ok(diff.includes('строк скрыто'));
+		assert.ok(diff.includes('lines hidden'));
 		assert.ok(diff.split('\n').length <= 82);
 	});
 });
@@ -154,9 +154,9 @@ suite('tool argument JSON', () => {
 		assert.throws(
 			() => parseToolArguments('{"path":"a.go","content":"package x'),
 			(err: unknown) => err instanceof Error
-				&& err.message.includes('невалидный JSON')
+				&& err.message.includes('invalid JSON')
 				&& err.message.includes('a.go')
-				&& err.message.includes('не записан'),
+				&& err.message.includes('was not written'),
 		);
 	});
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ChatUiMessage } from '../../chat/protocol';
+import { t } from '../i18n';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownMessage } from './MarkdownMessage';
 import { TokenMeter } from './TokenMeter';
@@ -20,7 +21,7 @@ export function MessageList({ messages, busy }: MessageListProps) {
 		if (!el || !stickToBottom.current) {
 			return;
 		}
-		
+
 		el.scrollTop = el.scrollHeight;
 	}, [messages]);
 
@@ -37,8 +38,8 @@ export function MessageList({ messages, busy }: MessageListProps) {
 				stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
 			}}
 		>
-			{messages.length === 0 
-				? (<div className="msg msg--hint">Напишите сообщение. В режиме Агент модель может вызывать инструменты. Выделение в редакторе уйдёт в контекст.</div>) 
+			{messages.length === 0
+				? (<div className="msg msg--hint">{t('chat.messages.emptyHint')}</div>)
 				: (messages.filter((msg) => {
 					if (msg.role === 'tool') {
 						return false;
@@ -51,10 +52,10 @@ export function MessageList({ messages, busy }: MessageListProps) {
 					return true;
 				}).map((msg) => (
 					<div key={msg.id} className={`msg msg--${msg.role}`}>
-						{msg.role === 'assistant' && msg.content 
+						{msg.role === 'assistant' && msg.content
 							? (<MarkdownMessage content={msg.content} />)
-							: msg.role === 'assistant' && busy && !msg.toolCalls?.length 
-								? (<span className="msg__typing">гоняю байты...</span>) 
+							: msg.role === 'assistant' && busy && !msg.toolCalls?.length
+								? (<span className="msg__typing">{t('chat.messages.typing')}</span>)
 								: msg.role === 'assistant' ? null : (msg.content)}
 						{msg.toolCalls?.length ? (<div className="tool-calls">{msg.toolCalls.map((call) => (<ToolCallCard key={call.id} call={call} />))}</div>) : null}
 						{msg.role === 'assistant' ? <TokenMeter usage={msg.usage} /> : null}

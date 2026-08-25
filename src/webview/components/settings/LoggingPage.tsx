@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 
 interface LoggingPageProps extends SettingsPageProps {
@@ -13,14 +14,12 @@ export function LoggingPage({ draft, setField, onOpenLogsFolder }: LoggingPagePr
 					checked={draft.loggingEnabled}
 					onChange={(e) => setField('loggingEnabled', e.target.checked)}
 				/>
-				<span className="field__label">Писать логи</span>
+				<span className="field__label">{t('settings.loggingEnabled.label')}</span>
 			</label>
-			<span className="field__hint">
-				По умолчанию выключено. 
-				Output-каналы Gen LLM и Gen Agent, плюс файлы llm.log и agent.log.
-				Запись на диск идёт в фоне и не ждёт сохранения - запросы из-за логов не блокируются.
-			</span>
-			<button className="btn btn--secondary" type="button" onClick={onOpenLogsFolder}>Открыть папку логов</button>
+			<span className="field__hint">{t('settings.loggingEnabled.hint')}</span>
+			<button className="btn btn--secondary" type="button" onClick={onOpenLogsFolder}>
+				{t('settings.openLogsFolder')}
+			</button>
 		</>
 	);
 }

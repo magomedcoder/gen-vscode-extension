@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { detectTestCommand } from '../detectTestCommand';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveCommandCwd, throwIfAborted } from '../workspacePath';
@@ -30,11 +31,11 @@ export const runTestsTool: ToolDefinition = {
 			return {
 				ok: false,
 				path: resolved.relative,
-				content: 'Не удалось определить команду тестов (package.json scripts.test, go.mod, Cargo.toml, pytest.ini, manage.py). Используйте run_command явно.',
+				content: vscode.l10n.t('tool.testsNotDetected'),
 			};
 		}
 
-		const denied = await confirmAlwaysOrSkip(ctx, `Запустить тесты в ${resolved.relative || '.'}?`, detected.label);
+		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runTests', resolved.relative || '.'), detected.label);
 		if (denied) {
 			return {
 				...denied,

@@ -1,16 +1,18 @@
+import * as vscode from 'vscode';
+
 export function withCause(message: string, cause?: unknown): Error {
 	const err = new Error(message, cause instanceof Error ? { cause } : undefined);
 	return err;
 }
 
 export function toAbortError(cause?: unknown): Error {
-	const err = withCause('Операция отменена', cause);
+	const err = withCause(vscode.l10n.t('agent.operationCancelled'), cause);
 	err.name = 'AbortError';
 	return err;
 }
 
 export function toTimeoutError(timeoutMs: number, cause?: unknown): Error {
-	const err = withCause(`Истекло время ожидания LLM (${Math.round(timeoutMs / 1000)} с)`, cause);
+	const err = withCause(vscode.l10n.t('llm.timeout', Math.round(timeoutMs / 1000)), cause);
 	err.name = 'TimeoutError';
 	return err;
 }
@@ -29,15 +31,15 @@ export function isRetryableStatus(status: number): boolean {
 
 export function httpErrorMessage(status: number, detail: string): string {
 	const hint = status === 401 || status === 403
-		? 'Проверь API-ключ в настройках.'
+		? vscode.l10n.t('llm.httpHint.auth')
 		: status === 429
-			? 'Слишком много запросов, подожди и повтори.'
+			? vscode.l10n.t('llm.httpHint.rateLimit')
 			: status >= 500
-				? 'Сервер LLM временно недоступен.'
+				? vscode.l10n.t('llm.httpHint.server')
 				: '';
 
-	const body = detail.trim() || 'без текста';
-	return `Ошибка HTTP ${status}: ${body}${hint ? ` ${hint}` : ''}`;
+	const body = detail.trim() || vscode.l10n.t('llm.httpEmptyBody');
+	return vscode.l10n.t('llm.httpError', status, body, hint);
 }
 
 export class LlmHttpError extends Error {
@@ -64,7 +66,7 @@ export function retryDelayMs(attempt: number): number {
 }
 
 export function parseErrorDetail(text: string, parsed: unknown, statusText: string): string {
-	const fromJson = (parsed as { 
+	const fromJson = (parsed as {
 		error?: {
 			message?: string
 		}

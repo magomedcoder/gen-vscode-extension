@@ -23,7 +23,7 @@ export function setConfirmHost(next: ConfirmHost | undefined): void {
 // Единая точка подтверждения: карточка в панели Gen (не отдельная вкладка)
 export async function showConfirmDialog(options: ConfirmDialogOptions): Promise<ConfirmChoice> {
 	if (!host) {
-		throw new Error('Confirm host не зарегистрирован (чат ещё не инициализирован)');
+		throw new Error(vscode.l10n.t('ui.confirmHostMissing'));
 	}
 
 	await vscode.commands.executeCommand('gen.chatView.focus').then(undefined, () => undefined);

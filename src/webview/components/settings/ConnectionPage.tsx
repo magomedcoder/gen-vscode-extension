@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 
 interface ConnectionPageProps extends SettingsPageProps {
@@ -26,7 +27,7 @@ export function ConnectionPage({
 	return (
 		<>
 			<label className="field">
-				<span className="field__label">Базовый URL</span>
+				<span className="field__label">{t('settings.baseUrl.label')}</span>
 				<input
 					className="field__input"
 					value={draft.baseUrl}
@@ -40,20 +41,20 @@ export function ConnectionPage({
 			</label>
 
 			<label className="field">
-				<span className="field__label">API-ключ</span>
+				<span className="field__label">{t('settings.apiKey.label')}</span>
 				<input
 					className="field__input"
 					type="password"
 					autoComplete="off"
 					value={apiKeyDraft}
-					placeholder={apiKeySet ? 'ключ сохранён - введи новый, чтобы заменить' : ''}
+					placeholder={apiKeySet ? t('settings.apiKey.placeholderSet') : ''}
 					onChange={(e) => onApiKeyDraft(e.target.value)}
 				/>
-				<span className="field__hint">Пусто - не отправлять заголовок.</span>
+				<span className="field__hint">{t('settings.apiKey.hint')}</span>
 			</label>
 
 			<label className="field">
-				<span className="field__label">Заголовок ключа (Например Authorization)</span>
+				<span className="field__label">{t('settings.authHeader.label')}</span>
 				<input
 					className="field__input"
 					value={draft.authHeader}
@@ -62,17 +63,17 @@ export function ConnectionPage({
 			</label>
 
 			<label className="field">
-				<span className="field__label">Схема ключа (Например Bearer</span>
+				<span className="field__label">{t('settings.authScheme.label')}</span>
 				<input
 					className="field__input"
 					value={draft.authScheme}
 					onChange={(e) => setField('authScheme', e.target.value)}
 				/>
-				<span className="field__hint">По умолчанию Authorization: Bearer и ключ.</span>
+				<span className="field__hint">{t('settings.authScheme.hint')}</span>
 			</label>
 
 			<label className="field">
-				<span className="field__label">Модель</span>
+				<span className="field__label">{t('settings.model.label')}</span>
 				<div className="field__row">
 					<select
 						className="field__input"
@@ -81,7 +82,7 @@ export function ConnectionPage({
 						onChange={(e) => setField('model', e.target.value)}
 					>
 						{modelOptions.length === 0 ? (
-							<option value="">{modelsLoading ? 'Загрузка...' : 'Нет моделей - укажите базовый URL'}</option>
+							<option value="">{modelsLoading ? t('settings.model.loading') : t('settings.model.empty')}</option>
 						) : (
 							modelOptions.map((id) => (<option key={id} value={id}>{id}</option>))
 						)}
@@ -92,7 +93,7 @@ export function ConnectionPage({
 						disabled={modelsLoading || !draft.baseUrl.trim()}
 						onClick={() => onLoadModels(draft.baseUrl)}
 					>
-						{modelsLoading ? '...' : 'Обновить'}
+						{modelsLoading ? '...' : t('settings.model.refresh')}
 					</button>
 				</div>
 				{modelsStatus ? <span className="field__hint">{modelsStatus}</span> : null}

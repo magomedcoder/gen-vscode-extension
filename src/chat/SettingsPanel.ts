@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getSettings, hasApiKey, setApiKey, updateSettings } from '../config/settings';
 import { HttpLlmClient } from '../llm/client';
+import { loadWebviewL10n } from '../l10n/loadBundle';
 import { revealLogsFolder } from '../log/logger';
 import { CHAT_VIEW_ID } from './ids';
 import { createNonce, renderChatHtml } from './chatHtml';
@@ -31,20 +32,23 @@ export class SettingsPanel {
 			localResourceRoots: [assetsRoot],
 		});
 		panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'logo.svg');
-		SettingsPanel.current = new SettingsPanel(panel, assetsRoot);
+		SettingsPanel.current = new SettingsPanel(panel, assetsRoot, context.extensionUri);
 	}
 
 	private constructor(
 		private readonly panel: vscode.WebviewPanel,
 		assetsRoot: vscode.Uri,
+		extensionUri: vscode.Uri,
 	) {
+		const l10n = loadWebviewL10n(extensionUri);
 		this.panel.webview.html = renderChatHtml({
 			cspSource: this.panel.webview.cspSource,
 			nonce: createNonce(),
 			scriptUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.js')),
 			styleUri: this.panel.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.css')),
-			title: 'Настройки Gen',
+			title: l10n.strings['settings.webviewTitle'],
 			screen: 'settings',
+			l10n,
 		});
 
 		const messageSub = this.panel.webview.onDidReceiveMessage((msg: FromWebviewMessage) => {

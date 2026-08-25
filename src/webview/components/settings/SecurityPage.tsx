@@ -1,4 +1,5 @@
 import { EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../../../config/types';
+import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 
 export function SecurityPage({ draft, setField }: SettingsPageProps) {
@@ -9,7 +10,7 @@ export function SecurityPage({ draft, setField }: SettingsPageProps) {
 	return (
 		<>
 			<div className="field">
-				<span className="field__label">Запрещённые пути агента</span>
+				<span className="field__label">{t('settings.deniedPaths.label')}</span>
 				<textarea
 					className="field__input field__input--multiline"
 					rows={8}
@@ -18,22 +19,18 @@ export function SecurityPage({ draft, setField }: SettingsPageProps) {
 					spellCheck={false}
 					onChange={(e) => setListField('deniedPaths', e.target.value)}
 				/>
-				<span className="field__hint">
-					По одному glob на строку: .env, .env.*, *.pem, node_modules.
-					Пусто - не запрещать.
-					Строка с # - комментарий.
-				</span>
+				<span className="field__hint">{t('settings.deniedPaths.hint')}</span>
 				<button
 					className="btn btn--secondary"
 					type="button"
 					onClick={() => setField('deniedPaths', [...EXAMPLE_DENIED_PATHS])}
 				>
-					Вставить примеры
+					{t('settings.insertExamples')}
 				</button>
 			</div>
 
 			<div className="field">
-				<span className="field__label">Запрещённые команды</span>
+				<span className="field__label">{t('settings.deniedCommands.label')}</span>
 				<textarea
 					className="field__input field__input--multiline"
 					rows={8}
@@ -42,22 +39,18 @@ export function SecurityPage({ draft, setField }: SettingsPageProps) {
 					spellCheck={false}
 					onChange={(e) => setListField('deniedCommands', e.target.value)}
 				/>
-				<span className="field__hint">
-					Имена бинарников для run_command, по одному на строку: rm, curl, bash, docker.
-					Пусто - не запрещать по имени (eval, git write и package install всё равно блокируются).
-					Строка с # - комментарий.
-				</span>
+				<span className="field__hint">{t('settings.deniedCommands.hint')}</span>
 				<button
 					className="btn btn--secondary"
 					type="button"
 					onClick={() => setField('deniedCommands', [...EXAMPLE_DENIED_COMMANDS])}
 				>
-					Вставить примеры
+					{t('settings.insertExamples')}
 				</button>
 			</div>
 
 			<div className="field">
-				<span className="field__label">Шаблоны секретов (regexp)</span>
+				<span className="field__label">{t('settings.secretPatterns.label')}</span>
 				<textarea
 					className="field__input field__input--multiline"
 					rows={6}
@@ -66,17 +59,13 @@ export function SecurityPage({ draft, setField }: SettingsPageProps) {
 					spellCheck={false}
 					onChange={(e) => setListField('secretPatterns', e.target.value)}
 				/>
-				<span className="field__hint">
-					По одной JS-регулярке на строку.
-					Совпадения в ответах инструментов заменяются на [REDACTED].
-					Пусто - не маскировать. Невалидная регулярка пропускается.
-				</span>
+				<span className="field__hint">{t('settings.secretPatterns.hint')}</span>
 				<button
 					className="btn btn--secondary"
 					type="button"
 					onClick={() => setField('secretPatterns', [...EXAMPLE_SECRET_PATTERNS])}
 				>
-					Вставить примеры
+					{t('settings.insertExamples')}
 				</button>
 			</div>
 		</>

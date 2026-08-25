@@ -1,4 +1,5 @@
 import type { AgentAuthLevel, ChatMode } from '../../../config/types';
+import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { parseNumberInput } from './parseNumber';
 
@@ -6,19 +7,19 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 	return (
 		<>
 			<label className="field">
-				<span className="field__label">Режим чата по умолчанию</span>
+				<span className="field__label">{t('settings.chatMode.label')}</span>
 				<select
 					className="field__input"
 					value={draft.chatMode}
 					onChange={(e) => setField('chatMode', e.target.value as ChatMode)}
 				>
-					<option value="ask">Просто чат - только ответы текстом</option>
-					<option value="agent">Агент - вызов инструмента</option>
+					<option value="ask">{t('settings.chatMode.ask')}</option>
+					<option value="agent">{t('settings.chatMode.agent')}</option>
 				</select>
 			</label>
 
 			<label className="field">
-				<span className="field__label">Лимит итераций агента</span>
+				<span className="field__label">{t('settings.agentMaxIterations.label')}</span>
 				<input
 					className="field__input"
 					type="number"
@@ -28,19 +29,19 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 					value={draft.agentMaxIterations}
 					onChange={(e) => setField('agentMaxIterations', parseNumberInput(e.target.value, draft.agentMaxIterations))}
 				/>
-				<span className="field__hint">0 - без лимита. Иначе 1-40</span>
+				<span className="field__hint">{t('settings.agentMaxIterations.hint')}</span>
 			</label>
 
 			<label className="field">
-				<span className="field__label">Уровень доступа агента</span>
+				<span className="field__label">{t('settings.agentAuthLevel.label')}</span>
 				<select
 					className="field__input"
 					value={draft.agentAuthLevel}
 					onChange={(e) => setField('agentAuthLevel', e.target.value as AgentAuthLevel)}
 				>
-					<option value="auto">Чтение - только просмотр файлов</option>
-					<option value="ask">Спросить - подтверждать запись и удаление</option>
-					<option value="open">Без спроса - без диалогов (всё в лог Gen Agent)</option>
+					<option value="auto">{t('settings.agentAuthLevel.auto')}</option>
+					<option value="ask">{t('settings.agentAuthLevel.ask')}</option>
+					<option value="open">{t('settings.agentAuthLevel.open')}</option>
 				</select>
 			</label>
 		</>

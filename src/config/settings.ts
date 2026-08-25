@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
 import { initApiKeyStore } from './apiKey';
 import { DEFAULT_SETTINGS, type AgentAuthLevel, type GenSettings } from './types';
@@ -99,7 +100,7 @@ export function getSettings(): GenSettings {
 
 export async function updateSettings(next: GenSettings): Promise<GenSettings> {
 	if (!store) {
-		throw new Error('Хранилище настроек не инициализировано');
+		throw new Error(vscode.l10n.t('config.settingsNotInit'));
 	}
 
 	const normalized = normalize(next);

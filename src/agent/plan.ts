@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { AGENT_LIMITS } from './policy';
 import { asObjectArray, asString, type ToolResult } from './types';
 
@@ -42,24 +43,24 @@ export function normalizePlanPath(path: string): string {
 }
 
 export function parsePlanArgs(args: Record<string, unknown>): AgentPlan {
-	const title = asString(args, 'title').trim() || 'План правок';
+	const title = asString(args, 'title').trim() || vscode.l10n.t('plan.defaultTitle');
 	const steps = asObjectArray(args, 'steps').map((item) => {
 		const stepTitle = asString(item, 'title').trim() || asString(item, 'summary').trim();
 		const path = asString(item, 'path').trim();
 		const action = asString(item, 'action').trim();
 		return {
-			title: stepTitle || path || action || 'шаг',
+			title: stepTitle || path || action || vscode.l10n.t('plan.defaultStep'),
 			...(path ? { path } : {}),
 			...(action ? { action } : {}),
 		};
 	});
 
 	if (steps.length === 0) {
-		throw new Error('Нужен непустой массив steps');
+		throw new Error(vscode.l10n.t('plan.needSteps'));
 	}
 
 	if (steps.length > AGENT_LIMITS.maxPlanSteps) {
-		throw new Error(`Слишком много шагов (${steps.length}, лимит ${AGENT_LIMITS.maxPlanSteps})`);
+		throw new Error(vscode.l10n.t('plan.tooManySteps', steps.length, AGENT_LIMITS.maxPlanSteps));
 	}
 
 	return { title, steps };
@@ -179,7 +180,7 @@ export class StickyPlan {
 			return;
 		}
 
-		this.title = data.title || 'План';
+		this.title = data.title || vscode.l10n.t('plan.defaultName');
 		this.steps = data.steps.map((s) => ({
 			title: s.title,
 			...(s.path ? { path: s.path } : {}),
@@ -209,7 +210,7 @@ export class StickyPlan {
 	setStepStatus(index1Based: number, status: PlanStepStatus): void {
 		const idx = index1Based - 1;
 		if (idx < 0 || idx >= this.steps.length) {
-			throw new Error(`Нет шага #${index1Based} (всего ${this.steps.length})`);
+			throw new Error(vscode.l10n.t('plan.noStep', index1Based, this.steps.length));
 		}
 
 		this.steps[idx] = { ...this.steps[idx], status };
@@ -279,7 +280,7 @@ export class StickyPlan {
 					return {
 						ok: false,
 						denied: true,
-						content: `${OUTSIDE_PLAN_HINT}\nВне плана: ${path}`,
+						content: `${OUTSIDE_PLAN_HINT}\n${vscode.l10n.t('plan.outsidePath', path)}`,
 					};
 				}
 			}

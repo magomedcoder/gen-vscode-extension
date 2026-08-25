@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 
 export class CommandPolicyError extends Error {
@@ -94,44 +95,44 @@ function gitSubcommand(args: string[]): string | undefined {
 export function assertAllowedCommand(command: string, args: string[], deniedCommands?: readonly string[]): void {
 	const trimmed = command.trim();
 	if (!trimmed) {
-		throw new CommandPolicyError('Пустая команда');
+		throw new CommandPolicyError(vscode.l10n.t('cmd.empty'));
 	}
 
 	if (trimmed.includes('..') || trimmed.includes('\0')) {
-		throw new CommandPolicyError('Недопустимый путь к команде');
+		throw new CommandPolicyError(vscode.l10n.t('cmd.badPath'));
 	}
 
 	const binary = normalizeBinaryName(trimmed);
 	if (!binary) {
-		throw new CommandPolicyError('Пустая команда');
+		throw new CommandPolicyError(vscode.l10n.t('cmd.empty'));
 	}
 
 	if (deniedBinarySet(deniedCommands).has(binary)) {
-		throw new CommandPolicyError(`Команда запрещена политикой: ${binary}`);
+		throw new CommandPolicyError(vscode.l10n.t('cmd.deniedBinary', binary));
 	}
 
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
 		if (typeof arg !== 'string') {
-			throw new CommandPolicyError('Аргументы должны быть строками');
+			throw new CommandPolicyError(vscode.l10n.t('cmd.argsMustBeStrings'));
 		}
 
 		if (arg.includes('\0')) {
-			throw new CommandPolicyError('Недопустимый символ в аргументе');
+			throw new CommandPolicyError(vscode.l10n.t('cmd.badArgChar'));
 		}
 
 		if (EVAL_FLAGS.has(arg) || isDeniedCFlag(binary, args, i)) {
-			throw new CommandPolicyError(`Флаг ${arg} запрещён политикой (eval)`);
+			throw new CommandPolicyError(vscode.l10n.t('cmd.evalFlag', arg));
 		}
 	}
 
 	const sub = binary === 'git' ? gitSubcommand(args) : firstSubcommand(args);
 	if (sub && PACKAGE_SUBCOMMANDS.has(sub)) {
-		throw new CommandPolicyError(`Подкоманда ${sub} запрещена политикой`);
+		throw new CommandPolicyError(vscode.l10n.t('cmd.deniedSub', sub));
 	}
 
 	if (binary === 'git' && sub && GIT_WRITE_SUBCOMMANDS.has(sub)) {
-		throw new CommandPolicyError(`git ${sub} запрещён. Для статуса используйте git_status`);
+		throw new CommandPolicyError(vscode.l10n.t('cmd.gitDenied', sub));
 	}
 }
 

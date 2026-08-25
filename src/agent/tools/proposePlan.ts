@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { formatPlan, parsePlanArgs } from '../plan';
 import type { StickyPlan, StickyPlanSnapshot} from '../plan';
 import { asObjectArray, asString } from '../types';
@@ -45,11 +46,13 @@ export const proposePlanTool: ToolDefinition = {
 		throwIfAborted(ctx.signal);
 		const plan = parsePlanArgs(args);
 		const formatted = formatPlan(plan);
-		const denied = await confirmAlwaysOrSkip(ctx, `Выполнить план: ${plan.title}?`, formatted);
+		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.executePlan', plan.title), formatted);
 		if (denied) {
 			return {
 				...denied,
-				content: denied.content === 'Пользователь отклонил действие' ? `План отклонён:\n${formatted}` : denied.content,
+				content: denied.denied
+					? vscode.l10n.t('agent.planRejected', formatted)
+					: denied.content,
 			};
 		}
 
@@ -57,7 +60,7 @@ export const proposePlanTool: ToolDefinition = {
 		ctx.onPlanChanged?.();
 		return {
 			ok: true,
-			content: `План подтверждён и сохранён в сессии. Следуй шагам на следующих ходах; отмечай прогресс через update_plan.\n${formatted}`,
+			content: vscode.l10n.t('plan.approvedSaved', formatted),
 		};
 	},
 };
@@ -135,19 +138,19 @@ export const updatePlanTool: ToolDefinition = {
 		throwIfAborted(ctx.signal);
 		const plan = ctx.plan as StickyPlan | undefined;
 		if (!plan) {
-			return { ok: false, content: 'План сессии недоступен' };
+			return { ok: false, content: vscode.l10n.t('plan.sessionUnavailable') };
 		}
 
 		if (args.clear === true) {
 			plan.clear();
 			ctx.onPlanChanged?.();
-			return { ok: true, content: 'План сессии очищен.' };
+			return { ok: true, content: vscode.l10n.t('plan.sessionCleared') };
 		}
 
 		if (args.replace && typeof args.replace === 'object' && !Array.isArray(args.replace)) {
 			const next = parsePlanArgs(args.replace as Record<string, unknown>);
 			const formatted = formatPlan(next);
-			const denied = await confirmAlwaysOrSkip(ctx, `Заменить план: ${next.title}?`, formatted);
+			const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.replacePlan', next.title), formatted);
 			if (denied) {
 				return denied;
 			}
@@ -156,7 +159,7 @@ export const updatePlanTool: ToolDefinition = {
 			ctx.onPlanChanged?.();
 			return {
 				ok: true,
-				content: `План заменён.\n${formatted}`,
+				content: vscode.l10n.t('plan.replaced', formatted),
 			};
 		}
 
@@ -164,14 +167,14 @@ export const updatePlanTool: ToolDefinition = {
 		if (updates.length === 0) {
 			return {
 				ok: false,
-				content: 'Укажи steps (index+status), replace или clear',
+				content: vscode.l10n.t('plan.needUpdateArgs'),
 			};
 		}
 
 		if (!plan.hasPlan || !plan.isApproved) {
 			return {
 				ok: false,
-				content: 'Нет активного плана. Сначала propose_plan.',
+				content: vscode.l10n.t('plan.noActive'),
 			};
 		}
 
@@ -181,7 +184,7 @@ export const updatePlanTool: ToolDefinition = {
 			if (!Number.isFinite(index) || !status) {
 				return {
 					ok: false,
-					content: 'Каждый step нужен с index (число) и status (pending|in_progress|done|skipped)',
+					content: vscode.l10n.t('plan.badStepUpdate'),
 				};
 			}
 			plan.setStepStatus(Math.floor(index), status);
@@ -191,7 +194,7 @@ export const updatePlanTool: ToolDefinition = {
 		const snap = plan.snapshot();
 		return {
 			ok: true,
-			content: snap ? `План обновлён.\n${formatStickyPlanBrief(snap)}` : 'План обновлён.',
+			content: snap ? vscode.l10n.t('plan.updatedWithBrief', formatStickyPlanBrief(snap)) : vscode.l10n.t('plan.updated'),
 		};
 	},
 };

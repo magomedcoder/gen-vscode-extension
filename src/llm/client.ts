@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { getApiKey, buildAuthHeaders } from '../config/apiKey';
 import { getSettings, type GenSettings } from '../config/settings';
 import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
@@ -66,7 +67,7 @@ function toTruncatedToolArgsError(err: unknown): Error | undefined {
 		return undefined;
 	}
 
-	return new Error('Модель вернула битый JSON в tool-call (часто обрезка max_tokens). Увеличь max_tokens в настройках и продолжи файл через apply_patch небольшими кусками.', { cause: err instanceof Error ? err : undefined });
+	return new Error(vscode.l10n.t('llm.badToolCallJson'), { cause: err instanceof Error ? err : undefined });
 }
 
 function looksLikeToolsUnsupported(err: unknown): boolean {
@@ -81,7 +82,7 @@ function looksLikeToolsUnsupported(err: unknown): boolean {
 
 	const mentionsTools = /tools?|tool_choice|tool call|function.?call|functions?/.test(msg);
 	const unsupported = /unsupported|not support|unknown|unexpected|extra|invalid|unrecognized|does not allow|no longer/.test(msg);
-	const httpReject = /ошибка http (400|404|422)/.test(msg);
+	const httpReject = /(?:ошибка http|http error) (400|404|422)/.test(msg);
 	return mentionsTools && (unsupported || httpReject);
 }
 
@@ -219,7 +220,7 @@ function accumToResult(acc: StreamAccum): CompleteResult {
 		}))
 		: undefined;
 	if (!acc.content.trim() && !toolCalls?.length) {
-		throw new Error('LLM-сервер вернул пустой ответ');
+		throw new Error(vscode.l10n.t('llm.emptyResponse'));
 	}
 
 	return {
@@ -300,7 +301,7 @@ export class HttpLlmClient implements LlmClient {
 			const text = typeof content === 'string' ? content : '';
 
 			if (!text.trim() && !toolCalls?.length) {
-				throw new Error('LLM-сервер вернул пустой ответ');
+				throw new Error(vscode.l10n.t('llm.emptyResponse'));
 			}
 
 			if (text && !streamedAny) {
@@ -368,7 +369,7 @@ export class HttpLlmClient implements LlmClient {
 		const settings = this.getConfig();
 		const baseUrl = (params.baseUrl ?? settings.baseUrl).trim();
 		if (!baseUrl) {
-			throw new Error('Укажите базовый URL');
+			throw new Error(vscode.l10n.t('llm.needBaseUrl'));
 		}
 
 		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
@@ -531,7 +532,7 @@ export class HttpLlmClient implements LlmClient {
 				}
 
 				if (!text.trim() && !toolCalls?.length) {
-					throw new Error('LLM-сервер вернул пустой ответ');
+					throw new Error(vscode.l10n.t('llm.emptyResponse'));
 				}
 
 				return {
@@ -546,7 +547,7 @@ export class HttpLlmClient implements LlmClient {
 			}
 
 			if (!response.body) {
-				throw new Error('Стрим без тела ответа');
+				throw new Error(vscode.l10n.t('llm.streamNoBody'));
 			}
 
 			const acc: StreamAccum = { content: '', calls: [] };
@@ -652,7 +653,7 @@ export class HttpLlmClient implements LlmClient {
 				try {
 					parsed = JSON.parse(text) as unknown;
 				} catch (cause) {
-					throw new Error(`Некорректный JSON от LLM-сервера (HTTP ${response.status}): ${text.slice(0, 200)}`, { cause: cause instanceof Error ? cause : undefined });
+					throw new Error(vscode.l10n.t('llm.badJsonHttp', response.status, text.slice(0, 200)), { cause: cause instanceof Error ? cause : undefined });
 				}
 			}
 

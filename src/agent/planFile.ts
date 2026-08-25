@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { formatMiniDiff } from './diff';
 import { AGENT_LIMITS } from './policy';
 import type { PlanStepStatus, StickyPlan, StickyPlanSnapshot, StickyPlanStep } from './plan';
@@ -152,11 +153,11 @@ export function parsePlanMarkdown(text: string): StickyPlanSnapshot {
 	}
 
 	if (steps.length === 0) {
-		throw new PlanFileError('В файле плана нет шагов (нужны строки вида `- [ ] ...`)');
+		throw new PlanFileError(vscode.l10n.t('plan.noStepsInFile'));
 	}
 
 	if (steps.length > AGENT_LIMITS.maxPlanSteps) {
-		throw new PlanFileError(`Слишком много шагов (${steps.length}, лимит ${AGENT_LIMITS.maxPlanSteps})`);
+		throw new PlanFileError(vscode.l10n.t('plan.tooManySteps', steps.length, AGENT_LIMITS.maxPlanSteps));
 	}
 
 	return {

@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { LlmToolDefinition } from '../../llm/types';
 import { logAgentTool } from '../audit';
 import { denyMutatingIfAuto, isMutatingTool } from '../auth';
@@ -60,7 +61,7 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 	if (!tool) {
 		return {
 			ok: false,
-			content: `Неизвестный инструмент: ${name}`,
+			content: vscode.l10n.t('agent.unknownTool', name),
 		};
 	}
 

@@ -36,7 +36,7 @@ export const listDirTool: ToolDefinition = {
 		} catch {
 			return {
 				ok: false,
-				content: `Не удалось прочитать каталог: ${resolved.relative}`
+				content: vscode.l10n.t('tool.dirReadFailed', resolved.relative)
 			};
 		}
 

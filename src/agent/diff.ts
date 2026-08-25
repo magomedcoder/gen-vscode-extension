@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { extractPathFromPartialJson } from './types';
 
 const CONTEXT = 2;
@@ -42,7 +43,7 @@ export function formatMiniDiff(before: string, after: string): string {
 	}
 
 	if (lines.length > MAX_LINES) {
-		return `${lines.slice(0, MAX_LINES).join('\n')}\n... [${lines.length - MAX_LINES} строк скрыто]`;
+		return `${lines.slice(0, MAX_LINES).join('\n')}\n${vscode.l10n.t('diff.linesHidden', lines.length - MAX_LINES)}`;
 	}
 
 	return lines.join('\n');

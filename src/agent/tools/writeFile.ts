@@ -32,7 +32,7 @@ export const writeFileTool: ToolDefinition = {
 		if (bytes.byteLength > AGENT_LIMITS.maxWriteBytes) {
 			return {
 				ok: false,
-				content: `Слишком большой write (${bytes.byteLength} байт, лимит ${AGENT_LIMITS.maxWriteBytes})`,
+				content: vscode.l10n.t('tool.writeTooLarge', bytes.byteLength, AGENT_LIMITS.maxWriteBytes),
 			};
 		}
 
@@ -52,7 +52,7 @@ export const writeFileTool: ToolDefinition = {
 		}
 
 		if (exists && shouldConfirmWrites()) {
-			const denied = await confirmOrSkip(ctx, `Перезаписать файл ${resolved.relative}?`, content);
+			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.overwriteFile', resolved.relative), content);
 			if (denied) {
 				return {
 					...denied,
@@ -90,7 +90,7 @@ export const writeFileTool: ToolDefinition = {
 		if (!applied) {
 			return {
 				ok: false,
-				content: `Не удалось записать: ${resolved.relative}`,
+				content: vscode.l10n.t('tool.writeFailed', resolved.relative),
 			};
 		}
 
@@ -106,8 +106,8 @@ export const writeFileTool: ToolDefinition = {
 			path: resolved.relative,
 			diff: formatMiniDiff(before, content),
 			content: exists
-				? `Файл перезаписан: ${resolved.relative} (${bytes.byteLength} байт)`
-				: `Файл создан: ${resolved.relative} (${bytes.byteLength} байт)`,
+				? vscode.l10n.t('tool.fileOverwritten', resolved.relative, bytes.byteLength)
+				: vscode.l10n.t('tool.fileCreated', resolved.relative, bytes.byteLength),
 		};
 	},
 };

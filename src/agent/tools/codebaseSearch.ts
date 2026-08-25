@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { getIndexManager } from '../../index/IndexManager';
 import { AGENT_LIMITS } from '../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
@@ -27,7 +28,7 @@ export const codebaseSearchTool: ToolDefinition = {
 		if (!query) {
 			return { 
 				ok: false, 
-				content: 'Нужен query' 
+				content: vscode.l10n.t('tool.queryRequired') 
 			};
 		}
 
@@ -40,7 +41,7 @@ export const codebaseSearchTool: ToolDefinition = {
 		if (!manager) {
 			return {
 				ok: false,
-				content: 'Индекс не инициализирован (нет workspace?)',
+				content: vscode.l10n.t('tool.indexNotInit'),
 			};
 		}
 
@@ -52,7 +53,7 @@ export const codebaseSearchTool: ToolDefinition = {
 					query,
 					indexing: true,
 					hits: [],
-					hint: 'Индекс ещё строится - повторите поиск через несколько секунд',
+					hint: vscode.l10n.t('tool.indexBuilding'),
 				}, null, 2),
 			};
 		}

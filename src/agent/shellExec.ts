@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import * as vscode from 'vscode';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from './commandPolicy';
 import { AGENT_LIMITS, previewText } from './policy';
 
@@ -48,7 +49,7 @@ function formatExecOutput(params: {
 	}
 
 	if (params.truncated) {
-		lines.push(`... [вывод обрезан, лимит ${AGENT_LIMITS.maxCommandOutput} символов]`);
+		lines.push(vscode.l10n.t('shell.outputTruncated', AGENT_LIMITS.maxCommandOutput));
 	}
 
 	return lines.join('\n');
@@ -98,7 +99,7 @@ export async function runShellCommand(request: ShellExecRequest): Promise<ShellE
 		};
 
 		if (execErr.name === 'AbortError' || request.signal?.aborted) {
-			const abortErr = new Error('Операция отменена');
+			const abortErr = new Error(vscode.l10n.t('agent.operationCancelled'));
 			abortErr.name = 'AbortError';
 			throw abortErr;
 		}
@@ -123,7 +124,7 @@ export async function runShellCommand(request: ShellExecRequest): Promise<ShellE
 			cwd: request.cwd,
 			exitCode,
 			stdout,
-			stderr: timedOut ? `${stderr}\nТаймаут ${timeout} мс`.trim() : stderr || msg,
+			stderr: timedOut ? `${stderr}\n${vscode.l10n.t('shell.timeout', timeout)}`.trim() : stderr || msg,
 		});
 
 		return {

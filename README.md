@@ -6,7 +6,7 @@ Minimum VS Code version: **1.125.0**
 
 AI chat and agent in the bottom panel: **Ask** / **Agent** modes, code comments, path sandbox, `.gitignore` / `.genignore`.
 
-Works with llama.cpp and any other OpenAI-compatible API.
+Works with (`llama.cpp`) and any other OpenAI-compatible API.
 
 ## Documentation
 

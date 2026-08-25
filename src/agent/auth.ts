@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { getSettings, type AgentAuthLevel } from '../config/settings';
 
 const WRITE_TOOLS = new Set([
@@ -40,8 +41,8 @@ export function denyMutatingIfAuto(name: string): { ok: false; denied: true; con
 	}
 
 	const hint = isTerminalTool(name)
-		? 'Режим «Чтение»: запуск команд запрещён. Переключите уровень доступа на «Спросить» или «Без спроса».'
-		: 'Режим «Чтение»: правки и удаление запрещены. Переключите уровень доступа на «Спросить» или «Без спроса».';
+		? vscode.l10n.t('agent.auth.readOnlyTerminal')
+		: vscode.l10n.t('agent.auth.readOnlyMutating');
 
 	return {
 		ok: false,

@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { ExtensionContext, SecretStorage } from 'vscode';
 
 const API_KEY_SECRET = 'gen.apiKey';
@@ -18,7 +19,7 @@ export async function hasApiKey(): Promise<boolean> {
 
 export async function setApiKey(value: string): Promise<void> {
 	if (!secrets) {
-		throw new Error('Хранилище ключа не инициализировано');
+		throw new Error(vscode.l10n.t('config.apiKeyNotInit'));
 	}
 
 	const trimmed = value.trim();

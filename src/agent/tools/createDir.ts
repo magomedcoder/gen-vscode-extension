@@ -24,13 +24,13 @@ export const createDirTool: ToolDefinition = {
 			if (stat.type & vscode.FileType.Directory) {
 				return {
 					ok: true,
-					content: `Каталог уже есть: ${resolved.relative}`
+					content: vscode.l10n.t('tool.dirExists', resolved.relative)
 				};
 			}
 
 			return {
 				ok: false,
-				content: `По этому пути уже есть файл: ${resolved.relative}`
+				content: vscode.l10n.t('tool.pathIsFile', resolved.relative)
 			};
 		}
 
@@ -40,7 +40,7 @@ export const createDirTool: ToolDefinition = {
 		return {
 			ok: true,
 			path: resolved.relative,
-			content: `Каталог создан: ${resolved.relative}`
+			content: vscode.l10n.t('tool.dirCreated', resolved.relative)
 		};
 	},
 };

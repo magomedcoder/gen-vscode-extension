@@ -150,7 +150,7 @@ export class ChatSession {
 		this.persistPlan();
 		this.emit();
 		if (result.parseError) {
-			void vscode.window.showWarningMessage(`Gen: не удалось разобрать ${result.relativePath}: ${result.parseError}`);
+			void vscode.window.showWarningMessage(vscode.l10n.t('chat.warn.planParse', result.relativePath, result.parseError));
 		}
 	}
 
@@ -289,7 +289,7 @@ export class ChatSession {
 			this.append({
 				id: messageId(),
 				role: 'error',
-				content: 'Не заданы базовый URL или модель',
+				content: vscode.l10n.t('chat.error.missingUrlOrModel'),
 			});
 			return;
 		}
@@ -312,7 +312,7 @@ export class ChatSession {
 					this.append({
 						id: messageId(),
 						role: 'error',
-						content: `Не удалось прочитать план: ${planReload.parseError}. Исправь ${this.planStore.relativePath} или отмени план.`,
+						content: vscode.l10n.t('chat.error.planParse', planReload.parseError, this.planStore.relativePath),
 					});
 				}
 				await this.agent.run({
@@ -383,7 +383,7 @@ export class ChatSession {
 			this.append({
 				id: messageId(),
 				role: 'error',
-				content: cancelled ? 'Запрос отменён.' : err instanceof Error ? err.message : String(err),
+				content: cancelled ? vscode.l10n.t('chat.error.cancelled') : err instanceof Error ? err.message : String(err),
 			});
 		} finally {
 			if (this.inflight === controller) {

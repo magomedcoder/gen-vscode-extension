@@ -23,7 +23,7 @@ export const deleteFileTool: ToolDefinition = {
 		if (!await pathExists(resolved.uri)) {
 			return {
 				ok: false,
-				content: `Файл не найден: ${resolved.relative}`
+				content: vscode.l10n.t('tool.fileNotFound', resolved.relative)
 			};
 		}
 
@@ -31,12 +31,12 @@ export const deleteFileTool: ToolDefinition = {
 		if (stat.type & vscode.FileType.Directory) {
 			return {
 				ok: false,
-				content: `Это каталог, delete_file его не удаляет: ${resolved.relative}`
+				content: vscode.l10n.t('tool.isDirectory', resolved.relative)
 			};
 		}
 
 		if (shouldConfirmDeletes()) {
-			const denied = await confirmOrSkip(ctx, `Удалить файл ${resolved.relative}?`);
+			const denied = await confirmOrSkip(ctx, vscode.l10n.t('agent.confirm.deleteFile', resolved.relative));
 			if (denied) {
 				return {
 					...denied,
@@ -55,7 +55,7 @@ export const deleteFileTool: ToolDefinition = {
 		return {
 			ok: true,
 			path: resolved.relative,
-			content: `Файл удалён: ${resolved.relative}`
+			content: vscode.l10n.t('tool.fileDeleted', resolved.relative)
 		};
 	},
 };

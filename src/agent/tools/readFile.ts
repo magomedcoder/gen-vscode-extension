@@ -34,21 +34,21 @@ export const readFileTool: ToolDefinition = {
 		} catch {
 			return {
 				ok: false,
-				content: `Файл не найден: ${resolved.relative}`
+				content: vscode.l10n.t('tool.fileNotFound', resolved.relative)
 			};
 		}
 
 		if (looksBinary(raw)) {
 			return {
 				ok: false,
-				content: `Бинарный файл нельзя прочитать: ${resolved.relative}`
+				content: vscode.l10n.t('tool.binaryFile', resolved.relative)
 			};
 		}
 
 		if (raw.byteLength > AGENT_LIMITS.maxReadBytes) {
 			return {
 				ok: false,
-				content: `Файл слишком большой (${raw.byteLength} байт, лимит ${AGENT_LIMITS.maxReadBytes})`,
+				content: vscode.l10n.t('tool.fileTooLarge', raw.byteLength, AGENT_LIMITS.maxReadBytes),
 			};
 		}
 
@@ -59,7 +59,7 @@ export const readFileTool: ToolDefinition = {
 		if (start > end) {
 			return {
 				ok: false,
-				content: 'Некорректный диапазон строк'
+				content: vscode.l10n.t('tool.badLineRange')
 			};
 		}
 
@@ -69,7 +69,7 @@ export const readFileTool: ToolDefinition = {
 		return {
 			ok: true,
 			content: previewText(
-				`Файл: ${resolved.relative} (строки ${start}-${end} из ${lines.length})\n${body}`,
+				`${vscode.l10n.t('tool.fileHeader', resolved.relative, start, end, lines.length)}\n${body}`,
 				AGENT_LIMITS.maxReadBytes,
 			),
 		};

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import * as vscode from 'vscode';
 import { AGENT_LIMITS, previewText } from '../policy';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
@@ -38,7 +39,7 @@ export const gitStatusTool: ToolDefinition = {
 			const branch = await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'], ctx.signal);
 			const status = await git(cwd, ['status', '--porcelain=v1', '-uall'], ctx.signal);
 			const stat = await git(cwd, ['diff', '--stat', 'HEAD'], ctx.signal);
-			const body = [`branch: ${branch}`, 'status:', status || '(чисто)', 'diff --stat:', stat || '(нет отличий от HEAD)'].join('\n');
+			const body = [`branch: ${branch}`, 'status:', status || vscode.l10n.t('tool.gitClean'), 'diff --stat:', stat || vscode.l10n.t('tool.gitNoDiff')].join('\n');
 			return {
 				ok: true,
 				content: previewText(body, AGENT_LIMITS.maxGitOutput)
@@ -48,7 +49,7 @@ export const gitStatusTool: ToolDefinition = {
 			if (/not a git repository/i.test(msg)) {
 				return {
 					ok: false,
-					content: 'Это не git-репозиторий'
+					content: vscode.l10n.t('tool.notGitRepo')
 				};
 			}
 

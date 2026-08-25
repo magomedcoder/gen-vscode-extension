@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import type { ToolCallUi } from '../../chat/protocol';
+import { t } from '../i18n';
 
 const RESULT_PREVIEW = 500;
 
 function statusLabel(status: ToolCallUi['status']): string {
 	if (status === 'pending') {
-		return 'выполняется...';
+		return t('chat.tool.status.pending');
 	}
 
 	if (status === 'ok') {
-		return 'ok';
+		return t('chat.tool.status.ok');
 	}
 
 	if (status === 'denied') {
-		return 'отклонено';
+		return t('chat.tool.status.denied');
 	}
 
-	return 'ошибка';
+	return t('chat.tool.status.error');
 }
 
 function DiffPreview({ diff }: { diff: string }) {
@@ -57,7 +58,7 @@ export function ToolCallCard({ call }: { call: ToolCallUi }) {
 						setExpanded((v) => !v);
 					}}
 				>
-					{expanded ? 'Свернуть' : 'Показать полностью'}
+					{expanded ? t('chat.tool.collapse') : t('chat.tool.expand')}
 				</button>
 			) : null}
 		</details>

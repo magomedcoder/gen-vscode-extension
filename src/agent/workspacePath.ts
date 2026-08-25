@@ -28,7 +28,7 @@ function folderContaining(fsPath: string): vscode.WorkspaceFolder {
 		}
 	}
 	if (!best) {
-		throw new PathPolicyError('Нет открытого workspace');
+		throw new PathPolicyError(vscode.l10n.t('policy.noWorkspace'));
 	}
 
 	return best;
@@ -38,7 +38,7 @@ async function followToWorkspace(fsPath: string, folders: string[]): Promise<str
 	try {
 		const real = await fs.realpath(fsPath);
 		if (!findContainingFolder(real, folders)) {
-			throw new PathPolicyError('Путь вне workspace (в т.ч. после перехода по symlink)');
+			throw new PathPolicyError(vscode.l10n.t('policy.pathOutsideSymlink'));
 		}
 
 		return real;
@@ -51,7 +51,7 @@ async function followToWorkspace(fsPath: string, folders: string[]): Promise<str
 			const realParent = await fs.realpath(parent);
 			const candidate = path.join(realParent, path.basename(fsPath));
 			if (!findContainingFolder(candidate, folders)) {
-				throw new PathPolicyError('Путь вне workspace (в т.ч. после перехода по symlink)');
+				throw new PathPolicyError(vscode.l10n.t('policy.pathOutsideSymlink'));
 			}
 
 			return candidate;
@@ -72,7 +72,7 @@ export async function resolveWorkspacePath(input: string): Promise<ResolvedWorks
 	const containing = findContainingFolder(checked, folders) ?? folder;
 	const relative = assertAllowedPath(checked, containing);
 	if (await isIgnoredByGitIgnore(containing, relative)) {
-		throw new PathPolicyError(`Путь игнорируется (.gitignore/.genignore): ${relative || '.'}`);
+		throw new PathPolicyError(vscode.l10n.t('policy.pathIgnored', relative || '.'));
 	}
 
 	const uri = vscode.Uri.file(checked);
@@ -126,7 +126,7 @@ export async function resolveCommandCwd(input: string): Promise<ResolvedWorkspac
 
 export function throwIfAborted(signal?: AbortSignal): void {
 	if (signal?.aborted) {
-		const err = new Error('Операция отменена');
+		const err = new Error(vscode.l10n.t('agent.operationCancelled'));
 		err.name = 'AbortError';
 		throw err;
 	}

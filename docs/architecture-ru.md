@@ -46,4 +46,4 @@ Comment command
 - Extension host: esbuild -> `dist/extension.js`
 - Webview: esbuild -> `dist/webview/`
 - Тесты: `yarn test` (vscode-test)
-- Локализация: `package.nls*.json`, `l10n/bundle.l10n*.json`
+- Локализация: `package.nls*.json` (команды/манифест), `l10n/bundle.l10n*.json` (host + UI webview). Строки webview инжектятся как `window.__GEN_L10N__` по локали host.
