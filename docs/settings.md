@@ -16,11 +16,11 @@
 
 ## Chat & Agent
 
-| Field           | Default | Description            |
-| --------------- | ------- | ---------------------- |
-| Chat mode       | `ask`   | Ask or Agent           |
-| Iteration limit | `40`    | 1-40                   |
-| Access level    | `ask`   | Read / Ask / No prompt |
+| Field           | Default | Description                   |
+| --------------- | ------- | ----------------------------- |
+| Chat mode       | `ask`   | Ask or Agent                  |
+| Iteration limit | `40`    | 0 = unlimited; otherwise 1-40 |
+| Access level    | `ask`   | Read / Ask / No prompt        |
 
 ## Requests
 

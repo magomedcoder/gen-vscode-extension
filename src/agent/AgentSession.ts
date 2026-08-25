@@ -117,6 +117,7 @@ export class AgentSession {
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
+		const unlimited = maxIterations === 0;
 		let toolsEnabled = true;
 		const plan = params.plan ?? new StickyPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
@@ -150,7 +151,7 @@ export class AgentSession {
 			},
 		];
 
-		for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+		for (let iteration = 0; unlimited || iteration < maxIterations; iteration += 1) {
 			if (params.signal.aborted) {
 				throw toAbortError();
 			}
@@ -290,6 +291,10 @@ export class AgentSession {
 					content: redactSecrets(resultText).text,
 				});
 			}
+		}
+
+		if (unlimited) {
+			return;
 		}
 
 		params.ui.append({

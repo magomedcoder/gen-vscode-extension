@@ -7,6 +7,8 @@
 - Context Engine + `@file` / `@folder` / `@codebase` mentions in chat (Composer autocomplete)
 - Docs: English docs without `-ru` suffix; Russian docs as `*-ru.md` with EN/RU cross-links
 - Security setting `deniedCommands`: move `run_command` binary denylist from code into settings
+- Fix **No prompt** (`open`): skip confirm dialogs for commands, plan, and overwrite of user edits
+- Agent iteration limit: `0` means unlimited
 
 ## 0.1.0 (24 August 2026)
 

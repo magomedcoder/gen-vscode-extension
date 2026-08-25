@@ -67,7 +67,7 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		baseUrl: String(raw.baseUrl ?? '').trim(),
 		model: String(raw.model ?? '').trim(),
 		chatMode,
-		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 1, 40),
+		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 0, 40),
 		agentAuthLevel: normalizeAuthLevel(raw),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
 		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),

@@ -67,7 +67,7 @@ Still always blocked in code:
 - `git push` / `commit` / `reset` / ...
 - eval flags with code (`node -e`, `python -c`); `gcc -c file.c` and `git -c key=value` are allowed
 
-`run_tests` / `run_command` always require confirmation.
+`run_tests` / `run_command` require confirmation in **Ask** mode; in **No prompt** they run without a dialog.
 
 ## Agent access levels
 

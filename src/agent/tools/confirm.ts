@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
+import { getAgentAuthLevel, shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
 import { previewText } from '../policy';
-import { shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
 import { throwIfAborted } from '../workspacePath';
 import type { ConfirmChoice, ToolContext, ToolResult } from '../types';
 
@@ -30,7 +30,7 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 			onAbort();
 			return;
 		}
-		
+
 		ctx.signal?.addEventListener('abort', onAbort, { once: true });
 		void Promise.resolve(ctx.confirm!({
 			title,
@@ -59,7 +59,15 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 	abortTurn();
 }
 
+/**
+ * Подтверждение для опасных tools (команды, план, overwrite user-diff).
+ * В режиме «Без спроса» (`open`) диалог не показывается - действие выполняется и пишется в лог
+ */
 export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
+	if (getAgentAuthLevel() === 'open') {
+		return undefined;
+	}
+
 	return confirmOrSkip(ctx, title, detail);
 }
 

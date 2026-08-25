@@ -21,7 +21,7 @@ Set in **Chat & Agent** settings:
 | **Ask**       | `ask`  | Write/delete with modal confirmation (Apply / Skip / Stop)   |
 | **No prompt** | `open` | No dialogs; actions are logged to Output `Gen Agent`         |
 
-Some tools always require confirmation (for example `propose_plan`, `run_command`, `run_tests`) - see [tools.md](tools.md).
+In **Ask**, writes, deletes, commands, and plan approval use the confirmation card. In **No prompt**, those dialogs are skipped.
 
 ## Chat UI
 
@@ -72,4 +72,4 @@ More on the index: [codebase-index.md](codebase-index.md).
 
 - Paths must stay inside the workspace (see [security.md](security.md)).
 - Large files: short `write_file` scaffold, then `apply_patch` in chunks (otherwise JSON tool-args may be cut by `max_tokens`).
-- Agent iteration limit: 1-40 (default 40).
+- Agent iteration limit: 0 = unlimited; otherwise 1-40 (default 40).

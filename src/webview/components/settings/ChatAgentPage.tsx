@@ -22,12 +22,13 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 				<input
 					className="field__input"
 					type="number"
-					min={1}
+					min={0}
 					max={40}
 					step={1}
 					value={draft.agentMaxIterations}
 					onChange={(e) => setField('agentMaxIterations', parseNumberInput(e.target.value, draft.agentMaxIterations))}
 				/>
+				<span className="field__hint">0 - без лимита. Иначе 1-40</span>
 			</label>
 
 			<label className="field">

@@ -67,7 +67,7 @@ docs/private/
 - `git push` / `commit` / `reset` / ...
 - eval-флаги с кодом (`node -e`, `python -c`); `gcc -c file.c` и `git -c key=value` - можно
 
-`run_tests` / `run_command` всегда с подтверждением.
+`run_tests` / `run_command` требуют подтверждения в режиме **Спросить**; в **Без спроса** - без диалога.
 
 ## Уровни доступа агента
 

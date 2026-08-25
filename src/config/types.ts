@@ -12,7 +12,8 @@ export interface GenSettings {
 	/**
 	 * Максимум итераций agent loop (LLM -> tools -> LLM)
 	 *
-	 * min - 1
+	 * 0 - без лимита
+	 * min - 0
 	 * max - 40
 	 * default - 40
 	 */
