@@ -1,72 +1,74 @@
-# Безопасность
+# Security
+
+[Русская версия](security-ru.md)
 
 ## Path sandbox
 
-Агент работает **только** внутри открытого workspace:
+The agent works **only** inside the open workspace:
 
-- запрет `..` и абсолютных путей вне папок workspace;
-- после symlink путь снова проверяется на принадлежность workspace;
-- относительные пути считаются от корня workspace.
+- block `..` and absolute paths outside workspace folders;
+- after resolving a symlink, the path is checked again for workspace membership;
+- relative paths are resolved from the workspace root.
 
-## Слои запрета путей
+## Path deny layers
 
-Путь недоступен tools, если срабатывает **любой** слой:
+A path is unavailable to tools if **any** layer matches:
 
-| Слой                | Источник                   | Назначение                                           |
+| Layer               | Source                     | Purpose                                              |
 | ------------------- | -------------------------- | ---------------------------------------------------- |
-| Workspace / symlink | встроенно                  | Не выйти за проект                                   |
-| `.gitignore`        | файл в **корне** workspace | Как у git: сборка, `node_modules`, логи...           |
-| `.genignore`        | файл в **корне** workspace | Только для Gen: то, что в git есть, но агенту нельзя |
-| `deniedPaths`       | настройки                  | Glob’ы пользователя (`.env`, `*.pem`, ...)           |
+| Workspace / symlink | built-in                   | Do not leave the project                             |
+| `.gitignore`        | file at workspace **root** | Like git: build output, `node_modules`, logs...      |
+| `.genignore`        | file at workspace **root** | Gen-only: tracked in git but off-limits to the agent |
+| `deniedPaths`       | settings                   | User globs (`.env`, `*.pem`, ...)                    |
 
-Матчер `.gitignore` / `.genignore` кэшируется на один agent turn (пакет `ignore`, **без** spawn `git check-ignore`). Каталог `.git` всегда закрыт.
+The `.gitignore` / `.genignore` matcher is cached for one agent turn (`ignore` package, **no** `git check-ignore` spawn). The `.git` directory is always closed.
 
-`vendor` / `target` **не** зашиты в код - их должен закрывать ignore репозитория.
+`vendor` / `target` are **not** hard-coded - the repo’s ignore should cover them.
 
-### Зачем `.genignore`
+### Why `.genignore`
 
-`.gitignore` - что не коммитить.  
-`.genignore` - что **нельзя читать/трогать агенту**, даже если файл в репозитории.
+`.gitignore` - what not to commit.  
+`.genignore` - what the **agent must not read/touch**, even if the file is in the repo.
 
-Пример `.genignore`:
+Example `.genignore`:
 
 ```gitignore
-# секреты, которые всё же в дереве
+# secrets that still sit in the tree
 .env.local
 secrets/
 *.pem
 credentials.json
 
-# шумные данные
+# noisy data
 fixtures/large/
 *.dump
 datasets/
 
-# внутреннее
+# internal
 .gen/
 docs/private/
 ```
 
-## Маскировка секретов
+## Secret redaction
 
-В настройках **Безопасность** - JS-regexp по одному на строку.  
-Совпадения в тексте, уходящем в LLM / показываемом из tools, заменяются на `[REDACTED]`.  
-Пустой список - маскировки нет. Невалидная регулярка пропускается.
+In **Security** settings - JS regexps, one per line.  
+Matches in text sent to the LLM / shown from tools become `[REDACTED]`.  
+Empty list - no redaction. Invalid regexps are skipped.
 
-## Команды (`run_command`)
+## Commands (`run_command`)
 
-Без shell/pipe. Запрещены в том числе:
+No shell/pipe. Blocked among others:
 
-- оболочки: `sh`, `bash`, `zsh`, ...
-- сеть: `curl`, `wget`, `ssh`, ...
-- разрушительное: `rm`, `chmod`, `chown`, ...
-- контейнеры: `docker`, `kubectl`, ...
-- package install / publish и `git push` / `commit` / `reset` / ...
+- shells: `sh`, `bash`, `zsh`, ...
+- network: `curl`, `wget`, `ssh`, ...
+- destructive: `rm`, `chmod`, `chown`, ...
+- containers: `docker`, `kubectl`, ...
+- package install / publish and `git push` / `commit` / `reset` / ...
 
-Eval-флаги с кодом (`node -e`, `python -c`) запрещены; `gcc -c file.c` и `git -c key=value` - разрешены.
+Eval flags with code (`node -e`, `python -c`) are blocked; `gcc -c file.c` and `git -c key=value` are allowed.
 
-`run_tests` / `run_command` всегда с подтверждением.
+`run_tests` / `run_command` always require confirmation.
 
-## Уровни доступа агента
+## Agent access levels
 
-См. [chat.md](chat.md#уровень-доступа-агента).
+See [chat.md](chat.md#agent-access-level).

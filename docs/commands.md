@@ -1,39 +1,41 @@
-# Команды
+# Commands
 
-В палитре команд отображаются как **Gen: ...** (категория `Gen`).
+[Русская версия](commands-ru.md)
 
-## Сочетания по умолчанию
+In the command palette they appear as **Gen: ...** (`Gen` category).
 
-| Команда                     | Win / Linux  | macOS       |
-| --------------------------- | ------------ | ----------- |
-| Открыть чат                 | `Ctrl+Alt+G` | `Cmd+Alt+G` |
-| Прокомментировать выделение | `Ctrl+Alt+/` | `Cmd+Alt+/` |
+## Default keybindings
 
-Сочетания можно изменить: **Файл -> Настройки -> Сочетания клавиш** (поиск `Gen`).
+| Command           | Win / Linux  | macOS       |
+| ----------------- | ------------ | ----------- |
+| Open chat         | `Ctrl+Alt+G` | `Cmd+Alt+G` |
+| Comment selection | `Ctrl+Alt+/` | `Cmd+Alt+/` |
 
-Настройки открываются кнопкой Настройки в шапке чата (отдельной команды и сочетания **нет**).
+You can change bindings: **File -> Preferences -> Keyboard Shortcuts** (search `Gen`).
 
-## Список команд
+Settings open from the Settings button in the chat header (no separate command or keybinding).
 
-### Gen: Прокомментировать выделение
+## Command list
 
-Доступна при выделении в редакторе (контекстное меню + hotkey).  
-Пайплайн: prompt -> LLM -> extract -> validate -> diff -> apply.  
-См. [comments.md](comments.md).
+### Gen: Comment selection
 
-### Gen: Прокомментировать файл
+Available when there is a selection in the editor (context menu + hotkey).  
+Pipeline: prompt -> LLM -> extract -> validate -> diff -> apply.  
+See [comments.md](comments.md).
 
-Комментарии ко всему открытому файлу. Пункт в контекстном меню редактора (без отдельного hotkey по умолчанию).
+### Gen: Comment file
 
-## Синтаксис комментариев по языку
+Comments for the entire open file. Editor context menu item (no default hotkey).
 
-| Семейство | Языки (примеры)                 | Комментарии                      |
-| --------- | ------------------------------- | -------------------------------- |
-| ts-style  | JS, TS, Java, Go, Rust, C#, CSS | `//` `/* */`                     |
-| hash      | Python, Ruby, Shell, YAML       | `#` (+ `=begin`/`=end` для Ruby) |
-| html      | HTML, XML, Vue                  | `<!-- -->`                       |
-| sql       | SQL                             | `--` `/* */`                     |
-| lua       | Lua                             | `--` `--[[ ]]`                   |
-| php       | PHP                             | `//` `#` `/* */`                 |
+## Comment syntax by language
 
-Неизвестный `languageId` обрабатывается как ts-style.
+| Family   | Languages (examples)            | Comments                         |
+| -------- | ------------------------------- | -------------------------------- |
+| ts-style | JS, TS, Java, Go, Rust, C#, CSS | `//` `/* */`                     |
+| hash     | Python, Ruby, Shell, YAML       | `#` (+ `=begin`/`=end` for Ruby) |
+| html     | HTML, XML, Vue                  | `<!-- -->`                       |
+| sql      | SQL                             | `--` `/* */`                     |
+| lua      | Lua                             | `--` `--[[ ]]`                   |
+| php      | PHP                             | `//` `#` `/* */`                 |
+
+Unknown `languageId` is treated as ts-style.

@@ -1,28 +1,30 @@
-# Быстрый старт
+# Getting started
 
-## Подключение к LLM
+[Русская версия](getting-started-ru.md)
 
-Основной вариант - локальный (`llama.cpp`) с OpenAI-совместимым API. Тот же протокол подходит и для облачных endpoint’ов.
+## Connect to an LLM
 
-В разделе **Основное**:
+The main option is local **llama.cpp** with an OpenAI-compatible API. The same protocol works with cloud endpoints.
 
-1. **Базовый URL** - для llama.cpp по умолчанию `http://127.0.0.1:8080`. Для облака - URL провайдера (например `https://api.openai.com`).
-2. **API-ключ** - хранится в `SecretStorage` VS Code (не в settings.json). Для локального llama.cpp обычно не нужен - оставьте пустым.
-3. **Модель** - выберите из списка (загружается по URL) или введите вручную (имя/алиас модели на сервере).
-4. При необходимости задайте **заголовок** и **схему** ключа (по умолчанию `Authorization` + `Bearer`).
+In **General**:
 
-Сохраните настройки. Если URL/модель не заданы, чат покажет подсказку и кнопку к настройкам.
+1. **Base URL** - for llama.cpp the default is `http://127.0.0.1:8080`. For the cloud, use the provider URL (for example `https://api.openai.com`).
+2. **API key** - stored in VS Code `SecretStorage` (not in settings.json). For local llama.cpp it is usually not needed - leave it empty.
+3. **Model** - pick from the list (loaded from the URL) or type it manually (model name/alias on the server).
+4. If needed, set the key **header** and **scheme** (defaults: `Authorization` + `Bearer`).
 
-## Первый запрос
+Save the settings. If URL/model are missing, chat shows a hint and a button to open settings.
 
-1. Режим **Ask** - обычный диалог; выделенный в редакторе код уходит в контекст.
-2. Режим **Agent** - модель может вызывать инструменты (чтение/правка файлов и т.д.).
+## First request
 
-Режим переключается в шапке чата; значение по умолчанию - в настройках **Чат и агент**.
+1. **Ask** mode - normal chat; selected editor code is added to context.
+2. **Agent** mode - the model can call tools (read/edit files, and so on).
 
-## Проверка
+Switch mode in the chat header; the default is in **Chat & Agent** settings.
 
-- В Ask спросите что-нибудь простое - должен прийти streaming-ответ (если сервер умеет stream).
-- В Agent попросите «прочитай README» - должен появиться tool-call `read_file`.
+## Check
 
-Дальше: [Чат и агент](chat.md), [Настройки](settings.md), [Безопасность](security.md).
+- In Ask, ask something simple - you should get a streaming reply (if the server supports stream).
+- In Agent, ask to “read README” - a `read_file` tool-call should appear.
+
+Next: [Chat and agent](chat.md), [Settings](settings.md), [Security](security.md).

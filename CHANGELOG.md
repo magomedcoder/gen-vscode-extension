@@ -1,52 +1,59 @@
 # Changelog
 
-## 0.1.0 (24 августа 2026)
+[Русская версия](CHANGELOG-ru.md)
 
-- Чат и агент в bottom-панели (`ask` / `agent`)
-  - streaming ответов (если сервер поддерживает)
-  - кнопки `Стоп` и `Очистить`
-  - очистка истории чата не перезаписывает сохранённый storage после отмены запроса
-  - отображение расхода токенов (usage из API): в шапке чата и под сообщениями
-- Агентный цикл и UX
-  - LLM -> tool calls -> выполнение tools -> возврат результатов
-  - карточки tool-call в чате (pending/ok/denied/error)
-  - diff-preview для правок в режиме комментариев (и patch-first подход)
-  - multi-file plan: `propose_plan` -> `.gen/plan.md` (sticky, переживает clear чата) + `update_plan` + карточка «Открыть» / ручной edit с diff для модели
-  - локальный индекс кодовой базы (`.gen/index/`) + tool `codebase_search`
-  - checkpoints: снапшот файлов до agent turn и предложение восстановления
-  - своё подтверждение: карточка в чате Gen для agent, комментариев и checkpoint (без отдельной вкладки и без native MessageBox)
-  - совместное редактирование: снимок после write/patch, запрет full `write_file` поверх user-diff, confirm при patch поверх правок пользователя
-  - аудита в `Output` (`Gen Agent`): tool, путь/детали (с redaction), длительность, ok/error/denied
+## 0.2.0-dev (Development version)
+
+- Context Engine + `@file` / `@folder` / `@codebase` mentions in chat (Composer autocomplete)
+- Docs: English docs without `-ru` suffix; Russian docs as `*-ru.md` with EN/RU cross-links
+
+## 0.1.0 (24 August 2026)
+
+- Chat and agent in the bottom panel (`ask` / `agent`)
+  - streaming responses (when the server supports it)
+  - `Stop` and `Clear` buttons
+  - clearing chat history does not overwrite saved storage after a cancelled request
+  - token usage display (API usage): in the chat header and under messages
+- Agent loop and UX
+  - LLM -> tool calls -> tool execution -> results returned
+  - tool-call cards in chat (pending/ok/denied/error)
+  - diff preview for edits in comment mode (and patch-first approach)
+  - multi-file plan: `propose_plan` -> `.gen/plan.md` (sticky, survives chat clear) + `update_plan` + “Open” card / manual edit with diff for the model
+  - local codebase index (`.gen/index/`) + `codebase_search` tool
+  - checkpoints: file snapshot before an agent turn and restore offer
+  - custom confirmation: card in the Gen chat for agent, comments, and checkpoints (no separate tab, no native MessageBox)
+  - collaborative editing: snapshot after write/patch, block full `write_file` over user-diff, confirm when patching over user edits
+  - audit in `Output` (`Gen Agent`): tool, path/details (with redaction), duration, ok/error/denied
 - Workspace tools (sandboxed)
   - `list_dir`, `read_file`, `search_files`, `write_file`, `apply_patch`, `delete_file`, `create_dir`
-  - path sandbox: запрет выхода за workspace (`..`, symlink escape, пути вне workspace)
-  - `.gitignore` / `.genignore` в корне workspace (пакет `ignore`, без `git check-ignore` на каждый tool)
-  - подтверждение для опасных операций (write/patch/delete и т.п.)
-  - git tools в read-only режиме (`git_status`), диагностика (`get_diagnostics`)
-  - команды/терминал с allow/denylist политиками
-- LLM-клиент
-  - API key хранится в `SecretStorage` (settings -> API-ключ)
-  - авторизация через `Authorization: Bearer` (или настраиваемые заголовок и схема)
-  - retry для `429` и `5xx` с backoff (с сохранением ошибки/причин)
-  - отмена запросов: отдельная обработка timeout vs abort
-  - логи запросов в `Output` (`Gen LLM`) без body и без ключа
-  - (опционально) запись логов на диск в фоне: `llm.log` / `agent.log` с очередью без блокировки запросов
-- Настройки продукта (в основном окне редактора, не в webview-панели чата)
-  - настройки разделены на страницы: «Основное», «Чат и агент», «Запросы», «Комментарии», «Безопасность», «Логи»
-  - кнопка «Сбросить по умолчанию»
-  - загрузка моделей по `baseUrl`
-- Команды и локализация
-  - категория `Gen` в палитре команд
-  - сочетания по умолчанию: `Ctrl+Alt+G` - открыть чат; `Ctrl+Alt+/` - прокомментировать выделение
-  - EN/RU: `package.nls` (манифест) и `vscode.l10n` (сообщения extension host)
-- Пайплайн комментариев
-  - команды: прокомментировать выделение; прокомментировать весь файл (контекстное меню редактора)
-  - streaming генерации с прогрессом по символам (если сервер поддерживает)
-  - few-shot примеры по семейству языка (JS/TS, Python, HTML, SQL, Lua, PHP и др.)
-  - опциональный дополнительный system prompt в настройках «Комментарии»
-  - извлечение кода из ответа модели (в т.ч. последний markdown-блок)
-  - validate «не менять логику» + preview/diff перед apply
-  - при провале validation - только «Применить всё равно», без обычного Apply
-  - stale edit: проверка `document.version` и текста выделения перед apply
-  - diff UX: подсветка языка virtual docs, модальное подтверждение, очистка virtual docs после закрытия diff
-  - генерация комментариев с учётом языка файла и strip по языковым правилам
+  - path sandbox: block paths outside the workspace (`..`, symlink escape, paths outside workspace)
+  - `.gitignore` / `.genignore` at workspace root (`ignore` package, no `git check-ignore` per tool call)
+  - confirmation for dangerous operations (write/patch/delete, etc.)
+  - read-only git tools (`git_status`), diagnostics (`get_diagnostics`)
+  - commands/terminal with allow/denylist policies
+- LLM client
+  - API key stored in `SecretStorage` (Settings -> API key)
+  - authorization via `Authorization: Bearer` (or configurable header and scheme)
+  - retry for `429` and `5xx` with backoff (preserving error/cause)
+  - request cancellation: separate handling for timeout vs abort
+  - request logs in `Output` (`Gen LLM`) without body or key
+  - (optional) background log files: `llm.log` / `agent.log` with a non-blocking queue
+- Product settings (main editor window, not the chat webview panel)
+  - settings split into pages: General, Chat & Agent, Requests, Comments, Security, Logs
+  - “Reset to defaults” button
+  - load models from `baseUrl`
+- Commands and localization
+  - `Gen` category in the command palette
+  - default keybindings: `Ctrl+Alt+G` - open chat; `Ctrl+Alt+/` - comment selection
+  - EN/RU: `package.nls` (manifest) and `vscode.l10n` (extension host messages)
+- Comment pipeline
+  - commands: comment selection; comment entire file (editor context menu)
+  - streaming generation with character progress (when the server supports it)
+  - few-shot examples by language family (JS/TS, Python, HTML, SQL, Lua, PHP, etc.)
+  - optional extra system prompt in Comments settings
+  - extract code from model response (including the last markdown block)
+  - validate “do not change logic” + preview/diff before apply
+  - on validation failure - “Apply anyway” only, no regular Apply
+  - stale edit: check `document.version` and selection text before apply
+  - diff UX: language highlighting in virtual docs, modal confirmation, clear virtual docs after closing diff
+  - comment generation respects file language and strip rules per language

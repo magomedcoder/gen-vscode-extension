@@ -1,18 +1,20 @@
-# Логи
+# Logging
 
-По умолчанию логирование **выключено**.
+[Русская версия](logging-ru.md)
 
-## Что пишется при включении
+Logging is **off** by default.
 
-| Канал                | Содержание                                                                 |
+## What is written when enabled
+
+| Channel              | Contents                                                                   |
 | -------------------- | -------------------------------------------------------------------------- |
-| Output **Gen LLM**   | Запросы к модели (без body и без API-ключа)                                |
-| Output **Gen Agent** | Аудит tools: имя, путь/детали (с redaction), длительность, ok/error/denied |
-| Файл `llm.log`       | То же для LLM, в storage расширения                                        |
-| Файл `agent.log`     | То же для агента                                                           |
+| Output **Gen LLM**   | Model requests (no body, no API key)                                       |
+| Output **Gen Agent** | Tool audit: name, path/details (with redaction), duration, ok/error/denied |
+| File `llm.log`       | Same for LLM, in extension storage                                         |
+| File `agent.log`     | Same for the agent                                                         |
 
-Запись на диск асинхронная (очередь) и **не блокирует** HTTP-запросы.
+Disk writes are asynchronous (queue) and **do not block** HTTP requests.
 
 ## Retry
 
-Клиент повторяет запросы при HTTP `429` и `5xx` с backoff. Отмена пользователем и таймаут обрабатываются отдельно.
+The client retries on HTTP `429` and `5xx` with backoff. User cancel and timeout are handled separately.

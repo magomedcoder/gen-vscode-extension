@@ -1,57 +1,59 @@
-# Настройки
+# Settings
 
-Кнопка **Сбросить по умолчанию** возвращает все поля к defaults; **API-ключ не сбрасывается**.
+[Русская версия](settings-ru.md)
 
-## Основное
+**Reset to defaults** restores all fields to defaults; the **API key is not cleared**.
 
-| Поле            | По умолчанию    | Описание                                                                                                      |
-| --------------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
-| Базовый URL     | пусто           | Корень API: в первую очередь **llama.cpp** (`http://127.0.0.1:8080`), также любой OpenAI-совместимый endpoint |
-| API-ключ        | -               | В `SecretStorage`; пусто - заголовок не отправлять                                                            |
-| Заголовок ключа | `Authorization` | Имя HTTP-заголовка                                                                                            |
-| Схема ключа     | `Bearer`        | Префикс значения; пустая схема - сырой ключ                                                                   |
-| Модель          | пусто           | Идентификатор модели; список грузится по URL                                                                  |
+## General
 
-## Чат и агент
+| Field      | Default         | Description                                                                                    |
+| ---------- | --------------- | ---------------------------------------------------------------------------------------------- |
+| Base URL   | empty           | API root: primarily **llama.cpp** (`http://127.0.0.1:8080`), or any OpenAI-compatible endpoint |
+| API key    | -               | In `SecretStorage`; empty - do not send a header                                               |
+| Key header | `Authorization` | HTTP header name                                                                               |
+| Key scheme | `Bearer`        | Value prefix; empty scheme - raw key                                                           |
+| Model      | empty           | Model id; list is loaded from the URL                                                          |
 
-| Поле            | По умолчанию | Описание                       |
-| --------------- | ------------ | ------------------------------ |
-| Режим чата      | `ask`        | Ask или Agent                  |
-| Лимит итераций  | `40`         | 1-40                           |
-| Уровень доступа | `ask`        | Чтение / Спросить / Без спроса |
+## Chat & Agent
 
-## Запросы
+| Field           | Default | Description            |
+| --------------- | ------- | ---------------------- |
+| Chat mode       | `ask`   | Ask or Agent           |
+| Iteration limit | `40`    | 1-40                   |
+| Access level    | `ask`   | Read / Ask / No prompt |
 
-| Поле                    | По умолчанию | Описание                                  |
-| ----------------------- | ------------ | ----------------------------------------- |
-| Температура             | `0.2`        | 0-2; для стабильного формата лучше низкая |
-| Макс. токенов ответа    | `8192`       | min 64                                    |
-| Таймаут (мс)            | `120000`     | min 1000                                  |
-| Макс. символов на входе | `8000`       | Лимит для фрагмента комментариев и т.п.   |
+## Requests
 
-## Комментарии
+| Field                | Default  | Description                       |
+| -------------------- | -------- | --------------------------------- |
+| Temperature          | `0.2`    | 0-2; keep low for stable format   |
+| Max response tokens  | `8192`   | min 64                            |
+| Timeout (ms)         | `120000` | min 1000                          |
+| Max input characters | `8000`   | Limit for comment fragments, etc. |
 
-| Поле               | По умолчанию | Описание                                  |
-| ------------------ | ------------ | ----------------------------------------- |
-| Стиль              | `inline`     | `inline` или `block`                      |
-| Diff перед apply   | вкл.         | Показывать diff и модальное подтверждение |
-| Доп. system prompt | пусто        | Добавляется к стандартным инструкциям     |
+## Comments
 
-Подробнее: [comments.md](comments.md).
+| Field               | Default  | Description                           |
+| ------------------- | -------- | ------------------------------------- |
+| Style               | `inline` | `inline` or `block`                   |
+| Diff before apply   | on       | Show diff and modal confirmation      |
+| Extra system prompt | empty    | Appended to the standard instructions |
 
-## Безопасность
+Details: [comments.md](comments.md).
 
-| Поле             | По умолчанию | Описание                                   |
-| ---------------- | ------------ | ------------------------------------------ |
-| Запрещённые пути | пусто        | Glob’ы по одному на строку (`deniedPaths`) |
-| Шаблоны секретов | пусто        | JS-regexp; совпадения -> `[REDACTED]`      |
+## Security
 
-Есть кнопки «Вставить примеры». Полная политика путей: [security.md](security.md).
+| Field           | Default | Description                         |
+| --------------- | ------- | ----------------------------------- |
+| Denied paths    | empty   | Globs, one per line (`deniedPaths`) |
+| Secret patterns | empty   | JS regexps; matches -> `[REDACTED]` |
 
-## Логи
+There are “Insert examples” buttons. Full path policy: [security.md](security.md).
 
-| Поле        | По умолчанию | Описание                                        |
-| ----------- | ------------ | ----------------------------------------------- |
-| Писать логи | выкл.        | Output `Gen LLM` / `Gen Agent` + файлы на диске |
+## Logs
 
-Кнопка **Открыть папку логов**. Подробнее: [logging.md](logging.md).
+| Field      | Default | Description                                    |
+| ---------- | ------- | ---------------------------------------------- |
+| Write logs | off     | Output `Gen LLM` / `Gen Agent` + files on disk |
+
+**Open logs folder** button. Details: [logging.md](logging.md).

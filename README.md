@@ -1,23 +1,26 @@
-# Gen vscode extension
+# Gen Agent VS Code Extension
 
-Минимальная версия VS Code: **1.125.0**
+[Русская версия](README-ru.md)
 
-AI-чат и агент в bottom-панели: режимы **Ask** / **Agent**, комментарии к коду, sandbox путей, `.gitignore` / `.genignore`.
+Minimum VS Code version: **1.125.0**
 
-Работает с (`llama.cpp`) и любым другим OpenAI-совместимым API.
+AI chat and agent in the bottom panel: **Ask** / **Agent** modes, code comments, path sandbox, `.gitignore` / `.genignore`.
 
-## Документация
+Works with llama.cpp and any other OpenAI-compatible API.
 
-Каталог [docs/](docs/):
+## Documentation
 
-- [Быстрый старт](docs/getting-started.md)
-- [Чат и агент](docs/chat.md)
-- [Настройки](docs/settings.md)
-- [Команды](docs/commands.md)
-- [Инструменты](docs/tools.md)
-- [Комментарии](docs/comments.md)
-- [Безопасность](docs/security.md) (в т.ч. `.genignore`)
-- [Логи](docs/logging.md)
-- [Архитектура](docs/architecture.md)
+See [docs/](docs/):
 
-История изменений: [CHANGELOG.md](CHANGELOG.md).
+- [Getting started](docs/getting-started.md)
+- [Chat and agent](docs/chat.md)
+- [Settings](docs/settings.md)
+- [Commands](docs/commands.md)
+- [Tools](docs/tools.md)
+- [Comments](docs/comments.md)
+- [Security](docs/security.md) (including `.genignore`)
+- [Logging](docs/logging.md)
+- [Architecture](docs/architecture.md)
+- [Codebase index](docs/codebase-index.md)
+
+Changelog: [CHANGELOG.md](CHANGELOG.md).

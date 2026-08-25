@@ -1,0 +1,59 @@
+# Changelog
+
+[English version](CHANGELOG.md)
+
+## 0.2.0-dev (Версия в разработке)
+
+- Context Engine + упоминания `@file` / `@folder` / `@codebase` в чате (автодополнение в Composer)
+- Документация: английские docs без суффикса `-ru`; русские — `*-ru.md` со ссылками EN/RU
+
+## 0.1.0 (24 августа 2026)
+
+- Чат и агент в bottom-панели (`ask` / `agent`)
+  - streaming ответов (если сервер поддерживает)
+  - кнопки `Стоп` и `Очистить`
+  - очистка истории чата не перезаписывает сохранённый storage после отмены запроса
+  - отображение расхода токенов (usage из API): в шапке чата и под сообщениями
+- Агентный цикл и UX
+  - LLM -> tool calls -> выполнение tools -> возврат результатов
+  - карточки tool-call в чате (pending/ok/denied/error)
+  - diff-preview для правок в режиме комментариев (и patch-first подход)
+  - multi-file plan: `propose_plan` -> `.gen/plan.md` (sticky, переживает clear чата) + `update_plan` + карточка «Открыть» / ручной edit с diff для модели
+  - локальный индекс кодовой базы (`.gen/index/`) + tool `codebase_search`
+  - checkpoints: снапшот файлов до agent turn и предложение восстановления
+  - своё подтверждение: карточка в чате Gen для agent, комментариев и checkpoint (без отдельной вкладки и без native MessageBox)
+  - совместное редактирование: снимок после write/patch, запрет full `write_file` поверх user-diff, confirm при patch поверх правок пользователя
+  - аудита в `Output` (`Gen Agent`): tool, путь/детали (с redaction), длительность, ok/error/denied
+- Workspace tools (sandboxed)
+  - `list_dir`, `read_file`, `search_files`, `write_file`, `apply_patch`, `delete_file`, `create_dir`
+  - path sandbox: запрет выхода за workspace (`..`, symlink escape, пути вне workspace)
+  - `.gitignore` / `.genignore` в корне workspace (пакет `ignore`, без `git check-ignore` на каждый tool)
+  - подтверждение для опасных операций (write/patch/delete и т.п.)
+  - git tools в read-only режиме (`git_status`), диагностика (`get_diagnostics`)
+  - команды/терминал с allow/denylist политиками
+- LLM-клиент
+  - API key хранится в `SecretStorage` (settings -> API-ключ)
+  - авторизация через `Authorization: Bearer` (или настраиваемые заголовок и схема)
+  - retry для `429` и `5xx` с backoff (с сохранением ошибки/причин)
+  - отмена запросов: отдельная обработка timeout vs abort
+  - логи запросов в `Output` (`Gen LLM`) без body и без ключа
+  - (опционально) запись логов на диск в фоне: `llm.log` / `agent.log` с очередью без блокировки запросов
+- Настройки продукта (в основном окне редактора, не в webview-панели чата)
+  - настройки разделены на страницы: «Основное», «Чат и агент», «Запросы», «Комментарии», «Безопасность», «Логи»
+  - кнопка «Сбросить по умолчанию»
+  - загрузка моделей по `baseUrl`
+- Команды и локализация
+  - категория `Gen` в палитре команд
+  - сочетания по умолчанию: `Ctrl+Alt+G` - открыть чат; `Ctrl+Alt+/` - прокомментировать выделение
+  - EN/RU: `package.nls` (манифест) и `vscode.l10n` (сообщения extension host)
+- Пайплайн комментариев
+  - команды: прокомментировать выделение; прокомментировать весь файл (контекстное меню редактора)
+  - streaming генерации с прогрессом по символам (если сервер поддерживает)
+  - few-shot примеры по семейству языка (JS/TS, Python, HTML, SQL, Lua, PHP и др.)
+  - опциональный дополнительный system prompt в настройках «Комментарии»
+  - извлечение кода из ответа модели (в т.ч. последний markdown-блок)
+  - validate «не менять логику» + preview/diff перед apply
+  - при провале validation - только «Применить всё равно», без обычного Apply
+  - stale edit: проверка `document.version` и текста выделения перед apply
+  - diff UX: подсветка языка virtual docs, модальное подтверждение, очистка virtual docs после закрытия diff
+  - генерация комментариев с учётом языка файла и strip по языковым правилам

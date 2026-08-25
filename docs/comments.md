@@ -1,38 +1,40 @@
-# Комментарии к коду
+# Code comments
 
-Команды:
+[Русская версия](comments-ru.md)
 
-- **Gen: Прокомментировать выделение** - выделенный фрагмент (`Ctrl+Alt+/` / `Cmd+Alt+/`)
-- **Gen: Прокомментировать файл** - весь открытый файл (контекстное меню)
+Commands:
 
-## Пайплайн
+- **Gen: Comment selection** - selected fragment (`Ctrl+Alt+/` / `Cmd+Alt+/`)
+- **Gen: Comment file** - entire open file (context menu)
 
-1. **Лимит размера** - фрагмент не длиннее `maxInputChars` из настроек.
-2. **Prompt** - system + few-shot под семейство языка + код; опционально доп. system prompt из настроек.
-3. **LLM** - streaming (если сервер умеет) с прогрессом по символам; отмена через Progress notification.
-4. **Extract** - код из ответа (в т.ч. последний markdown fenced-блок).
-5. **Validate** - после снятия комментариев код не должен отличаться от исходника.
-6. **Diff** (если включено preview) - virtual docs со подсветкой языка, модальное «Применить» / «Отклонить».
-7. **Stale edit** - перед apply сверка `document.version` и текста выделения.
-8. **Apply** - `WorkspaceEdit` по исходному диапазону.
+## Pipeline
 
-## Валидация
+1. **Size limit** - fragment must not exceed `maxInputChars` from settings.
+2. **Prompt** - system + few-shot for the language family + code; optional extra system prompt from settings.
+3. **LLM** - streaming (if the server supports it) with character progress; cancel via Progress notification.
+4. **Extract** - code from the response (including the last markdown fenced block).
+5. **Validate** - after stripping comments, code must match the original.
+6. **Diff** (if preview is on) - virtual docs with language highlighting, modal Apply / Reject.
+7. **Stale edit** - before apply, check `document.version` and selection text.
+8. **Apply** - `WorkspaceEdit` over the original range.
 
-Если модель изменила не только комментарии:
+## Validation
 
-- без preview - только кнопки **«Применить всё равно»** / **«Отмена»**;
-- с preview - в diff-диалоге кнопка **«Применить всё равно»** вместо обычного Apply.
+If the model changed more than comments:
+
+- without preview - only **Apply anyway** / **Cancel**;
+- with preview - the diff dialog shows **Apply anyway** instead of regular Apply.
 
 ## Diff UX
 
-- Virtual-документы (`gen-comment:`) не очищаются, пока вкладка diff открыта.
-- Подсветка языка по `languageId`.
-- Подтверждение модальное.
+- Virtual documents (`gen-comment:`) are not cleared while the diff tab is open.
+- Language highlighting follows `languageId`.
+- Confirmation is modal.
 
-## Настройки
+## Settings
 
-См. раздел **Комментарии** в [settings.md](settings.md): стиль, preview, доп. prompt.
+See **Comments** in [settings.md](settings.md): style, preview, extra prompt.
 
-## Языки
+## Languages
 
-Синтаксис strip/комментариев - [commands.md](commands.md#синтаксис-комментариев-по-языку).
+Strip/comment syntax - [commands.md](commands.md#comment-syntax-by-language).

@@ -1,45 +1,47 @@
-# Инструменты агента
+# Agent tools
 
-Режим **Agent**. Пути только внутри workspace.
+[Русская версия](tools-ru.md)
 
-Учитываются `.gitignore` и `.genignore` в корне workspace (вместе с `deniedPaths` из настроек). Агент **не** обходит ignore «чтобы всё видеть». Подробнее: [security.md](security.md).
+**Agent** mode. Paths must stay inside the workspace.
 
-Подтверждение зависит от уровня доступа: **Чтение** (правки и команды запрещены), **Спросить**, **Без спроса**. «Всегда» - диалог даже в «Без спроса».
+`.gitignore` and `.genignore` at the workspace root are respected (together with `deniedPaths` from settings). The agent does **not** bypass ignore “to see everything”. Details: [security.md](security.md).
 
-Подтверждения - **карточка в чате Gen** (Применить / Пропустить / Стоп или Применить / Отклонить). Панель чата фокусируется автоматически; отдельной вкладки нет.
+Confirmation depends on access level: **Read** (edits and commands blocked), **Ask**, **No prompt**. “Always” - dialog even in “No prompt”.
 
-| Tool                   | Действие                                         | Подтверждать                 |
-| ---------------------- | ------------------------------------------------ | ---------------------------- |
-| `get_workspace_info`   | Папки workspace, имя, число документов           | нет                          |
-| `get_active_editor`    | Активный редактор: путь, язык, курсор, выделение | нет                          |
-| `get_open_editors`     | Открытые вкладки                                 | нет                          |
-| `list_dir`             | Список файлов/папок (без игнорируемых)           | нет                          |
-| `read_file`            | Прочитать файл (опц. диапазон строк)             | нет                          |
-| `search_files`         | Glob и/или поиск текста                          | нет                          |
-| `codebase_search`      | Поиск по локальному индексу (триграммы, `.gen/index/`) | нет                    |
-| `propose_plan`         | План шагов; сохраняется в сессии (sticky)        | всегда                       |
-| `update_plan`          | Статусы шагов / replace / clear активного плана  | replace - всегда; иначе нет  |
-| `write_file`           | Создать / полностью перезаписать                 | Спросить: если файл уже есть; запрещён, если пользователь правил после агента |
-| `apply_patch`          | Замена `old_string` -> `new_string`              | Спросить; всегда при правках пользователя поверх снимка агента |
-| `apply_workspace_edit` | Несколько правок атомарно                        | Спросить; всегда при правках пользователя на любом из файлов |
-| `delete_file`          | Удалить файл (не папку)                          | Спросить                     |
-| `create_dir`           | Создать каталог                                  | нет                          |
-| `open_file`            | Открыть файл в редакторе                         | нет                          |
-| `close_file`           | Закрыть вкладку (не грязную)                     | нет                          |
-| `reveal_line`          | Перейти к строке                                 | нет                          |
-| `git_status`           | `git status` + `diff --stat` (без commit/push)   | нет                          |
-| `get_diagnostics`      | Ошибки TS/ESLint и т.п.                          | нет                          |
-| `run_command`          | Команда в cwd workspace (allow + denylist)       | всегда                       |
-| `run_tests`            | Тесты проекта (npm / go / cargo / pytest)        | всегда                       |
+Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject). The chat panel is focused automatically; there is no separate tab.
 
-## Замечания
+| Tool                   | Action                                           | Confirm                                                             |
+| ---------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `get_workspace_info`   | Workspace folders, name, document count          | no                                                                  |
+| `get_active_editor`    | Active editor: path, language, cursor, selection | no                                                                  |
+| `get_open_editors`     | Open tabs                                        | no                                                                  |
+| `list_dir`             | List files/folders (excluding ignored)           | no                                                                  |
+| `read_file`            | Read a file (optional line range)                | no                                                                  |
+| `search_files`         | Glob and/or text search                          | no                                                                  |
+| `codebase_search`      | Search the local index (trigrams, `.gen/index/`) | no                                                                  |
+| `propose_plan`         | Step plan; kept in session (sticky)              | always                                                              |
+| `update_plan`          | Step statuses / replace / clear active plan      | replace - always; otherwise no                                      |
+| `write_file`           | Create / fully overwrite                         | Ask: if the file exists; blocked if the user edited after the agent |
+| `apply_patch`          | Replace `old_string` -> `new_string`             | Ask; always when user edits sit on top of the agent snapshot        |
+| `apply_workspace_edit` | Several edits atomically                         | Ask; always when user edits exist on any of the files               |
+| `delete_file`          | Delete a file (not a folder)                     | Ask                                                                 |
+| `create_dir`           | Create a directory                               | no                                                                  |
+| `open_file`            | Open a file in the editor                        | no                                                                  |
+| `close_file`           | Close a tab (not dirty)                          | no                                                                  |
+| `reveal_line`          | Jump to a line                                   | no                                                                  |
+| `git_status`           | `git status` + `diff --stat` (no commit/push)    | no                                                                  |
+| `get_diagnostics`      | TS/ESLint errors, etc.                           | no                                                                  |
+| `run_command`          | Command in workspace cwd (allow + denylist)      | always                                                              |
+| `run_tests`            | Project tests (npm / go / cargo / pytest)        | always                                                              |
 
-- Несколько файлов: сначала `propose_plan` -> файл `.gen/plan.md`; прогресс - `update_plan`. План переживает «Очистить» чат.
-- Большой файл: короткая заготовка `write_file`, дальше `apply_patch` кусками.
-- Обзор проекта: `codebase_search` по фоновому индексу; точный grep - `search_files`.
-- Если пользователь правил файл после агента: полный `write_file` отклоняется; правь через `apply_patch` / `apply_workspace_edit` по свежему `read_file`.
-- `run_command` без shell/pipe. Запрещены `rm`, `curl`, `install`, `git push`, eval (`-e` / `-c` с кодом; `gcc -c` и `git -c` - можно). Всегда confirm.
-- После хода агента можно **Восстановить снимок**.
-- Секреты в результатах tools маскируются по regexp из настроек (если заданы).
+## Notes
 
-Политика команд подробнее: [security.md](security.md#команды-run_command).
+- Multiple files: start with `propose_plan` -> `.gen/plan.md`; progress via `update_plan`. The plan survives **Clear** chat.
+- Large file: short `write_file` scaffold, then `apply_patch` in chunks.
+- Project overview: `codebase_search` on the background index; exact grep - `search_files`.
+- If the user edited a file after the agent: full `write_file` is rejected; patch via `apply_patch` / `apply_workspace_edit` after a fresh `read_file`.
+- `run_command` without shell/pipe. Blocked: `rm`, `curl`, `install`, `git push`, eval (`-e` / `-c` with code; `gcc -c` and `git -c` are allowed). Always confirm.
+- After an agent turn you can **Restore snapshot**.
+- Secrets in tool results are masked by regexps from settings (if set).
+
+Command policy details: [security.md](security.md#commands-run_command).

@@ -1,6 +1,8 @@
-# Архитектура (для разработки)
+# Architecture (for development)
 
-## Потоки данных
+[Русская версия](architecture-ru.md)
+
+## Data flows
 
 ```
 Chat (webview)
@@ -13,35 +15,35 @@ Comment command
       -> buildCommentMessages -> LLM -> extract -> validate -> showCommentDiff -> apply
 ```
 
-## Политика путей
+## Path policy
 
 1. `resolveAgainstFolders` / symlink check  
 2. `deniedPaths` (`policy.ts`)  
-3. `.gitignore` + `.genignore` (`gitIgnore.ts`, кэш на turn)
+3. `.gitignore` + `.genignore` (`gitIgnore.ts`, cached per turn)
 
-## Совместное редактирование
+## Collaborative editing
 
-- После успешного `write_file` / `apply_patch` / `apply_workspace_edit` сессия хранит снимок «как агент оставил» (`AgentWriteTracker`).
-- Если буфер расходится со снимком: полный `write_file` запрещён; `apply_patch` / `apply_workspace_edit` - поверх актуального текста + confirm при конфликте.
-- В system prompt на ход подмешивается краткий user-diff по затронутым файлам.
+- After a successful `write_file` / `apply_patch` / `apply_workspace_edit`, the session keeps a snapshot of “how the agent left it” (`AgentWriteTracker`).
+- If the buffer diverges from the snapshot: full `write_file` is blocked; `apply_patch` / `apply_workspace_edit` apply on current text + confirm on conflict.
+- A short user-diff for touched files is injected into the system prompt each turn.
 
 ## Sticky plan
 
-- После approve `propose_plan` план пишется в **`.gen/plan.md`** (+ кэш `workspaceState`).
-- «Очистить» чат **не** сбрасывает план; сброс - `update_plan clear` / удаление `.gen/plan.md`.
-- Перед agent turn файл перечитывается; ручной diff -> system prompt; карточка «Открыть» / watcher для UI.
+- After approving `propose_plan`, the plan is written to **`.gen/plan.md`** (+ `workspaceState` cache).
+- **Clear** chat does **not** reset the plan; reset via `update_plan clear` / delete `.gen/plan.md`.
+- Before an agent turn the file is re-read; manual diff -> system prompt; “Open” card / watcher for UI.
 
-## Индекс кодовой базы
+## Codebase index
 
-- Фоновая индексация в `.gen/index/manifest.json` (`src/index/`).
-- Инкремент по hash файла; `.gen/` не индексируется.
-- Tool `codebase_search` - триграммный поиск по chunks.
-- Context Engine (`contextEngine.ts`): ранжирует hits индекса и открытых редакторов; используется в `@codebase` и при сборке контекста упоминаний.
-- Подробнее: [codebase-index.md](codebase-index.md), упоминания - [chat.md](chat.md).
+- Background indexing into `.gen/index/manifest.json` (`src/index/`).
+- Incremental by file hash; `.gen/` is not indexed.
+- Tool `codebase_search` - trigram search over chunks.
+- Context Engine (`contextEngine.ts`): ranks index hits and open editors; used by `@codebase` and mention context packing.
+- Details: [codebase-index.md](codebase-index.md), mentions - [chat.md](chat.md).
 
-## Сборка
+## Build
 
 - Extension host: esbuild -> `dist/extension.js`
 - Webview: esbuild -> `dist/webview/`
-- Тесты: `yarn test` (vscode-test)
-- Локализация: `package.nls*.json`, `l10n/bundle.l10n*.json`
+- Tests: `yarn test` (vscode-test)
+- Localization: `package.nls*.json`, `l10n/bundle.l10n*.json`

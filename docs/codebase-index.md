@@ -1,26 +1,28 @@
-# Индекс кодовой базы
+# Codebase index
 
-Локальный индекс workspace в `.gen/index/`. 
+[Русская версия](codebase-index-ru.md)
 
-Агент ищет по нему через tool `codebase_search` (триграммы), без отправки всего индекса в LLM.
+Local workspace index in `.gen/index/`.
 
-## Зачем
+The agent searches it via the `codebase_search` tool (trigrams), without sending the whole index to the LLM.
 
-- Быстрый обзор проекта без полного `search_files`
-- Ранжирование фрагментов кода для контекста агента
+## Why
 
-## Как устроено
+- Fast project overview without a full `search_files` scan
+- Ranking code fragments for agent context
 
-- Индекс пишется в `.gen/index/manifest.json`.
-- `.gen/` не индексируется (как и `.git`, `node_modules` через ignore).
-- При изменении файла переиндексируется только он (сравнение content-hash).
-- Результаты `codebase_search` - фрагменты (path, строки, snippet, score).
-- В чате: `@file`, `@folder`, `@codebase` подмешивают контекст через Context Engine (см. [chat.md](chat.md)).
+## How it works
 
-## Использование
+- The index is written to `.gen/index/manifest.json`.
+- `.gen/` is not indexed (same for `.git`, `node_modules` via ignore).
+- On file change, only that file is reindexed (content-hash compare).
+- `codebase_search` results are fragments (path, lines, snippet, score).
+- In chat: `@file`, `@folder`, `@codebase` inject context through the Context Engine (see [chat.md](chat.md)).
 
-1. Открыть workspace - индекс строится в фоне.
-2. В режиме Agent вызвать `codebase_search` с `query` (символ, фраза, путь).
-3. Для точного grep по строке - `search_files`.
+## Usage
 
-Подробнее про tools: [tools.md](tools.md).
+1. Open a workspace - the index builds in the background.
+2. In Agent mode, call `codebase_search` with `query` (symbol, phrase, path).
+3. For exact line grep - `search_files`.
+
+More on tools: [tools.md](tools.md).
