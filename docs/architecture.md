@@ -35,7 +35,9 @@ Comment command
 
 - Фоновая индексация в `.gen/index/manifest.json` (`src/index/`).
 - Инкремент по hash файла; `.gen/` не индексируется.
-- Tool `codebase_search` - триграммный поиск по chunks. Подробнее: [codebase-index.md](codebase-index.md).
+- Tool `codebase_search` - триграммный поиск по chunks.
+- Context Engine (`contextEngine.ts`): ранжирует hits индекса и открытых редакторов; используется в `@codebase` и при сборке контекста упоминаний.
+- Подробнее: [codebase-index.md](codebase-index.md), упоминания - [chat.md](chat.md).
 
 ## Сборка
 

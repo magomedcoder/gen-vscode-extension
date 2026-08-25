@@ -9,6 +9,7 @@ import { getSettings, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
 import type { LlmClient } from '../llm/types';
 import { sumUsage } from '../llm/usage';
+import { resolveMentions } from './mentions';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
 import { CHAT_VIEW_ID } from './ids';
@@ -299,6 +300,10 @@ export class ChatSession {
 
 		const historyBeforeUser = this.messages.slice(0, -1);
 		const checkpoint = new AgentCheckpoint();
+		const mentions = await resolveMentions(trimmed);
+		const editorCtx = getEditorChatContext();
+		const mergedContext = [editorCtx, mentions.contextText].filter(Boolean).join('\n\n') || undefined;
+		const llmUserText = mentions.mentions.length > 0 ? (mentions.cleanText || trimmed) : trimmed;
 
 		try {
 			if (settings.chatMode === 'agent') {
@@ -312,8 +317,8 @@ export class ChatSession {
 				}
 				await this.agent.run({
 					history: historyBeforeUser,
-					userText: trimmed,
-					editorContext: getEditorChatContext(),
+					userText: llmUserText,
+					editorContext: mergedContext,
 					signal: controller.signal,
 					confirm: (req) => this.requestConfirm(req),
 					revealFile: revealAgentFile,
@@ -349,8 +354,8 @@ export class ChatSession {
 				const result = await this.client.complete({
 					messages: buildChatCompletionMessages(
 						historyForAsk,
-						trimmed,
-						getEditorChatContext(),
+						llmUserText,
+						mergedContext,
 					),
 					signal: controller.signal,
 					onDelta: (chunk) => {

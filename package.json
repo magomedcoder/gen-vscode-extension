@@ -1,14 +1,14 @@
 {
-  "name": "gen",
+  "name": "gen-agent-vscode",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "publisher": "magomedcoder",
   "icon": "media/logo.png",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/magomedcoder/gen-vscode-extension"
+    "url": "https://github.com/magomedcoder/gen-agent-vscode"
   },
   "l10n": "./l10n",
   "engines": {

@@ -68,7 +68,15 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean }
 	| { type: 'settingsError'; message: string }
 	| { type: 'models'; models: string[]; requestId: number }
-	| { type: 'modelsError'; message: string; requestId: number };
+	| { type: 'modelsError'; message: string; requestId: number }
+	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] };
+
+export interface MentionSuggestion {
+	kind: 'file' | 'folder' | 'codebase';
+	label: string;
+	insert: string;
+	detail?: string;
+}
 
 export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'send'; text: string }
@@ -83,4 +91,5 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
 	| { type: 'openLogsFolder' }
-	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice };
+	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice }
+	| { type: 'mentionSuggest'; requestId: number; query: string };

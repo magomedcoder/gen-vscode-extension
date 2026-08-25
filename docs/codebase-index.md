@@ -15,6 +15,7 @@
 - `.gen/` не индексируется (как и `.git`, `node_modules` через ignore).
 - При изменении файла переиндексируется только он (сравнение content-hash).
 - Результаты `codebase_search` - фрагменты (path, строки, snippet, score).
+- В чате: `@file`, `@folder`, `@codebase` подмешивают контекст через Context Engine (см. [chat.md](chat.md)).
 
 ## Использование
 

@@ -124,7 +124,7 @@ export class AgentSession {
 		clearIgnoreCache();
 
 		const userContent = params.editorContext
-			? `${params.userText}\n\n---\nКонтекст редактора:\n${params.editorContext}`
+			? `${params.userText}\n\n---\nКонтекст:\n${params.editorContext}`
 			: params.userText;
 
 		const userEditsAppendix = writes ? await writes.buildPromptAppendix() : '';

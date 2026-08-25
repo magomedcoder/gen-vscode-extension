@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { createNonce, renderChatHtml } from './chatHtml';
+import { suggestMentions } from './mentionSuggest';
 import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
@@ -89,6 +90,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'send':
 				await this.session.send(msg.text);
 				return;
+			case 'mentionSuggest': {
+				const items = await suggestMentions(msg.query);
+				this.post({
+					type: 'mentionSuggestions',
+					requestId: msg.requestId,
+					items,
+				});
+				return;
+			}
 			case 'setChatMode':
 				await this.session.setMode(msg.mode);
 				return;

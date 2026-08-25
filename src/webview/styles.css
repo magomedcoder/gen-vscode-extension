@@ -559,6 +559,7 @@ body {
 }
 
 .composer__box {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -566,6 +567,57 @@ body {
 	border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, rgba(127, 127, 127, 0.35)));
 	border-radius: 8px;
 	background: var(--vscode-input-background);
+}
+
+.mention-menu {
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: calc(100% - 4px);
+	z-index: 5;
+	margin: 0;
+	padding: 4px;
+	list-style: none;
+	max-height: 180px;
+	overflow: auto;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.mention-menu__item {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	width: 100%;
+	padding: 5px 8px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.mention-menu__item--active,
+.mention-menu__item:hover {
+	background: var(--vscode-list-activeSelectionBackground, var(--vscode-button-background));
+	color: var(--vscode-list-activeSelectionForeground, var(--vscode-button-foreground));
+}
+
+.mention-menu__label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mention-menu__detail {
+	flex-shrink: 0;
+	opacity: 0.7;
+	font-size: 11px;
 }
 
 .composer__box:focus-within {

@@ -36,13 +36,13 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gen-vsix
-          path: gen-*.vsix
+          name: gen-agent-vsix
+          path: gen-agent-*.vsix
           if-no-files-found: error
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: gen-*.vsix
+          files: gen-agent-*.vsix
           generate_release_notes: true

@@ -19,7 +19,7 @@ export function buildChatCompletionMessages(
 		content: m.content,
 	}));
 
-	const userContent = editorContext ? `${latestUserText}\n\n---\nКонтекст редактора:\n${editorContext}` : latestUserText;
+	const userContent = editorContext ? `${latestUserText}\n\n---\nКонтекст:\n${editorContext}` : latestUserText;
 
 	return [
 		{ 

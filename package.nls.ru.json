@@ -1,5 +1,5 @@
 {
-	"extension.displayName": "Gen",
+	"extension.displayName": "Gen agent",
 	"extension.description": "AI-чат и агент для программирования в VS Code",
 	"extension.category": "Gen",
 	"command.commentSelection.title": "Gen: Прокомментировать выделение",
