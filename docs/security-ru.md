@@ -57,15 +57,15 @@ docs/private/
 
 ## Команды (`run_command`)
 
-Без shell/pipe. Запрещены в том числе:
+Без shell/pipe.
 
-- оболочки: `sh`, `bash`, `zsh`, ...
-- сеть: `curl`, `wget`, `ssh`, ...
-- разрушительное: `rm`, `chmod`, `chown`, ...
-- контейнеры: `docker`, `kubectl`, ...
-- package install / publish и `git push` / `commit` / `reset` / ...
+**Запрещённые бинарники** задаются в **Безопасность -> Запрещённые команды** (`deniedCommands`). По умолчанию: оболочки (`sh`, `bash`, ...), сеть (`curl`, `wget`, `ssh`, ...), разрушительное (`rm`, `chmod`, ...), контейнеры (`docker`, `kubectl`, ...). Пустой список - не блокировать по имени.
 
-Eval-флаги с кодом (`node -e`, `python -c`) запрещены; `gcc -c file.c` и `git -c key=value` - разрешены.
+В коде по-прежнему всегда запрещены:
+
+- package install / publish (`npm install`, ...)
+- `git push` / `commit` / `reset` / ...
+- eval-флаги с кодом (`node -e`, `python -c`); `gcc -c file.c` и `git -c key=value` - можно
 
 `run_tests` / `run_command` всегда с подтверждением.
 

@@ -70,6 +70,7 @@ export function SettingsScreen({
 		const next: GenSettings = {
 			...DEFAULT_SETTINGS,
 			deniedPaths: [...DEFAULT_SETTINGS.deniedPaths],
+			deniedCommands: [...DEFAULT_SETTINGS.deniedCommands],
 			secretPatterns: [...DEFAULT_SETTINGS.secretPatterns],
 		};
 		setDraft(next);

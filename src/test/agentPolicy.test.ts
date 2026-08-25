@@ -184,6 +184,14 @@ suite('commandPolicy', () => {
 		assert.throws(() => assertAllowedCommand('git', ['-C', '/tmp', 'push']), (err: unknown) => err instanceof CommandPolicyError);
 	});
 
+	test('пустой deniedCommands не блокирует curl по имени', () => {
+		assert.doesNotThrow(() => assertAllowedCommand('curl', ['https://example.com'], []));
+		assert.throws(
+			() => assertAllowedCommand('curl', ['https://example.com'], ['curl']),
+			(err: unknown) => err instanceof CommandPolicyError,
+		);
+	});
+
 	test('gcc -c файл можно, python -c код нельзя', () => {
 		assert.doesNotThrow(() => assertAllowedCommand('gcc', ['-c', 'foo.c']));
 		assert.doesNotThrow(() => assertAllowedCommand('tar', ['-c', '-f', 'out.tar', 'src']));

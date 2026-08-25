@@ -43,12 +43,13 @@ Details: [comments.md](comments.md).
 
 ## Security
 
-| Field           | Default | Description                         |
-| --------------- | ------- | ----------------------------------- |
-| Denied paths    | empty   | Globs, one per line (`deniedPaths`) |
-| Secret patterns | empty   | JS regexps; matches -> `[REDACTED]` |
+| Field           | Default           | Description                                                     |
+| --------------- | ----------------- | --------------------------------------------------------------- |
+| Denied paths    | empty             | Globs, one per line (`deniedPaths`)                             |
+| Denied commands | built-in denylist | Binary names for `run_command`, one per line (`deniedCommands`) |
+| Secret patterns | empty             | JS regexps; matches -> `[REDACTED]`                             |
 
-There are “Insert examples” buttons. Full path policy: [security.md](security.md).
+There are “Insert examples” buttons. Full path/command policy: [security.md](security.md).
 
 ## Logs
 

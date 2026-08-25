@@ -3,7 +3,7 @@ import { initApiKeyStore } from './apiKey';
 import { DEFAULT_SETTINGS, type AgentAuthLevel, type GenSettings } from './types';
 
 export type { AgentAuthLevel, ChatMode, CommentStyle, GenSettings } from './types';
-export { DEFAULT_SETTINGS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from './types';
+export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 
 const STORAGE_KEY = 'gen.settings';
@@ -77,6 +77,9 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		previewBeforeApply: Boolean(raw.previewBeforeApply ?? DEFAULT_SETTINGS.previewBeforeApply),
 		commentSystemPrompt: String(raw.commentSystemPrompt ?? DEFAULT_SETTINGS.commentSystemPrompt).trim(),
 		deniedPaths: normalizeStringList(raw.deniedPaths),
+		deniedCommands: 'deniedCommands' in raw
+			? normalizeStringList(raw.deniedCommands).map((item) => item.toLowerCase())
+			: [...DEFAULT_SETTINGS.deniedCommands],
 		secretPatterns: normalizeStringList(raw.secretPatterns),
 		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,
 		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),

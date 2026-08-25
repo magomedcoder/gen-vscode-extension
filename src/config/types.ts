@@ -75,6 +75,11 @@ export interface GenSettings {
 	 */
 	deniedPaths: string[];
 	/**
+	 * Имена бинарников, запрещённых для run_command (по одному на строку).
+	 * Пусто - не запрещать по имени (eval / git write / package install остаются в коде).
+	 */
+	deniedCommands: string[];
+	/**
 	 * JS-регулярки для маскировки секретов в тексте, уходящем в LLM. 
 	 * Пусто - не маскировать.
 	 */
@@ -115,6 +120,43 @@ export const EXAMPLE_DENIED_PATHS: string[] = [
 	'.git',
 ];
 
+export const EXAMPLE_DENIED_COMMANDS: string[] = [
+	'sudo',
+	'doas',
+	'su',
+	'rm',
+	'rmdir',
+	'unlink',
+	'dd',
+	'mkfs',
+	'fdisk',
+	'chmod',
+	'chown',
+	'chgrp',
+	'curl',
+	'wget',
+	'nc',
+	'ncat',
+	'netcat',
+	'ssh',
+	'scp',
+	'sftp',
+	'docker',
+	'podman',
+	'kubectl',
+	'nerdctl',
+	'sh',
+	'bash',
+	'zsh',
+	'fish',
+	'dash',
+	'csh',
+	'tcsh',
+	'cmd',
+	'powershell',
+	'pwsh',
+];
+
 export const EXAMPLE_SECRET_PATTERNS: string[] = [
 	String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`,
 	String.raw`\b(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*['"]?[^\s'"]{8,}`,
@@ -136,6 +178,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	previewBeforeApply: true,
 	commentSystemPrompt: '',
 	deniedPaths: [],
+	deniedCommands: [...EXAMPLE_DENIED_COMMANDS],
 	secretPatterns: [],
 	authHeader: 'Authorization',
 	authScheme: 'Bearer',

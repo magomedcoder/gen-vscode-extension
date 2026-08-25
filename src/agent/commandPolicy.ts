@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { getSettings } from '../config/settings';
 
 export class CommandPolicyError extends Error {
 	constructor(message: string) {
@@ -6,8 +7,6 @@ export class CommandPolicyError extends Error {
 		this.name = 'CommandPolicyError';
 	}
 }
-
-const DENIED_BINARIES = new Set(['sudo', 'doas', 'su', 'rm', 'rmdir', 'unlink', 'dd', 'mkfs', 'fdisk', 'chmod', 'chown', 'chgrp', 'curl', 'wget', 'nc', 'ncat', 'netcat', 'ssh', 'scp', 'sftp', 'docker', 'podman', 'kubectl', 'nerdctl', 'sh', 'bash', 'zsh', 'fish', 'dash', 'csh', 'tcsh', 'cmd', 'powershell', 'pwsh']);
 
 const EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print']);
 const C_FLAGS = new Set(['-c', '--command']);
@@ -18,6 +17,21 @@ const GIT_WRITE_SUBCOMMANDS = new Set(['push', 'rebase', 'reset', 'commit', 'tag
 export function normalizeBinaryName(command: string): string {
 	const base = path.basename(command.trim()).toLowerCase();
 	return base.replace(/\.(cmd|exe|bat)$/i, '');
+}
+
+function deniedBinarySet(patterns?: readonly string[]): Set<string> {
+	const source = patterns ?? getSettings().deniedCommands;
+	const out = new Set<string>();
+	for (const item of source) {
+		const name = item.trim().toLowerCase();
+		if (!name || name.startsWith('#')) {
+			continue;
+		}
+
+		out.add(normalizeBinaryName(name));
+	}
+
+	return out;
 }
 
 function looksLikeFileOperand(arg: string): boolean {
@@ -77,7 +91,7 @@ function gitSubcommand(args: string[]): string | undefined {
 	return undefined;
 }
 
-export function assertAllowedCommand(command: string, args: string[]): void {
+export function assertAllowedCommand(command: string, args: string[], deniedCommands?: readonly string[]): void {
 	const trimmed = command.trim();
 	if (!trimmed) {
 		throw new CommandPolicyError('Пустая команда');
@@ -92,7 +106,7 @@ export function assertAllowedCommand(command: string, args: string[]): void {
 		throw new CommandPolicyError('Пустая команда');
 	}
 
-	if (DENIED_BINARIES.has(binary)) {
+	if (deniedBinarySet(deniedCommands).has(binary)) {
 		throw new CommandPolicyError(`Команда запрещена политикой: ${binary}`);
 	}
 

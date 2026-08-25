@@ -57,15 +57,15 @@ Empty list - no redaction. Invalid regexps are skipped.
 
 ## Commands (`run_command`)
 
-No shell/pipe. Blocked among others:
+No shell/pipe.
 
-- shells: `sh`, `bash`, `zsh`, ...
-- network: `curl`, `wget`, `ssh`, ...
-- destructive: `rm`, `chmod`, `chown`, ...
-- containers: `docker`, `kubectl`, ...
-- package install / publish and `git push` / `commit` / `reset` / ...
+**Denied binaries** come from **Security -> Denied commands** (`deniedCommands`). Default list includes shells (`sh`, `bash`, ...), network (`curl`, `wget`, `ssh`, ...), destructive (`rm`, `chmod`, ...), containers (`docker`, `kubectl`, ...). Empty list - do not block by binary name.
 
-Eval flags with code (`node -e`, `python -c`) are blocked; `gcc -c file.c` and `git -c key=value` are allowed.
+Still always blocked in code:
+
+- package install / publish subcommands (`npm install`, ...)
+- `git push` / `commit` / `reset` / ...
+- eval flags with code (`node -e`, `python -c`); `gcc -c file.c` and `git -c key=value` are allowed
 
 `run_tests` / `run_command` always require confirmation.
 

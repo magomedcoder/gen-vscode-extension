@@ -6,6 +6,7 @@
 
 - Context Engine + `@file` / `@folder` / `@codebase` mentions in chat (Composer autocomplete)
 - Docs: English docs without `-ru` suffix; Russian docs as `*-ru.md` with EN/RU cross-links
+- Security setting `deniedCommands`: move `run_command` binary denylist from code into settings
 
 ## 0.1.0 (24 August 2026)
 
