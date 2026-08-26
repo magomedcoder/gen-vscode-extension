@@ -47,6 +47,8 @@
 	"chat.header.clear": "Очистить",
 	"chat.composer.placeholderBusy": "Идёт запрос...",
 	"chat.composer.placeholder": "Сообщение... @file @folder @codebase",
+	"chat.composer.chipsAria": "Прикреплённый контекст",
+	"chat.composer.removeChip": "Убрать {0}",
 	"chat.composer.modeAria": "Режим чата",
 	"chat.composer.modeAsk": "Просто чат",
 	"chat.composer.modeAgent": "Агент",

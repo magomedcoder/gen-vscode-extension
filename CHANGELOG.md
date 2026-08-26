@@ -11,6 +11,8 @@
 - Agent iteration limit: `0` means unlimited
 - Localization: chat/settings webview + host UI strings via `l10n/bundle.l10n*.json` (EN/RU; add more locales by dropping in a new bundle)
 - Opt-in project setup: do not create `.gen/` on folder open; Gen chat shows **Create config & index** (writes `.gen/config.json` + builds index)
+- Composer context chips for `@file` / `@folder` / `@codebase` (pick from autocomplete, remove before send)
+- Collapsible sticky plan card docked above the chat composer
 
 ## 0.1.0 (24 August 2026)
 

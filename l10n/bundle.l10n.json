@@ -47,6 +47,8 @@
 	"chat.header.clear": "Clear",
 	"chat.composer.placeholderBusy": "Request in progress...",
 	"chat.composer.placeholder": "Message... @file @folder @codebase",
+	"chat.composer.chipsAria": "Attached context",
+	"chat.composer.removeChip": "Remove {0}",
 	"chat.composer.modeAria": "Chat mode",
 	"chat.composer.modeAsk": "Chat only",
 	"chat.composer.modeAgent": "Agent",

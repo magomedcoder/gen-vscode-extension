@@ -8,6 +8,13 @@ interface ComposerProps {
 	mode: ChatMode;
 }
 
+interface ContextChip {
+	id: string;
+	kind: MentionSuggestion['kind'];
+	label: string;
+	insert: string;
+}
+
 function activeMentionQuery(text: string, cursor: number): { start: number; query: string } | undefined {
 	const before = text.slice(0, cursor);
 	const at = before.lastIndexOf('@');
@@ -27,8 +34,18 @@ function activeMentionQuery(text: string, cursor: number): { start: number; quer
 	return { start: at, query: fragment };
 }
 
+function chipFromSuggestion(item: MentionSuggestion): ContextChip {
+	return {
+		id: item.insert.trim(),
+		kind: item.kind,
+		label: item.label,
+		insert: item.insert.trim(),
+	};
+}
+
 export function Composer({ busy, mode }: ComposerProps) {
 	const [draft, setDraft] = useState('');
+	const [chips, setChips] = useState<ContextChip[]>([]);
 	const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
 	const [suggestIndex, setSuggestIndex] = useState(0);
 	const requestId = useRef(0);
@@ -88,23 +105,32 @@ export function Composer({ busy, mode }: ComposerProps) {
 			return;
 		}
 
-		const next = draft.slice(0, active.start) + item.insert + draft.slice(cursor);
+		const chip = chipFromSuggestion(item);
+		setChips((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
+
+		const next = `${draft.slice(0, active.start)}${draft.slice(cursor)}`.replace(/\s{2,}/g, ' ');
 		setDraft(next);
 		setSuggestions([]);
 		requestAnimationFrame(() => {
-			const pos = active.start + item.insert.length;
 			el?.focus();
-			el?.setSelectionRange(pos, pos);
+			el?.setSelectionRange(active.start, active.start);
 		});
 	};
 
+	const removeChip = (id: string) => {
+		setChips((prev) => prev.filter((c) => c.id !== id));
+	};
+
 	const submit = () => {
-		const text = draft.trim();
+		const question = draft.trim();
+		const prefix = chips.map((c) => c.insert).join(' ').trim();
+		const text = [prefix, question].filter(Boolean).join(' ').trim();
 		if (!text || busy) {
 			return;
 		}
 
 		setDraft('');
+		setChips([]);
 		setSuggestions([]);
 		vscodeApi.postMessage({ type: 'send', text });
 	};
@@ -147,7 +173,7 @@ export function Composer({ busy, mode }: ComposerProps) {
 		}
 	};
 
-	const canSend = Boolean(draft.trim()) && !busy;
+	const canSend = (Boolean(draft.trim()) || chips.length > 0) && !busy;
 
 	return (
 		<form className="composer" onSubmit={onSubmit}>
@@ -171,6 +197,25 @@ export function Composer({ busy, mode }: ComposerProps) {
 						))}
 					</ul>
 				)}
+				{chips.length > 0 ? (
+					<ul className="composer-chips" aria-label={t('chat.composer.chipsAria')}>
+						{chips.map((chip) => (
+							<li key={chip.id} className={`composer-chip composer-chip--${chip.kind}`}>
+								<span className="composer-chip__kind">@{chip.kind}</span>
+								<span className="composer-chip__label" title={chip.label}>{chip.label}</span>
+								<button
+									type="button"
+									className="composer-chip__remove"
+									aria-label={t('chat.composer.removeChip', chip.label)}
+									disabled={busy}
+									onClick={() => removeChip(chip.id)}
+								>
+									Закрыть
+								</button>
+							</li>
+						))}
+					</ul>
+				) : null}
 				<textarea
 					ref={textareaRef}
 					className="composer__input"
