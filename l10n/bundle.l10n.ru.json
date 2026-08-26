@@ -62,6 +62,8 @@
 	"chat.tool.expand": "Показать полностью",
 	"chat.plan.aria": "Активный план",
 	"chat.plan.open": "Открыть",
+	"chat.plan.expand": "Развернуть план",
+	"chat.plan.collapse": "Свернуть план",
 	"chat.plan.status.pending": "ожидает",
 	"chat.plan.status.in_progress": "в работе",
 	"chat.plan.status.done": "готово",

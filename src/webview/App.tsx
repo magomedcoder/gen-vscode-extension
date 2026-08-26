@@ -45,9 +45,11 @@ export function App() {
 			<ChatHeader usage={chat.usage} />
 			<ProjectSetupBanner project={chat.project} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
-			{chat.stickyPlan ? <PlanCard plan={chat.stickyPlan} /> : null}
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
-			<Composer busy={chat.busy || confirming} mode={chat.mode} />
+			<div className="composer-dock">
+				{chat.stickyPlan ? <PlanCard plan={chat.stickyPlan} /> : null}
+				<Composer busy={chat.busy || confirming} mode={chat.mode} />
+			</div>
 		</div>
 	);
 }
