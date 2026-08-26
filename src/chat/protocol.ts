@@ -54,6 +54,16 @@ export interface StickyPlanUi {
 	}>;
 }
 
+export interface ChatProjectStatus {
+	hasWorkspace: boolean;
+	enabled: boolean;
+	indexing: boolean;
+	ready: boolean;
+	error?: string;
+	fileCount?: number;
+	chunkCount?: number;
+}
+
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
@@ -61,6 +71,7 @@ export interface ChatViewState {
 	usage?: TokenUsage;
 	pendingConfirm?: PendingConfirm;
 	stickyPlan?: StickyPlanUi;
+	project?: ChatProjectStatus;
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
@@ -92,4 +103,5 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
 	| { type: 'openLogsFolder' }
 	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice }
-	| { type: 'mentionSuggest'; requestId: number; query: string };
+	| { type: 'mentionSuggest'; requestId: number; query: string }
+	| { type: 'enableProject' };

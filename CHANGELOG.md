@@ -10,6 +10,7 @@
 - Fix **No prompt** (`open`): skip confirm dialogs for commands, plan, and overwrite of user edits
 - Agent iteration limit: `0` means unlimited
 - Localization: chat/settings webview + host UI strings via `l10n/bundle.l10n*.json` (EN/RU; add more locales by dropping in a new bundle)
+- Opt-in project setup: do not create `.gen/` on folder open; Gen chat shows **Create config & index** (writes `.gen/config.json` + builds index)
 
 ## 0.1.0 (24 August 2026)
 

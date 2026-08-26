@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
 import { createNonce, renderChatHtml } from './chatHtml';
 import { suggestMentions } from './mentionSuggest';
-import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
+import type { ChatProjectStatus, FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
 import { onSettingsChanged } from '../config/settings';
 import { loadWebviewL10n } from '../l10n/loadBundle';
 import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../ui/confirmDialog';
+import { enableProject, isProjectEnabled } from '../project/config';
+import { getIndexManager } from '../index/IndexManager';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -15,14 +17,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.session = new ChatSession(context, new HttpLlmClient());
-		this.session.subscribe((state) => {
-			this.post({ type: 'state', state });
+		this.session.subscribe(() => {
+			void this.postState();
 		});
 		onSettingsChanged(() => {
-			this.post({
-				type: 'state',
-				state: this.session.getState(),
-			});
+			void this.postState();
+		});
+		getIndexManager()?.onDidChange(() => {
+			void this.postState();
 		});
 	}
 
@@ -73,13 +75,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		void this.view?.webview.postMessage(message);
 	}
 
+	private async buildProjectStatus(): Promise<ChatProjectStatus> {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		if (!folder) {
+			return {
+				hasWorkspace: false,
+				enabled: false,
+				indexing: false,
+				ready: false,
+			};
+		}
+
+		const enabled = await isProjectEnabled(folder.uri.fsPath);
+		const progress = getIndexManager()?.getProgress(folder.uri.fsPath);
+		return {
+			hasWorkspace: true,
+			enabled,
+			indexing: progress?.state === 'indexing',
+			ready: enabled && progress?.state === 'ready',
+			error: progress?.lastError,
+			fileCount: progress?.fileCount,
+			chunkCount: progress?.chunkCount,
+		};
+	}
+
+	private async postState(): Promise<void> {
+		const project = await this.buildProjectStatus();
+		this.post({
+			type: 'state',
+			state: {
+				...this.session.getState(),
+				project,
+			},
+		});
+	}
+
 	private async onWebviewMessage(msg: FromWebviewMessage): Promise<void> {
 		switch (msg.type) {
 			case 'ready':
-				this.post({
-					type: 'state',
-					state: this.session.getState(),
-				});
+				await this.postState();
 				return;
 			case 'clear':
 				this.session.clear();
@@ -111,6 +145,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'confirmChoice':
 				this.session.resolveConfirm(msg.id, msg.choice);
 				return;
+			case 'enableProject': {
+				const folder = await enableProject();
+				if (folder) {
+					await getIndexManager()?.enableAndIndex(folder);
+				}
+				await this.postState();
+				return;
+			}
 			case 'openExternal': {
 				try {
 					const uri = vscode.Uri.parse(msg.url);

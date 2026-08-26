@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isProjectEnabled } from '../project/config';
 import { chunkFileContent } from './chunk';
 import { contentHash } from './hash';
 import { listIndexableFiles, readIndexableText } from './scanner';
@@ -11,56 +12,36 @@ export class IndexManager implements vscode.Disposable {
 	private readonly progressByFolder = new Map<string, IndexProgress>();
 	private indexing = new Set<string>();
 	private indexed = new Set<string>();
+	private readonly onChangeListeners = new Set<() => void>();
 
 	constructor(private readonly context: vscode.ExtensionContext) {
-		for (const folder of vscode.workspace.workspaceFolders ?? []) {
-			void this.scheduleFullIndex(folder);
-		}
+		void this.bootstrapExisting();
 
 		this.disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders((e) => {
 				for (const folder of e.added) {
-					void this.scheduleFullIndex(folder);
+					void this.maybeSchedule(folder);
 				}
 
 				for (const folder of e.removed) {
 					this.progressByFolder.delete(folder.uri.fsPath);
 					this.indexed.delete(folder.uri.fsPath);
 				}
+				this.notifyChanged();
 			}),
 			vscode.workspace.createFileSystemWatcher('**/*'),
 		);
 
 		const watcher = this.disposables[this.disposables.length - 1] as vscode.FileSystemWatcher;
 		const onFsChange = (uri: vscode.Uri) => {
-			const folder = vscode.workspace.getWorkspaceFolder(uri);
-			if (!folder) {
-				return;
-			}
-
-			const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-			if (!relative || relative.startsWith('.gen/')) {
-				return;
-			}
-
-			void this.reindexFile(folder, relative, uri);
+			void this.onWorkspaceFileChange(uri);
 		};
 
 		this.disposables.push(
 			watcher.onDidChange(onFsChange),
 			watcher.onDidCreate(onFsChange),
 			watcher.onDidDelete((uri) => {
-				const folder = vscode.workspace.getWorkspaceFolder(uri);
-				if (!folder) {
-					return;
-				}
-
-				const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-				if (!relative || relative.startsWith('.gen/')) {
-					return;
-				}
-
-				void this.removeFile(folder.uri.fsPath, relative);
+				void this.onWorkspaceFileDelete(uri);
 			}),
 		);
 	}
@@ -71,23 +52,44 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		this.disposables.length = 0;
+		this.onChangeListeners.clear();
+	}
+
+	onDidChange(listener: () => void): vscode.Disposable {
+		this.onChangeListeners.add(listener);
+		return {
+			dispose: () => {
+				this.onChangeListeners.delete(listener);
+			},
+		};
+	}
+
+	private notifyChanged(): void {
+		for (const listener of this.onChangeListeners) {
+			listener();
+		}
 	}
 
 	getProgress(folderFsPath?: string): IndexProgress {
 		const key = folderFsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!key) {
-			return { 
-				state: 'idle', 
-				fileCount: 0, 
-				chunkCount: 0 
+			return {
+				state: 'idle',
+				fileCount: 0,
+				chunkCount: 0,
 			};
 		}
 
-		return this.progressByFolder.get(key) ?? { 
-			state: 'idle', 
-			fileCount: 0, 
-			chunkCount: 0 
+		return this.progressByFolder.get(key) ?? {
+			state: 'idle',
+			fileCount: 0,
+			chunkCount: 0,
 		};
+	}
+
+	// Создать индекс после того, как пользователь подтвердит свое согласие (запись в каталог `.gen/`)
+	async enableAndIndex(folder: vscode.WorkspaceFolder): Promise<void> {
+		await this.scheduleFullIndex(folder, true);
 	}
 
 	async search(query: string, maxResults: number): Promise<CodebaseSearchHit[]> {
@@ -97,6 +99,10 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		const key = folder.uri.fsPath;
+		if (!(await isProjectEnabled(key))) {
+			return [];
+		}
+
 		if (!this.indexed.has(key) && !this.indexing.has(key)) {
 			void this.scheduleFullIndex(folder);
 		}
@@ -126,6 +132,56 @@ export class IndexManager implements vscode.Disposable {
 		return hits;
 	}
 
+	private async bootstrapExisting(): Promise<void> {
+		for (const folder of vscode.workspace.workspaceFolders ?? []) {
+			await this.maybeSchedule(folder);
+		}
+	}
+
+	private async maybeSchedule(folder: vscode.WorkspaceFolder): Promise<void> {
+		if (!(await isProjectEnabled(folder.uri.fsPath))) {
+			return;
+		}
+
+		void this.scheduleFullIndex(folder);
+	}
+
+	private async onWorkspaceFileChange(uri: vscode.Uri): Promise<void> {
+		const folder = vscode.workspace.getWorkspaceFolder(uri);
+		if (!folder) {
+			return;
+		}
+
+		if (!(await isProjectEnabled(folder.uri.fsPath))) {
+			return;
+		}
+
+		const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+		if (!relative || relative.startsWith('.gen/')) {
+			return;
+		}
+
+		void this.reindexFile(folder, relative, uri);
+	}
+
+	private async onWorkspaceFileDelete(uri: vscode.Uri): Promise<void> {
+		const folder = vscode.workspace.getWorkspaceFolder(uri);
+		if (!folder) {
+			return;
+		}
+
+		if (!(await isProjectEnabled(folder.uri.fsPath))) {
+			return;
+		}
+
+		const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+		if (!relative || relative.startsWith('.gen/')) {
+			return;
+		}
+
+		void this.removeFile(folder.uri.fsPath, relative);
+	}
+
 	private setProgress(folderFsPath: string, patch: Partial<IndexProgress>): void {
 		const prev = this.progressByFolder.get(folderFsPath) ?? {
 			state: 'idle' as const,
@@ -134,6 +190,7 @@ export class IndexManager implements vscode.Disposable {
 		};
 
 		this.progressByFolder.set(folderFsPath, { ...prev, ...patch });
+		this.notifyChanged();
 	}
 
 	private async scheduleFullIndex(folder: vscode.WorkspaceFolder, force = false): Promise<void> {
@@ -147,8 +204,8 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		this.indexing.add(key);
-		this.setProgress(key, { 
-			state: 'indexing' 
+		this.setProgress(key, {
+			state: 'indexing',
 		});
 
 		try {
@@ -168,6 +225,7 @@ export class IndexManager implements vscode.Disposable {
 			});
 		} finally {
 			this.indexing.delete(key);
+			this.notifyChanged();
 		}
 	}
 
@@ -179,8 +237,8 @@ export class IndexManager implements vscode.Disposable {
 
 		for (const file of files) {
 			seen.add(file.relative);
-			await this.indexOneFile(manifest, folderFsPath, file.relative, file.uri, { 
-				save: false 
+			await this.indexOneFile(manifest, folderFsPath, file.relative, file.uri, {
+				save: false,
 			});
 		}
 
@@ -197,8 +255,8 @@ export class IndexManager implements vscode.Disposable {
 	private async reindexFile(folder: vscode.WorkspaceFolder, relative: string, uri: vscode.Uri): Promise<void> {
 		const folderFsPath = folder.uri.fsPath;
 		const manifest = await loadManifest(folderFsPath);
-		const changed = await this.indexOneFile(manifest, folderFsPath, relative, uri, { 
-			save: false 
+		const changed = await this.indexOneFile(manifest, folderFsPath, relative, uri, {
+			save: false,
 		});
 		if (!changed) {
 			return;
@@ -242,8 +300,8 @@ export class IndexManager implements vscode.Disposable {
 		folderFsPath: string,
 		relative: string,
 		uri: vscode.Uri,
-		opts: { 
-			save: boolean 
+		opts: {
+			save: boolean
 		},
 	): Promise<boolean> {
 		const text = await readIndexableText(uri);

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getIndexManager } from '../../index/IndexManager';
+import { isProjectEnabled } from '../../project/config';
 import { AGENT_LIMITS } from '../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { throwIfAborted } from '../workspacePath';
@@ -42,6 +43,13 @@ export const codebaseSearchTool: ToolDefinition = {
 			return {
 				ok: false,
 				content: vscode.l10n.t('tool.indexNotInit'),
+			};
+		}
+
+		if (!(await isProjectEnabled())) {
+			return {
+				ok: false,
+				content: vscode.l10n.t('tool.indexDisabled'),
 			};
 		}
 

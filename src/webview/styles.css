@@ -856,3 +856,47 @@ body[data-screen='settings'] .settings {
 	font-size: 12px;
 	opacity: 0.85;
 }
+
+.project-banner {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+	margin: 8px var(--pad) 0;
+	padding: 10px 12px;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
+	border-radius: 4px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	flex-shrink: 0;
+}
+
+.project-banner--busy {
+	opacity: 0.9;
+}
+
+.project-banner--error {
+	border-color: var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+.project-banner__text {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.project-banner__title {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.project-banner__hint {
+	font-size: 11px;
+	opacity: 0.85;
+	line-height: 1.35;
+}
+
+.project-banner .btn {
+	flex-shrink: 0;
+	white-space: nowrap;
+}

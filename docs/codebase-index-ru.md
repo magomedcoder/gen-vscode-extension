@@ -21,8 +21,9 @@
 
 ## Использование
 
-1. Открыть workspace - индекс строится в фоне.
-2. В режиме Agent вызвать `codebase_search` с `query` (символ, фраза, путь).
-3. Для точного grep по строке - `search_files`.
+1. Открыть workspace и чат Gen.
+2. Нажать **Создать конфиг и индекс** (пишет `.gen/config.json` и строит `.gen/index/`). До этого при открытии папки `.gen/` не создаётся.
+3. В режиме Agent вызвать `codebase_search` с `query` (символ, фраза, путь).
+4. Для точного grep по строке - `search_files`.
 
 Подробнее про tools: [tools-ru.md](tools-ru.md).

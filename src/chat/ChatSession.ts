@@ -50,8 +50,7 @@ export class ChatSession {
 		private readonly client: LlmClient,
 	) {
 		this.messages = this.context.workspaceState.get<ChatUiMessage[]>(STORAGE_KEY, []);
-		const legacy = this.context.workspaceState.get<StickyPlanSnapshot>('gen.chat.stickyPlan');
-		const stored = this.context.workspaceState.get<StickyPlanSnapshot>(PLAN_STORAGE_KEY) ?? legacy;
+		const stored = this.context.workspaceState.get<StickyPlanSnapshot>(PLAN_STORAGE_KEY);
 		this.stickyPlan.restore(stored);
 		this.agent = new AgentSession(client);
 		this.planStore = new WorkspacePlanStore(() => {
@@ -110,7 +109,6 @@ export class ChatSession {
 
 	private persistPlan(): void {
 		void this.context.workspaceState.update(PLAN_STORAGE_KEY, this.stickyPlan.snapshot());
-		void this.context.workspaceState.update('gen.chat.stickyPlan', undefined);
 	}
 
 	private onPlanChanged(): void {

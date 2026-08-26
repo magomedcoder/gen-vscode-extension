@@ -21,8 +21,9 @@ The agent searches it via the `codebase_search` tool (trigrams), without sending
 
 ## Usage
 
-1. Open a workspace - the index builds in the background.
-2. In Agent mode, call `codebase_search` with `query` (symbol, phrase, path).
-3. For exact line grep - `search_files`.
+1. Open a workspace and open Gen chat.
+2. Click **Create config & index** (writes `.gen/config.json` and builds `.gen/index/`). Until then Gen does not create `.gen/` on folder open.
+3. In Agent mode, call `codebase_search` with `query` (symbol, phrase, path).
+4. For exact line grep - `search_files`.
 
 More on tools: [tools.md](tools.md).
