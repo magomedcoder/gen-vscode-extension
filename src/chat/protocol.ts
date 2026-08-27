@@ -1,8 +1,9 @@
 import type { ChatMode, GenSettings } from '../config/types';
 import type { TokenUsage } from '../llm/usage';
 import type { ConfirmChoice } from '../agent/types';
+import type { DiffHunkPayload, HunkReviewStatus } from '../agent/diff';
 
-export type { ChatMode, ConfirmChoice };
+export type { ChatMode, ConfirmChoice, DiffHunkPayload, HunkReviewStatus };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
 export type ToolCallStatus = 'pending' | 'ok' | 'error' | 'denied';
@@ -16,6 +17,7 @@ export interface ToolCallUi {
 	result?: string;
 	path?: string;
 	diff?: string;
+	hunks?: DiffHunkPayload[];
 }
 
 export interface ChatUiMessage {
@@ -104,4 +106,7 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'openLogsFolder' }
 	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice }
 	| { type: 'mentionSuggest'; requestId: number; query: string }
-	| { type: 'enableProject' };
+	| { type: 'enableProject' }
+	| { type: 'editMessage'; id: string; content: string }
+	| { type: 'reviewHunk'; toolCallId: string; hunkId: string; action: 'accept' | 'reject' }
+	| { type: 'reviewDiff'; toolCallId: string; action: 'acceptAll' | 'rejectAll' };

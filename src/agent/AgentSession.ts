@@ -270,6 +270,7 @@ export class AgentSession {
 					result: resultText,
 					path: toolResult.path ?? liveCalls[i].path,
 					diff: toolResult.diff,
+					hunks: toolResult.hunks,
 				};
 				params.ui.update(assistantId, {
 					toolCalls: liveCalls.map((c) => ({ ...c })),

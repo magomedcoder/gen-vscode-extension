@@ -14,6 +14,9 @@ import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
 import { CHAT_VIEW_ID } from './ids';
 import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
+import type { DiffHunkPayload } from '../agent/diff';
+import { revertHunkInText } from '../agent/diff';
+import { pathExists, resolveWorkspacePath } from '../agent/workspacePath';
 
 const STORAGE_KEY = 'gen.chat.messages';
 const PLAN_STORAGE_KEY = 'gen.agent.stickyPlan';
@@ -104,7 +107,37 @@ export class ChatSession {
 	}
 
 	private persist(): void {
-		void this.context.workspaceState.update(STORAGE_KEY, this.messages.slice(-MAX_STORED));
+		const slim = this.messages.slice(-MAX_STORED).map((msg) => {
+			if (!msg.toolCalls?.length) {
+				return msg;
+			}
+
+			return {
+				...msg,
+				toolCalls: msg.toolCalls.map((call) => {
+					if (!call.hunks?.length) {
+						return call;
+					}
+
+					return {
+						...call,
+						hunks: call.hunks.map((hunk) => {
+							if (hunk.status === 'pending') {
+								return hunk;
+							}
+
+							const { oldLines: _o, newLines: _n, beforeContext: _b, afterContext: _a, ...rest } = hunk;
+							return {
+								...rest,
+								oldLines: [],
+								newLines: [],
+							};
+						}),
+					};
+				}),
+			};
+		});
+		void this.context.workspaceState.update(STORAGE_KEY, slim);
 	}
 
 	private persistPlan(): void {
@@ -260,6 +293,183 @@ export class ChatSession {
 		this.settleConfirm('abort');
 	}
 
+	// Правит сообщение пользователя, отбрасывает всё после него и заново запускает ход
+	async editMessage(id: string, content: string): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const trimmed = content.trim();
+		if (!trimmed) {
+			return;
+		}
+
+		const idx = this.messages.findIndex((msg) => msg.id === id);
+		if (idx < 0) {
+			return;
+		}
+
+		const msg = this.messages[idx];
+		if (msg.role !== 'user' || !msg.content) {
+			return;
+		}
+
+		this.settleConfirm('abort');
+		this.messages = [
+			...this.messages.slice(0, idx),
+			{
+				...msg,
+				content: trimmed,
+			},
+		];
+		this.persist();
+		this.emit();
+		await this.runTurn(trimmed);
+	}
+
+	async reviewHunk(toolCallId: string, hunkId: string, action: 'accept' | 'reject'): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const found = this.findToolCall(toolCallId);
+		if (!found?.call.hunks?.length) {
+			return;
+		}
+
+		const hunk = found.call.hunks.find((item) => item.id === hunkId);
+		if (!hunk || hunk.status !== 'pending') {
+			return;
+		}
+
+		if (action === 'reject') {
+			const ok = await this.applyHunkReject(hunk);
+			if (!ok) {
+				void vscode.window.showWarningMessage(vscode.l10n.t('chat.hunk.rejectFailed'));
+				return;
+			}
+		}
+
+		hunk.status = action === 'accept' ? 'accepted' : 'rejected';
+		this.persist();
+		this.emit();
+	}
+
+	async reviewDiff(toolCallId: string, action: 'acceptAll' | 'rejectAll'): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const found = this.findToolCall(toolCallId);
+		if (!found?.call.hunks?.length) {
+			return;
+		}
+
+		const pending = found.call.hunks.filter((h) => h.status === 'pending');
+		if (pending.length === 0) {
+			return;
+		}
+
+		if (action === 'rejectAll') {
+			// С конца: при матче по содержимому раньше откатанные хунки не сдвигают поиск следующих
+			for (let i = pending.length - 1; i >= 0; i -= 1) {
+				const ok = await this.applyHunkReject(pending[i]);
+				if (!ok) {
+					void vscode.window.showWarningMessage(vscode.l10n.t('chat.hunk.rejectFailed'));
+					this.persist();
+					this.emit();
+					return;
+				}
+				pending[i].status = 'rejected';
+			}
+		} else {
+			for (const hunk of pending) {
+				hunk.status = 'accepted';
+			}
+		}
+
+		this.persist();
+		this.emit();
+	}
+
+	private findToolCall(toolCallId: string): { messageIndex: number; callIndex: number; call: NonNullable<ChatUiMessage['toolCalls']>[number] } | undefined {
+		for (let mi = this.messages.length - 1; mi >= 0; mi -= 1) {
+			const msg = this.messages[mi];
+			if (!msg.toolCalls?.length) {
+				continue;
+			}
+
+			const callIndex = msg.toolCalls.findIndex((c) => c.id === toolCallId);
+			if (callIndex < 0) {
+				continue;
+			}
+
+			return {
+				messageIndex: mi,
+				callIndex,
+				call: msg.toolCalls[callIndex],
+			};
+		}
+
+		return undefined;
+	}
+
+	private async applyHunkReject(hunk: DiffHunkPayload): Promise<boolean> {
+		const relative = hunk.path?.trim();
+		if (!relative) {
+			return false;
+		}
+
+		let resolved;
+		try {
+			resolved = await resolveWorkspacePath(relative);
+		} catch {
+			return false;
+		}
+
+		const wholeFileAdd = hunk.oldLines.length === 0 && hunk.newLines.length > 0 && hunk.beforeContext === undefined && hunk.afterContext === undefined;
+
+		if (wholeFileAdd && !(await pathExists(resolved.uri))) {
+			return true;
+		}
+
+		if (wholeFileAdd && (await pathExists(resolved.uri))) {
+			try {
+				const doc = await vscode.workspace.openTextDocument(resolved.uri);
+				const text = doc.getText();
+				const newText = hunk.newLines.join('\n');
+				if (text === newText || text.replace(/\n$/, '') === newText.replace(/\n$/, '')) {
+					await vscode.workspace.fs.delete(resolved.uri, { useTrash: true });
+					this.writes.forget(resolved.uri);
+					return true;
+				}
+			} catch {
+				return false;
+			}
+		}
+
+		if (!(await pathExists(resolved.uri))) {
+			return false;
+		}
+
+		const doc = await vscode.workspace.openTextDocument(resolved.uri);
+		const next = revertHunkInText(doc.getText(), hunk);
+		if (next === undefined) {
+			return false;
+		}
+
+		const last = Math.max(0, doc.lineCount - 1);
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(doc.uri, new vscode.Range(0, 0, last, doc.lineAt(last).text.length), next);
+		const ok = await vscode.workspace.applyEdit(edit);
+		if (!ok) {
+			return false;
+		}
+
+		this.writes.remember(doc.uri, resolved.relative, next);
+		return true;
+	}
+
 	async setMode(mode: ChatMode): Promise<void> {
 		await updateSettings({
 			...getSettings(),
@@ -274,14 +484,21 @@ export class ChatSession {
 			return;
 		}
 
-		const clearSeqAtStart = this.clearSeq;
-
 		this.append({
 			id: messageId(),
 			role: 'user',
 			content: trimmed,
 		});
+		await this.runTurn(trimmed);
+	}
 
+	// Запуск хода: последнее сообщение уже user с этим текстом
+	private async runTurn(trimmed: string): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const clearSeqAtStart = this.clearSeq;
 		const settings = getSettings();
 		if (!settings.baseUrl.trim() || !settings.model.trim()) {
 			this.append({

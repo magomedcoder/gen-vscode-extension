@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatMiniDiff } from '../diff';
+import { computeMiniDiff, toDiffHunkPayloads } from '../diff';
 import { applySearchReplace } from '../patch';
 import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asObjectArray, asString} from '../types';
@@ -213,10 +213,19 @@ export const applyWorkspaceEditTool: ToolDefinition = {
 		}
 
 		const note = drifted.length > 0 ? vscode.l10n.t('tool.userEditsNotedBatch') : '';
+		const fileDiffs = refreshed.map((p) => ({
+			relative: p.relative,
+			mini: computeMiniDiff(p.original, p.text),
+		}));
+		const hunks = fileDiffs.flatMap((item, fileIndex) => toDiffHunkPayloads(item.mini.hunks, refreshed[fileIndex].original, {
+			path: item.relative,
+			idPrefix: `f${fileIndex}`,
+		}));
 		return {
 			ok: true,
 			path: refreshed.map((p) => p.relative).join(', '),
-			diff: refreshed.map((p) => `--- ${p.relative}\n${formatMiniDiff(p.original, p.text)}`).join('\n\n'),
+			diff: fileDiffs.map((item) => `--- ${item.relative}\n${item.mini.text}`).join('\n\n'),
+			hunks,
 			content: vscode.l10n.t('tool.editsApplied', refreshed.length, refreshed.map((p) => `${p.relative}: ${p.count}`).join('\n'), note),
 		};
 	},

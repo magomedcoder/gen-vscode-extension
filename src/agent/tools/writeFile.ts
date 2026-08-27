@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatMiniDiff } from '../diff';
+import { computeMiniDiff, toDiffHunkPayloads } from '../diff';
 import { AGENT_LIMITS } from '../policy';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { denyWriteOverUserEdits } from '../userEdits';
@@ -101,10 +101,12 @@ export const writeFileTool: ToolDefinition = {
 			await ctx.revealFile(resolved.uri);
 		}
 
+		const mini = computeMiniDiff(before, content);
 		return {
 			ok: true,
 			path: resolved.relative,
-			diff: formatMiniDiff(before, content),
+			diff: mini.text,
+			hunks: toDiffHunkPayloads(mini.hunks, before, { path: resolved.relative }),
 			content: exists
 				? vscode.l10n.t('tool.fileOverwritten', resolved.relative, bytes.byteLength)
 				: vscode.l10n.t('tool.fileCreated', resolved.relative, bytes.byteLength),

@@ -127,6 +127,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'send':
 				await this.session.send(msg.text);
 				return;
+			case 'editMessage':
+				await this.session.editMessage(msg.id, msg.content);
+				return;
+			case 'reviewHunk':
+				await this.session.reviewHunk(msg.toolCallId, msg.hunkId, msg.action);
+				return;
+			case 'reviewDiff':
+				await this.session.reviewDiff(msg.toolCallId, msg.action);
+				return;
 			case 'mentionSuggest': {
 				const items = await suggestMentions(msg.query);
 				this.post({

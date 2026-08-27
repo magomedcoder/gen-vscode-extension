@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import type { LlmToolDefinition } from '../llm/types';
 import type { AgentCheckpoint } from './checkpoint';
+import type { DiffHunkPayload } from './diff';
 import type { StickyPlan } from './plan';
 import type { AgentWriteTracker } from './userEdits';
 
@@ -24,6 +25,7 @@ export interface ToolResult {
 	denied?: boolean;
 	path?: string;
 	diff?: string;
+	hunks?: DiffHunkPayload[];
 }
 
 export interface ToolDefinition {

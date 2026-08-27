@@ -5,7 +5,7 @@ import { applySearchReplace, PatchError } from '../agent/patch.js';
 import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy.js';
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit.js';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy.js';
-import { formatMiniDiff, pathFromToolArguments } from '../agent/diff.js';
+import { formatMiniDiff, computeMiniDiff, pathFromToolArguments, revertHunkInText } from '../agent/diff.js';
 import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../agent/plan.js';
 import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../agent/planFile.js';
 import { redactSecrets } from '../agent/secrets.js';
@@ -114,6 +114,30 @@ suite('formatMiniDiff', () => {
 		const diff = formatMiniDiff(before, after);
 		assert.ok(diff.includes('lines hidden'));
 		assert.ok(diff.split('\n').length <= 82);
+	});
+
+	test('несколько удалённых хунков', () => {
+		const before = 'a\nold1\nb\nold2\nc';
+		const after = 'a\nnew1\nb\nnew2\nc';
+		const mini = computeMiniDiff(before, after);
+		assert.ok(mini.hunks.length >= 2);
+		assert.strictEqual(revertHunkInText(after, mini.hunks[1]), 'a\nnew1\nb\nold2\nc');
+		assert.strictEqual(revertHunkInText(after, mini.hunks[0]), 'a\nold1\nb\nnew2\nc');
+	});
+});
+
+suite('revertHunkInText', () => {
+	test('откатывает замену', () => {
+		const before = 'keep\nold\nkeep2';
+		const after = 'keep\nnew\nkeep2';
+		const [hunk] = computeMiniDiff(before, after).hunks;
+		assert.strictEqual(revertHunkInText(after, hunk), before);
+	});
+
+	test('откатывает добавление файла', () => {
+		const after = 'line1\nline2';
+		const [hunk] = computeMiniDiff('', after).hunks;
+		assert.strictEqual(revertHunkInText(after, hunk), '');
 	});
 });
 
