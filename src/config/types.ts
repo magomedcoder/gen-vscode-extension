@@ -96,6 +96,15 @@ export interface GenSettings {
 	 */
 	authScheme: string;
 	/**
+	 * Писать план агента в `.gen/plan.md` в workspace.
+	 * Выключено - план только в памяти сессии.
+	 */
+	planWriteToFile: boolean;
+	/**
+	 * Показывать карточку активного плана над полем ввода в чате.
+	 */
+	showPlanCard: boolean;
+	/**
 	 * Писать логи в Output и в файлы. 
 	 * По умолчанию выключено.
 	 */
@@ -183,5 +192,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	secretPatterns: [],
 	authHeader: 'Authorization',
 	authScheme: 'Bearer',
+	planWriteToFile: true,
+	showPlanCard: true,
 	loggingEnabled: false,
 };

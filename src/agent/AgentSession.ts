@@ -143,6 +143,7 @@ export class AgentSession {
 					userEditsAppendix,
 					planAppendix,
 					planEditsAppendix,
+					planWriteToFile: settings.planWriteToFile,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -187,6 +188,7 @@ export class AgentSession {
 						userEditsAppendix,
 						planAppendix,
 						planEditsAppendix,
+						planWriteToFile: settings.planWriteToFile,
 					}),
 				};
 				params.ui.append({

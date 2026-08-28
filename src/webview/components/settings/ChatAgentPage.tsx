@@ -44,6 +44,25 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 					<option value="open">{t('settings.agentAuthLevel.open')}</option>
 				</select>
 			</label>
+			<label className="field field--row">
+				<input
+					type="checkbox"
+					checked={draft.planWriteToFile}
+					onChange={(e) => setField('planWriteToFile', e.target.checked)}
+				/>
+				<span className="field__label">{t('settings.planWriteToFile.label')}</span>
+			</label>
+			<span className="field__hint">{t('settings.planWriteToFile.hint')}</span>
+
+			<label className="field field--row">
+				<input
+					type="checkbox"
+					checked={draft.showPlanCard}
+					onChange={(e) => setField('showPlanCard', e.target.checked)}
+				/>
+				<span className="field__label">{t('settings.showPlanCard.label')}</span>
+			</label>
+			<span className="field__hint">{t('settings.showPlanCard.hint')}</span>
 		</>
 	);
 }

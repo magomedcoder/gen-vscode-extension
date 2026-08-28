@@ -7,9 +7,11 @@ export function buildAgentSystemPrompt(options?: {
 	userEditsAppendix?: string;
 	planAppendix?: string;
 	planEditsAppendix?: string;
+	planWriteToFile?: boolean;
 }): string {
 	const toolsAvailable = options?.toolsAvailable ?? true;
 	const authLevel = options?.authLevel ?? 'ask';
+	const planWriteToFile = options?.planWriteToFile !== false;
 	const deniedPaths = (options?.deniedPaths ?? []).map((item) => item.trim()).filter((item) => item && !item.startsWith('#'));
 
 	const lines = [
@@ -29,8 +31,12 @@ export function buildAgentSystemPrompt(options?: {
 			'Навигация: open_file, reveal_line, close_file. Состояние редактора: get_active_editor, get_open_editors.',
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). В режиме «Спросить» - confirm; в «Чтение» - запрещены; в «Без спроса» - без диалога.',
-			'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план сохраняется в `.gen/plan.md` и в сессии. Прогресс: update_plan. Один файл можно править без плана.',
-			'Пока активен план - следуй ему и файлу `.gen/plan.md` (пользователь может править файл руками; актуальный файл - канон). Новая задача: update_plan replace/clear или удаление `.gen/plan.md`.',
+			planWriteToFile
+				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план сохраняется в `.gen/plan.md` и в сессии. Прогресс: update_plan. Один файл можно править без плана.'
+				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план хранится только в сессии (файл плана отключён в настройках). Прогресс: update_plan. Один файл можно править без плана.',
+			planWriteToFile
+				? 'Пока активен план - следуй ему и файлу `.gen/plan.md` (пользователь может править файл руками; актуальный файл - канон). Новая задача: update_plan replace/clear или удаление `.gen/plan.md`.'
+				: 'Пока активен план - следуй ему (только в сессии). Новая задача: update_plan replace/clear.',
 			'Пути - относительно корня workspace. Учитывай `.gitignore` и `.genignore` в корне: игнорируемые файлы недоступны для tools.',
 			deniedPaths.length > 0
 				? `Также не трогай файлы по шаблонам из настроек: ${deniedPaths.join(', ')}.`

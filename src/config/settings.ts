@@ -84,6 +84,8 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		secretPatterns: normalizeStringList(raw.secretPatterns),
 		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,
 		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),
+		planWriteToFile: raw.planWriteToFile !== false,
+		showPlanCard: raw.showPlanCard !== false,
 		loggingEnabled: raw.loggingEnabled === true,
 	};
 }

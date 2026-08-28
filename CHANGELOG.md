@@ -15,6 +15,7 @@
 - Collapsible sticky plan card docked above the chat composer
 - Edit a user chat message; history after it is trimmed and the turn is resent
 - Per-hunk Accept / Reject on agent file diffs in the chat tool card
+- Settings: disable `.gen/plan.md` sync (`planWriteToFile`) and hide plan card in chat (`showPlanCard`)
 
 ## 0.1.0 (24 August 2026)
 

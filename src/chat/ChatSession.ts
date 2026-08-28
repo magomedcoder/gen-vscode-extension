@@ -68,12 +68,13 @@ export class ChatSession {
 	}
 
 	getState(): ChatViewState {
+		const settings = getSettings();
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
-			mode: getSettings().chatMode,
+			mode: settings.chatMode,
 			usage: sumUsage(this.messages),
-			stickyPlan: this.stickyPlan.toUi(),
+			stickyPlan: settings.showPlanCard ? this.stickyPlan.toUi() : undefined,
 			pendingConfirm: this.pendingConfirm
 				? {
 					id: this.pendingConfirm.id,
@@ -150,21 +151,25 @@ export class ChatSession {
 
 	private async flushPlan(): Promise<void> {
 		this.persistPlan();
-		await this.planStore.writeSnapshot(this.stickyPlan.snapshot());
+		if (getSettings().planWriteToFile) {
+			await this.planStore.writeSnapshot(this.stickyPlan.snapshot());
+		}
 		this.emit();
 	}
 
 	private async bootstrapPlan(): Promise<void> {
 		const fromState = this.stickyPlan.snapshot();
-		this.planStore.seedCanonicalFromPlan(fromState);
-		const raw = await this.planStore.readRaw();
-		if ((raw === undefined || !raw.trim()) && fromState?.steps.length) {
-			await this.planStore.writeSnapshot(fromState);
-		} else {
-			const result = await this.planStore.reload(this.stickyPlan);
-			if (result.parseError) {
-				// оставляем план из workspaceState в памяти
-				this.planStore.seedCanonicalFromPlan(fromState);
+		if (getSettings().planWriteToFile) {
+			this.planStore.seedCanonicalFromPlan(fromState);
+			const raw = await this.planStore.readRaw();
+			if ((raw === undefined || !raw.trim()) && fromState?.steps.length) {
+				await this.planStore.writeSnapshot(fromState);
+			} else {
+				const result = await this.planStore.reload(this.stickyPlan);
+				if (result.parseError) {
+					// оставляем план из workspaceState в памяти
+					this.planStore.seedCanonicalFromPlan(fromState);
+				}
 			}
 		}
 		this.persistPlan();
@@ -173,7 +178,7 @@ export class ChatSession {
 	}
 
 	private async onPlanFileExternallyChanged(): Promise<void> {
-		if (!this.planBootstrapped || this.inflight) {
+		if (!this.planBootstrapped || this.inflight || !getSettings().planWriteToFile) {
 			return;
 		}
 
@@ -186,6 +191,10 @@ export class ChatSession {
 	}
 
 	private async reloadPlanForTurn(): Promise<{ planEditsAppendix?: string; parseError?: string }> {
+		if (!getSettings().planWriteToFile) {
+			return {};
+		}
+
 		const result = await this.planStore.reload(this.stickyPlan);
 		this.persistPlan();
 		this.emit();
@@ -285,6 +294,11 @@ export class ChatSession {
 	}
 
 	async openPlan(): Promise<void> {
+		if (!getSettings().planWriteToFile) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('plan.fileDisabled'));
+			return;
+		}
+
 		await this.planStore.openInEditor();
 	}
 
