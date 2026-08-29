@@ -31,11 +31,16 @@
 | `reveal_line`          | Перейти к строке                                       | нет                                                                           |
 | `git_status`           | `git status` + `diff --stat` (без commit/push)         | нет                                                                           |
 | `get_diagnostics`      | Ошибки TS/ESLint и т.п.                                | нет                                                                           |
+| `find_logs`            | Найти `*.log` / `logs/` в workspace                    | нет                                                                           |
+| `read_log_tail`        | Хвост лог-файла (последние N строк)                    | нет                                                                           |
+| `open_browser`         | Открыть URL в Simple Browser VS Code                   | Спросить                                                                      |
+| `fetch_page`           | HTTP GET текста/HTML страницы (Design Mode)            | Спросить; remote (не localhost) - всегда confirm                              |
 | `run_command`          | Команда в cwd workspace (allow + denylist)             | Спросить                                                                      |
 | `run_tests`            | Тесты проекта (npm / go / cargo / pytest)              | Спросить                                                                      |
 
 ## Замечания
 
+- Режимы чата **Debug** / **Design** - тот же agent loop со спец. system prompt. Debug: `find_logs` + `read_log_tail` + диагностики; Design: `open_browser` + `fetch_page` (без выполнения JS / кликов пока).
 - Несколько файлов: сначала `propose_plan` -> файл `.gen/plan.md`; прогресс - `update_plan`. План переживает «Очистить» чат.
 - Большой файл: короткая заготовка `write_file`, дальше `apply_patch` кусками.
 - Обзор проекта: `codebase_search` по фоновому индексу; точный grep - `search_files`.

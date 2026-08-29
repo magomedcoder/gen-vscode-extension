@@ -17,6 +17,10 @@ export const AGENT_LIMITS = {
 	maxWorkspaceEdits: 20,
 	maxPlanSteps: 20,
 	maxSelectionChars: 2_000,
+	maxLogTailLines: 200,
+	maxLogTailBytes: 80_000,
+	maxFindLogs: 40,
+	maxFetchPageBytes: 120_000,
 } as const;
 
 export class PathPolicyError extends Error {

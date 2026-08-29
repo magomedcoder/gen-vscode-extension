@@ -31,11 +31,16 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 | `reveal_line`          | Jump to a line                                   | no                                                                  |
 | `git_status`           | `git status` + `diff --stat` (no commit/push)    | no                                                                  |
 | `get_diagnostics`      | TS/ESLint errors, etc.                           | no                                                                  |
+| `find_logs`            | Find `*.log` / `logs/` in the workspace          | no                                                                  |
+| `read_log_tail`        | Last N lines of a log file                       | no                                                                  |
+| `open_browser`         | Open URL in VS Code Simple Browser               | Ask                                                                 |
+| `fetch_page`           | HTTP GET page text/HTML (Design Mode)            | Ask; remote (non-localhost) always confirms                         |
 | `run_command`          | Command in workspace cwd (allow + denylist)      | Ask                                                                 |
 | `run_tests`            | Project tests (npm / go / cargo / pytest)        | Ask                                                                 |
 
 ## Notes
 
+- Chat modes **Debug** / **Design** use the same agent loop with a focused system prompt. Debug prefers `find_logs` + `read_log_tail` + diagnostics; Design uses `open_browser` + `fetch_page` (no JS execution / no clicks yet).
 - Multiple files: start with `propose_plan` -> `.gen/plan.md`; progress via `update_plan`. The plan survives **Clear** chat.
 - Large file: short `write_file` scaffold, then `apply_patch` in chunks.
 - Project overview: `codebase_search` on the background index; exact grep - `search_files`.

@@ -21,6 +21,10 @@ import { runTestsTool } from './runTests';
 import { searchFilesTool } from './searchFiles';
 import { codebaseSearchTool } from './codebaseSearch';
 import { writeFileTool } from './writeFile';
+import { findLogsTool } from './findLogs';
+import { readLogTailTool } from './readLogTail';
+import { openBrowserTool } from './openBrowser';
+import { fetchPageTool } from './fetchPage';
 
 const TOOLS: ToolDefinition[] = [
 	getWorkspaceInfoTool,
@@ -30,6 +34,8 @@ const TOOLS: ToolDefinition[] = [
 	readFileTool,
 	searchFilesTool,
 	codebaseSearchTool,
+	findLogsTool,
+	readLogTailTool,
 	proposePlanTool,
 	updatePlanTool,
 	writeFileTool,
@@ -40,6 +46,8 @@ const TOOLS: ToolDefinition[] = [
 	openFileTool,
 	closeFileTool,
 	revealLineTool,
+	openBrowserTool,
+	fetchPageTool,
 	gitStatusTool,
 	getDiagnosticsTool,
 	runCommandTool,

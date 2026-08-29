@@ -29,9 +29,10 @@ Comment command
 
 ## Sticky plan
 
-- После approve `propose_plan` план пишется в **`.gen/plan.md`** (+ кэш `workspaceState`).
+- После approve `propose_plan` план пишется в **`.gen/plan.md`**, если включён `planWriteToFile`; в памяти - только на текущую сессию.
+- При перезапуске расширения / workspace план загружается из **`.gen/plan.md`**, не из storage.
 - «Очистить» чат **не** сбрасывает план; сброс - `update_plan clear` / удаление `.gen/plan.md`.
-- Перед agent turn файл перечитывается; ручной diff -> system prompt; карточка «Открыть» / watcher для UI.
+- Перед agent turn файл перечитывается; ручной diff -> system prompt; watcher на правки файла снаружи.
 
 ## Индекс кодовой базы
 

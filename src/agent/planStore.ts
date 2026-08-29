@@ -121,14 +121,9 @@ export class WorkspacePlanStore {
 		return result;
 	}
 
-	// Задать канонический текст из текущего плана в памяти (после restore из workspaceState, до первой синхронизации с диском)
-	seedCanonicalFromPlan(snap: StickyPlanSnapshot | undefined): void {
-		if (!snap?.steps.length) {
-			this.lastCanonical = '';
-			return;
-		}
-		
-		this.lastCanonical = serializePlanMarkdown(snap);
+	// Сбросить канон для diff; план загружается заново из `.gen/plan.md`
+	resetCanonical(): void {
+		this.lastCanonical = '';
 	}
 
 	async openInEditor(): Promise<void> {

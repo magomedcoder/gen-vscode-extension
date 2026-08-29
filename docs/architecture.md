@@ -29,9 +29,10 @@ Comment command
 
 ## Sticky plan
 
-- After approving `propose_plan`, the plan is written to **`.gen/plan.md`** (+ `workspaceState` cache).
+- After approving `propose_plan`, the plan is written to **`.gen/plan.md`** when `planWriteToFile` is enabled; in-memory cache for the current session only.
+- On extension / workspace restart the plan loads from **`.gen/plan.md`**, not persisted storage.
 - **Clear** chat does **not** reset the plan; reset via `update_plan clear` / delete `.gen/plan.md`.
-- Before an agent turn the file is re-read; manual diff -> system prompt; “Open” card / watcher for UI.
+- Before an agent turn the file is re-read; manual diff -> system prompt; file watcher for external edits.
 
 ## Codebase index
 

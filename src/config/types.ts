@@ -1,12 +1,17 @@
-export type ChatMode = 'ask' | 'agent';
+export type ChatMode = 'ask' | 'agent' | 'debug' | 'design';
 export type AgentAuthLevel = 'auto' | 'ask' | 'open';
 export type CommentStyle = 'inline' | 'block';
+
+// Режимы с tool-calling (не «просто чат»)
+export function isAgentLikeMode(mode: ChatMode): boolean {
+	return mode === 'agent' || mode === 'debug' || mode === 'design';
+}
 
 export interface GenSettings {
 	baseUrl: string;
 	model: string;
 	/**
-	 * Режим чата по умолчанию: ask (без tools) или agent (tool-calling)
+	 * Режим чата по умолчанию: ask / agent / debug / design
 	 */
 	chatMode: ChatMode;
 	/**
@@ -101,10 +106,6 @@ export interface GenSettings {
 	 */
 	planWriteToFile: boolean;
 	/**
-	 * Показывать карточку активного плана над полем ввода в чате.
-	 */
-	showPlanCard: boolean;
-	/**
 	 * Писать логи в Output и в файлы. 
 	 * По умолчанию выключено.
 	 */
@@ -193,6 +194,5 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	authHeader: 'Authorization',
 	authScheme: 'Bearer',
 	planWriteToFile: true,
-	showPlanCard: true,
 	loggingEnabled: false,
 };

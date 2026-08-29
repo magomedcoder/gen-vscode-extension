@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
 import { initApiKeyStore } from './apiKey';
-import { DEFAULT_SETTINGS, type AgentAuthLevel, type GenSettings } from './types';
-
+import { DEFAULT_SETTINGS } from './types';
+import type { AgentAuthLevel, ChatMode, GenSettings } from './types';
 export type { AgentAuthLevel, ChatMode, CommentStyle, GenSettings } from './types';
-export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from './types';
+export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, isAgentLikeMode } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 
 const STORAGE_KEY = 'gen.settings';
@@ -60,9 +60,18 @@ function normalizeAuthLevel(raw: Partial<GenSettings> & { agentConfirmWrites?: b
 	return 'ask';
 }
 
+function normalizeChatMode(raw: unknown): ChatMode {
+	const mode = String(raw ?? '');
+	if (mode === 'agent' || mode === 'debug' || mode === 'design') {
+		return mode;
+	}
+
+	return 'ask';
+}
+
 function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean }): GenSettings {
 	const commentStyle = raw.commentStyle === 'block' ? 'block' : 'inline';
-	const chatMode = raw.chatMode === 'agent' ? 'agent' : 'ask';
+	const chatMode = normalizeChatMode(raw.chatMode);
 
 	return {
 		baseUrl: String(raw.baseUrl ?? '').trim(),
@@ -85,7 +94,6 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,
 		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),
 		planWriteToFile: raw.planWriteToFile !== false,
-		showPlanCard: raw.showPlanCard !== false,
 		loggingEnabled: raw.loggingEnabled === true,
 	};
 }

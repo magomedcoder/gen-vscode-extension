@@ -127,7 +127,7 @@ function toStickySteps(plan: AgentPlan): StickyPlanStep[] {
 	}));
 }
 
-// План сессии: живёт между agent turn, пока не очистят / не удалят файл
+// План сессии: in-memory кэш; при старте и перед ходом агента подгружается из `.gen/plan.md`
 export class StickyPlan {
 	private title = '';
 	private steps: StickyPlanStep[] = [];

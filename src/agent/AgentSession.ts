@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
+import type { ChatMode } from '../config/types';
 import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { pathFromToolArguments } from './diff';
@@ -115,6 +116,7 @@ export class AgentSession {
 		checkpoint?: AgentCheckpoint;
 		writes?: AgentWriteTracker;
 		planEditsAppendix?: string;
+		mode?: ChatMode;
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = settings.agentMaxIterations;
@@ -123,6 +125,7 @@ export class AgentSession {
 		const plan = params.plan ?? new StickyPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
 		const writes = params.writes;
+		const agentMode: ChatMode = params.mode === 'debug' || params.mode === 'design' ? params.mode : 'agent';
 		clearIgnoreCache();
 
 		const userContent = params.editorContext
@@ -144,6 +147,7 @@ export class AgentSession {
 					planAppendix,
 					planEditsAppendix,
 					planWriteToFile: settings.planWriteToFile,
+					mode: agentMode,
 				})
 			},
 			...historyToApiMessages(params.history),
@@ -189,6 +193,7 @@ export class AgentSession {
 						planAppendix,
 						planEditsAppendix,
 						planWriteToFile: settings.planWriteToFile,
+						mode: agentMode,
 					}),
 				};
 				params.ui.append({

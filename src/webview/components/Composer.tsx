@@ -256,6 +256,22 @@ export function Composer({ busy, mode }: ComposerProps) {
 						>
 							{t('chat.composer.modeAgent')}
 						</button>
+						<button
+							type="button"
+							className={`mode-toggle__btn${mode === 'debug' ? ' mode-toggle__btn--active' : ''}`}
+							disabled={busy}
+							onClick={() => setMode('debug')}
+						>
+							{t('chat.composer.modeDebug')}
+						</button>
+						<button
+							type="button"
+							className={`mode-toggle__btn${mode === 'design' ? ' mode-toggle__btn--active' : ''}`}
+							disabled={busy}
+							onClick={() => setMode('design')}
+						>
+							{t('chat.composer.modeDesign')}
+						</button>
 					</div>
 					{busy ? (
 						<button

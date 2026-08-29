@@ -12,10 +12,10 @@
 - Localization: chat/settings webview + host UI strings via `l10n/bundle.l10n*.json` (EN/RU; add more locales by dropping in a new bundle)
 - Opt-in project setup: do not create `.gen/` on folder open; Gen chat shows **Create config & index** (writes `.gen/config.json` + builds index)
 - Composer context chips for `@file` / `@folder` / `@codebase` (pick from autocomplete, remove before send)
-- Collapsible sticky plan card docked above the chat composer
 - Edit a user chat message; history after it is trimmed and the turn is resent
 - Per-hunk Accept / Reject on agent file diffs in the chat tool card
-- Settings: disable `.gen/plan.md` sync (`planWriteToFile`) and hide plan card in chat (`showPlanCard`)
+- Settings: disable `.gen/plan.md` sync (`planWriteToFile`); on restart the plan loads from file, not workspaceState
+- Chat modes **Debug** / **Design**: log tools (`find_logs`, `read_log_tail`) and Simple Browser / `fetch_page`
 
 ## 0.1.0 (24 August 2026)
 

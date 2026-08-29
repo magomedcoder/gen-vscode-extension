@@ -15,6 +15,8 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 				>
 					<option value="ask">{t('settings.chatMode.ask')}</option>
 					<option value="agent">{t('settings.chatMode.agent')}</option>
+					<option value="debug">{t('settings.chatMode.debug')}</option>
+					<option value="design">{t('settings.chatMode.design')}</option>
 				</select>
 			</label>
 
@@ -53,16 +55,6 @@ export function ChatAgentPage({ draft, setField }: SettingsPageProps) {
 				<span className="field__label">{t('settings.planWriteToFile.label')}</span>
 			</label>
 			<span className="field__hint">{t('settings.planWriteToFile.hint')}</span>
-
-			<label className="field field--row">
-				<input
-					type="checkbox"
-					checked={draft.showPlanCard}
-					onChange={(e) => setField('showPlanCard', e.target.checked)}
-				/>
-				<span className="field__label">{t('settings.showPlanCard.label')}</span>
-			</label>
-			<span className="field__hint">{t('settings.showPlanCard.hint')}</span>
 		</>
 	);
 }

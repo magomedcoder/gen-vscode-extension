@@ -2,7 +2,6 @@ import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
 import { ConfirmCard } from './components/ConfirmCard';
 import { MessageList } from './components/MessageList';
-import { PlanCard } from './components/PlanCard';
 import { ProjectSetupBanner } from './components/ProjectSetupBanner';
 import { SettingsScreen } from './components/SettingsScreen';
 import { useGenBridge } from './useGenBridge';
@@ -47,7 +46,6 @@ export function App() {
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
 			<div className="composer-dock">
-				{chat.stickyPlan ? <PlanCard plan={chat.stickyPlan} /> : null}
 				<Composer busy={chat.busy || confirming} mode={chat.mode} />
 			</div>
 		</div>
