@@ -7,6 +7,7 @@ export function buildAgentSystemPrompt(options?: {
 	userEditsAppendix?: string;
 	planAppendix?: string;
 	planEditsAppendix?: string;
+	genRulesAppendix?: string;
 	planWriteToFile?: boolean;
 	// Фокус режима: agent (по умолчанию), debug, design
 	mode?: ChatMode;
@@ -82,6 +83,11 @@ export function buildAgentSystemPrompt(options?: {
 	const planEditsAppendix = options?.planEditsAppendix?.trim();
 	if (planEditsAppendix) {
 		lines.push(planEditsAppendix);
+	}
+
+	const genRulesAppendix = options?.genRulesAppendix?.trim();
+	if (genRulesAppendix) {
+		lines.push(genRulesAppendix);
 	}
 
 	const appendix = options?.userEditsAppendix?.trim();

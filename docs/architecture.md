@@ -34,6 +34,11 @@ Comment command
 - **Clear** chat does **not** reset the plan; reset via `update_plan clear` / delete `.gen/plan.md`.
 - Before an agent turn the file is re-read; manual diff -> system prompt; file watcher for external edits.
 
+## Project rules (`.genrules`)
+
+- Optional markdown/text file in the workspace root: coding style, architecture, team conventions.
+- Loaded at extension start and on file change; injected into agent, ask, and comment prompts (truncated at 12k chars).
+
 ## Codebase index
 
 - Background indexing into `.gen/index/manifest.json` (`src/index/`).

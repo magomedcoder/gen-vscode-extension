@@ -8,6 +8,7 @@ import { AgentCheckpoint } from './checkpoint';
 import { clearIgnoreCache } from './gitIgnore';
 import { formatStickyPlanForPrompt, StickyPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
+import { getGenRulesManager } from '../project/genrules';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
 import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
@@ -136,6 +137,7 @@ export class AgentSession {
 		const planSnap = plan.snapshot();
 		const planAppendix = planSnap?.approved ? formatStickyPlanForPrompt(planSnap) : '';
 		const planEditsAppendix = params.planEditsAppendix?.trim() ?? '';
+		const genRulesAppendix = getGenRulesManager()?.getPromptAppendix() ?? '';
 		const apiMessages: ChatMessage[] = [
 			{
 				role: 'system',
@@ -146,6 +148,7 @@ export class AgentSession {
 					userEditsAppendix,
 					planAppendix,
 					planEditsAppendix,
+					genRulesAppendix,
 					planWriteToFile: settings.planWriteToFile,
 					mode: agentMode,
 				})
@@ -192,6 +195,7 @@ export class AgentSession {
 						userEditsAppendix,
 						planAppendix,
 						planEditsAppendix,
+						genRulesAppendix,
 						planWriteToFile: settings.planWriteToFile,
 						mode: agentMode,
 					}),

@@ -16,6 +16,7 @@
 - Per-hunk Accept / Reject on agent file diffs in the chat tool card
 - Settings: disable `.gen/plan.md` sync (`planWriteToFile`); on restart the plan loads from file, not workspaceState
 - Chat modes **Debug** / **Design**: log tools (`find_logs`, `read_log_tail`) and Simple Browser / `fetch_page`
+- **`.genrules`** - optional workspace rules file injected into agent, ask, and comment prompts
 
 ## 0.1.0 (24 August 2026)
 

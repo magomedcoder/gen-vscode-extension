@@ -1,16 +1,26 @@
 import type { ChatMessage } from '../llm/types';
 import type { ChatUiMessage } from './protocol';
 
-const SYSTEM_PROMPT = [
+const SYSTEM_PROMPT_BASE = [
 	'Ты Gen - помощник программиста в VS Code.',
 	'Отвечай по делу, на языке пользователя.',
 	'Если в запросе есть контекст редактора (файл, выделение), опирайся на него.',
 ].join(' ');
 
+function buildAskSystemPrompt(genRulesAppendix?: string): string {
+	const appendix = genRulesAppendix?.trim();
+	if (!appendix) {
+		return SYSTEM_PROMPT_BASE;
+	}
+
+	return `${SYSTEM_PROMPT_BASE} ${appendix}`;
+}
+
 export function buildChatCompletionMessages(
 	messages: ChatUiMessage[],
 	latestUserText: string,
 	editorContext?: string,
+	genRulesAppendix?: string,
 ): ChatMessage[] {
 	const prior = messages.filter((m): m is ChatUiMessage & { role: 'user' | 'assistant' } => (m.role === 'user' || m.role === 'assistant') && !m.toolCalls?.length && Boolean(m.content))
 	.slice(0, -1)
@@ -24,7 +34,7 @@ export function buildChatCompletionMessages(
 	return [
 		{ 
 			role: 'system',
-			content: SYSTEM_PROMPT
+			content: buildAskSystemPrompt(genRulesAppendix)
 		},
 		...prior,
 		{

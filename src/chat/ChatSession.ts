@@ -17,6 +17,7 @@ import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
 import type { DiffHunkPayload } from '../agent/diff';
 import { revertHunkInText } from '../agent/diff';
 import { pathExists, resolveWorkspacePath } from '../agent/workspacePath';
+import { getGenRulesManager } from '../project/genrules';
 
 const STORAGE_KEY = 'gen.chat.messages';
 const MAX_STORED = 80;
@@ -575,6 +576,7 @@ export class ChatSession {
 						historyForAsk,
 						llmUserText,
 						mergedContext,
+						getGenRulesManager()?.getPromptAppendix(),
 					),
 					signal: controller.signal,
 					onDelta: (chunk) => {

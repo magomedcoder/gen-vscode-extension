@@ -1,5 +1,6 @@
 import type { CommentStyle } from '../config/settings';
 import type { ChatMessage } from '../llm/types';
+import { getGenRulesManager } from '../project/genrules';
 import { formatFewShotUser, pickFewShot } from './commentFewShot';
 
 export interface CommentPromptInput {
@@ -29,6 +30,11 @@ function buildSystemPrompt(input: CommentPromptInput): string {
 
 	if (input.commentSystemPrompt.trim()) {
 		parts.push(input.commentSystemPrompt.trim());
+	}
+
+	const genRules = getGenRulesManager()?.getPromptAppendix();
+	if (genRules) {
+		parts.push(genRules);
 	}
 
 	return parts.join(' ');

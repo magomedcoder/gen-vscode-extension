@@ -5,12 +5,14 @@ import { registerCommentFile } from './commands/commentFile';
 import { initSettings } from './config/settings';
 import { initIndexManager } from './index/IndexManager';
 import { initLogger } from './log/logger';
+import { initGenRulesManager } from './project/genrules';
 import { DiffContentProvider, registerDiffContentProvider } from './preview/showDiff';
 
 export function activate(context: vscode.ExtensionContext): void {
 	initSettings(context);
 	initLogger(context);
 	initIndexManager(context);
+	initGenRulesManager(context);
 
 	const diffProvider = new DiffContentProvider();
 
