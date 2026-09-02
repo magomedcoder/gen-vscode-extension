@@ -5,6 +5,7 @@ import { vscodeApi } from '../vscodeApi';
 
 interface ComposerProps {
 	busy: boolean;
+	queuedCount: number;
 	mode: ChatMode;
 }
 
@@ -43,7 +44,7 @@ function chipFromSuggestion(item: MentionSuggestion): ContextChip {
 	};
 }
 
-export function Composer({ busy, mode }: ComposerProps) {
+export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 	const [draft, setDraft] = useState('');
 	const [chips, setChips] = useState<ContextChip[]>([]);
 	const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
@@ -125,7 +126,7 @@ export function Composer({ busy, mode }: ComposerProps) {
 		const question = draft.trim();
 		const prefix = chips.map((c) => c.insert).join(' ').trim();
 		const text = [prefix, question].filter(Boolean).join(' ').trim();
-		if (!text || busy) {
+		if (!text) {
 			return;
 		}
 
@@ -173,11 +174,11 @@ export function Composer({ busy, mode }: ComposerProps) {
 		}
 	};
 
-	const canSend = (Boolean(draft.trim()) || chips.length > 0) && !busy;
+	const canSend = Boolean(draft.trim()) || chips.length > 0;
 
 	return (
 		<form className="composer" onSubmit={onSubmit}>
-			<div className={`composer__box${busy ? ' composer__box--disabled' : ''}`}>
+			<div className="composer__box">
 				{suggestions.length > 0 && (
 					<ul className="mention-menu" role="listbox">
 						{suggestions.map((item, i) => (
@@ -207,14 +208,18 @@ export function Composer({ busy, mode }: ComposerProps) {
 									type="button"
 									className="composer-chip__remove"
 									aria-label={t('chat.composer.removeChip', chip.label)}
-									disabled={busy}
 									onClick={() => removeChip(chip.id)}
 								>
-									Закрыть
+									*
 								</button>
 							</li>
 						))}
 					</ul>
+				) : null}
+				{queuedCount > 0 ? (
+					<div className="composer-queue" role="status">
+						{t('chat.composer.queued', queuedCount)}
+					</div>
 				) : null}
 				<textarea
 					ref={textareaRef}
@@ -222,7 +227,6 @@ export function Composer({ busy, mode }: ComposerProps) {
 					rows={2}
 					value={draft}
 					placeholder={busy ? t('chat.composer.placeholderBusy') : t('chat.composer.placeholder')}
-					disabled={busy}
 					onChange={(e) => {
 						const next = e.target.value;
 						setDraft(next);
@@ -273,19 +277,24 @@ export function Composer({ busy, mode }: ComposerProps) {
 							{t('chat.composer.modeDesign')}
 						</button>
 					</div>
-					{busy ? (
+					<div className="composer__actions">
+						{busy ? (
+							<button
+								className="btn btn--secondary composer__btn"
+								type="button"
+								onClick={() => vscodeApi.postMessage({ type: 'cancel' })}
+							>
+								{t('chat.composer.stop')}
+							</button>
+						) : null}
 						<button
-							className="btn btn--secondary composer__btn"
-							type="button"
-							onClick={() => vscodeApi.postMessage({ type: 'cancel' })}
+							className="btn composer__btn"
+							type="submit"
+							disabled={!canSend}
 						>
-							{t('chat.composer.stop')}
+							{busy ? t('chat.composer.queue') : t('chat.composer.send')}
 						</button>
-					) : (
-						<button className="btn composer__btn" type="submit" disabled={!canSend}>
-							{t('chat.composer.send')}
-						</button>
-					)}
+					</div>
 				</div>
 			</div>
 		</form>

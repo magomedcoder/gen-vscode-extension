@@ -57,6 +57,8 @@ export interface ChatProjectStatus {
 export interface ChatViewState {
 	messages: ChatUiMessage[];
 	busy: boolean;
+	// Сообщения в очереди, пока идёт текущий turn
+	queuedCount: number;
 	mode: ChatMode;
 	usage?: TokenUsage;
 	pendingConfirm?: PendingConfirm;

@@ -7,6 +7,7 @@ import type { ConfirmChoice } from '../agent/types';
 import { AgentWriteTracker } from '../agent/userEdits';
 import { getSettings, isAgentLikeMode, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
+import { writeLog } from '../log/logger';
 import type { LlmClient } from '../llm/types';
 import { sumUsage } from '../llm/usage';
 import { resolveMentions } from './mentions';
@@ -21,6 +22,8 @@ import { getGenRulesManager } from '../project/genrules';
 
 const STORAGE_KEY = 'gen.chat.messages';
 const MAX_STORED = 80;
+// Максимум сообщений в очереди, пока занят текущий turn
+const MAX_TURN_QUEUE = 8;
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -47,6 +50,7 @@ export class ChatSession {
 	private clearSeq = 0;
 	private pendingConfirm?: PendingConfirmInternal;
 	private planBootstrapped = false;
+	private readonly turnQueue: string[] = [];
 	private readonly subs: vscode.Disposable[] = [];
 
 	constructor(
@@ -80,6 +84,7 @@ export class ChatSession {
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
+			queuedCount: this.turnQueue.length,
 			mode: settings.chatMode,
 			usage: sumUsage(this.messages),
 			pendingConfirm: this.pendingConfirm
@@ -283,6 +288,7 @@ export class ChatSession {
 
 	clear(): void {
 		this.clearSeq += 1;
+		this.turnQueue.length = 0;
 		this.inflight?.abort();
 		this.inflight = undefined;
 		this.settleConfirm('abort');
@@ -292,9 +298,12 @@ export class ChatSession {
 		this.emit();
 	}
 
+	// Стоп: прервать текущий turn и сбросить очередь ожидающих сообщений
 	cancel(): void {
+		this.turnQueue.length = 0;
 		this.inflight?.abort();
 		this.settleConfirm('abort');
+		this.emit();
 	}
 
 	// Правит сообщение пользователя, отбрасывает всё после него и заново запускает ход
@@ -484,7 +493,22 @@ export class ChatSession {
 
 	async send(text: string): Promise<void> {
 		const trimmed = text.trim();
-		if (!trimmed || this.inflight) {
+		if (!trimmed) {
+			return;
+		}
+
+		if (this.inflight) {
+			if (this.turnQueue.length >= MAX_TURN_QUEUE) {
+				this.append({
+					id: messageId(),
+					role: 'error',
+					content: vscode.l10n.t('chat.error.queueFull', MAX_TURN_QUEUE),
+				});
+				return;
+			}
+
+			this.turnQueue.push(trimmed);
+			this.emit();
 			return;
 		}
 
@@ -494,6 +518,27 @@ export class ChatSession {
 			content: trimmed,
 		});
 		await this.runTurn(trimmed);
+	}
+
+	// После завершения turn - взять следующее из очереди
+	private async drainTurnQueue(): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const next = this.turnQueue.shift();
+		if (!next) {
+			this.emit();
+			return;
+		}
+
+		this.emit();
+		this.append({
+			id: messageId(),
+			role: 'user',
+			content: next,
+		});
+		await this.runTurn(next);
 	}
 
 	// Запуск хода: последнее сообщение уже user с этим текстом
@@ -626,5 +671,12 @@ export class ChatSession {
 				this.writes.clear();
 			}
 		}
+
+		const usage = sumUsage(this.messages);
+		if (usage && usage.totalTokens > 0) {
+			writeLog('agent', `[${new Date().toISOString()}] session tokens prompt=${usage.promptTokens} completion=${usage.completionTokens} total=${usage.totalTokens}`);
+		}
+
+		await this.drainTurnQueue();
 	}
 }

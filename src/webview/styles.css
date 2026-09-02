@@ -801,6 +801,20 @@ body {
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.composer__actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+.composer-queue {
+	font-size: 11px;
+	opacity: 0.75;
+	padding: 0 10px 4px;
 }
 
 .composer__btn {

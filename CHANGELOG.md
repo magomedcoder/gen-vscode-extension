@@ -17,6 +17,7 @@
 - Settings: disable `.gen/plan.md` sync (`planWriteToFile`); on restart the plan loads from file, not workspaceState
 - Chat modes **Debug** / **Design**: log tools (`find_logs`, `read_log_tail`) and Simple Browser / `fetch_page`
 - **`.genrules`** - optional workspace rules file injected into agent, ask, and comment prompts
+- Chat turn queue while busy (Composer **Queue**; **Stop** / **Clear** drop the queue); session token totals logged to agent Output
 
 ## 0.1.0 (24 August 2026)
 

@@ -15,6 +15,7 @@
 - Настройки: отключить запись `.gen/plan.md` (`planWriteToFile`); при перезапуске план загружается из файла, не из workspaceState
 - Режимы чата **Debug** / **Design**: tools логов (`find_logs`, `read_log_tail`) и Simple Browser / `fetch_page`
 - **`.genrules`** - опциональный файл правил проекта в system prompt agent / ask / комментариев
+- Очередь turns при занятом агенте (**В очередь**; **Стоп** / **Очистить** сбрасывают очередь); итог токенов сессии в лог agent
 
 ## 0.1.0 (24 августа 2026)
 

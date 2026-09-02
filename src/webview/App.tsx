@@ -46,7 +46,7 @@ export function App() {
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
 			<div className="composer-dock">
-				<Composer busy={chat.busy || confirming} mode={chat.mode} />
+				<Composer busy={chat.busy || confirming} queuedCount={chat.queuedCount ?? 0} mode={chat.mode} />
 			</div>
 		</div>
 	);

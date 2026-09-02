@@ -8,6 +8,7 @@ import { vscodeApi } from './vscodeApi';
 const EMPTY_CHAT: ChatViewState = {
 	messages: [],
 	busy: false,
+	queuedCount: 0,
 	mode: 'ask',
 };
 
