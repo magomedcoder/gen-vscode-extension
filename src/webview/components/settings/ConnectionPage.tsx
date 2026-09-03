@@ -1,10 +1,11 @@
+import type { LlmModelOption } from '../../../llm/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 
 interface ConnectionPageProps extends SettingsPageProps {
 	apiKeySet: boolean;
 	apiKeyDraft: string;
-	models: string[];
+	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
 	onApiKeyDraft: (value: string) => void;
@@ -22,7 +23,12 @@ export function ConnectionPage({
 	onApiKeyDraft,
 	onLoadModels,
 }: ConnectionPageProps) {
-	const modelOptions = draft.model && !models.includes(draft.model) ? [draft.model, ...models] : models;
+	const modelOptions = draft.model && !models.some((item) => item.id === draft.model)
+		? [{
+			id: draft.model,
+			label: draft.model
+		}, ...models]
+		: models;
 
 	return (
 		<>
@@ -84,7 +90,11 @@ export function ConnectionPage({
 						{modelOptions.length === 0 ? (
 							<option value="">{modelsLoading ? t('settings.model.loading') : t('settings.model.empty')}</option>
 						) : (
-							modelOptions.map((id) => (<option key={id} value={id}>{id}</option>))
+							modelOptions.map((item) => (
+								<option key={item.id} value={item.id} title={item.id}>
+									{item.label}
+								</option>
+							))
 						)}
 					</select>
 					<button

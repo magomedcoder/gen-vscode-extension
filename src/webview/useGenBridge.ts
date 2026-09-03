@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatViewState, PanelScreen, ToWebviewMessage } from '../chat/protocol';
 import type { GenSettings } from '../config/types';
 import { DEFAULT_SETTINGS } from '../config/types';
+import type { LlmModelOption } from '../llm/types';
 import { t } from './i18n';
 import { vscodeApi } from './vscodeApi';
 
@@ -22,7 +23,7 @@ export function useGenBridge() {
 	const [settings, setSettings] = useState<GenSettings>(DEFAULT_SETTINGS);
 	const [apiKeySet, setApiKeySet] = useState(false);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
-	const [models, setModels] = useState<string[]>([]);
+	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
 	const [modelsLoading, setModelsLoading] = useState(false);
 	const modelsRequestId = useRef(0);
@@ -61,6 +62,18 @@ export function useGenBridge() {
 							? t('settings.models.empty')
 							: t('settings.models.loaded', data.models.length),
 					);
+					if (data.models.length > 0) {
+						setSettings((prev) => {
+							if (prev.model && data.models.some((item) => item.id === prev.model)) {
+								return prev;
+							}
+
+							return {
+								...prev,
+								model: data.models[0].id,
+							};
+						});
+					}
 					return;
 				case 'modelsError':
 					if (data.requestId !== modelsRequestId.current) {

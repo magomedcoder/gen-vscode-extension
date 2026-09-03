@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { getApiKey, buildAuthHeaders } from '../config/apiKey';
-import { getSettings, type GenSettings } from '../config/settings';
+import { getSettings, setSessionModel, type GenSettings } from '../config/settings';
 import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
 import { logLlm } from './log';
+import { parseModelsListResponse, type LlmModelOption } from './modelLabel';
 import { parseUsage } from './usage';
 import type {
 	ChatMessage,
@@ -38,6 +39,7 @@ interface ChatCompletionsResponse {
 interface ModelsListResponse {
 	data?: Array<{
 		id?: string;
+		name?: string;
 	}>;
 	models?: Array<string | {
 		id?: string;
@@ -246,6 +248,11 @@ export class HttpLlmClient implements LlmClient {
 
 	async complete(params: CompleteParams): Promise<CompleteResult> {
 		const settings = this.getConfig();
+		const model = await this.resolveSessionModel(settings);
+		if (!model) {
+			throw new Error(vscode.l10n.t('llm.needModel'));
+		}
+
 		const useTools = Boolean(params.tools?.length) && params.toolChoice !== 'none';
 
 		let streamedAny = false;
@@ -256,7 +263,7 @@ export class HttpLlmClient implements LlmClient {
 
 		const attempt = async (withTools: boolean, stream: boolean): Promise<CompleteResult> => {
 			const body: Record<string, unknown> = {
-				model: settings.model,
+				model,
 				messages: params.messages,
 				temperature: settings.temperature,
 				max_tokens: settings.maxTokens,
@@ -366,6 +373,11 @@ export class HttpLlmClient implements LlmClient {
 	}
 
 	async listModels(params: ListModelsParams = {}): Promise<string[]> {
+		const options = await this.listModelOptions(params);
+		return options.map((item) => item.id);
+	}
+
+	async listModelOptions(params: ListModelsParams = {}): Promise<LlmModelOption[]> {
 		const settings = this.getConfig();
 		const baseUrl = (params.baseUrl ?? settings.baseUrl).trim();
 		if (!baseUrl) {
@@ -375,38 +387,41 @@ export class HttpLlmClient implements LlmClient {
 		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
 			method: 'GET',
 			signal: params.signal,
-		}, { 
-			...settings, 
-			baseUrl, 
-			requestTimeoutMs: Math.min(settings.requestTimeoutMs, 30_000) 
+		}, {
+			...settings,
+			baseUrl,
+			requestTimeoutMs: Math.min(settings.requestTimeoutMs, 30_000),
 		});
 
 		if (data.error?.message) {
 			throw new Error(data.error.message);
 		}
 
-		const ids = new Set<string>();
-		for (const item of data.data ?? []) {
-			if (item.id?.trim()) {
-				ids.add(item.id.trim());
-			}
+		return parseModelsListResponse(data);
+	}
+
+	private async resolveSessionModel(settings: GenSettings): Promise<string> {
+		const current = settings.model.trim();
+		if (current) {
+			return current;
 		}
 
-		for (const item of data.models ?? []) {
-			if (typeof item === 'string' && item.trim()) {
-				ids.add(item.trim());
-				continue;
-			}
-
-			if (typeof item === 'object' && item) {
-				const id = item.id?.trim() || item.name?.trim();
-				if (id) {
-					ids.add(id);
-				}
-			}
+		const baseUrl = settings.baseUrl.trim();
+		if (!baseUrl) {
+			return '';
 		}
 
-		return [...ids].sort((a, b) => a.localeCompare(b));
+		try {
+			const models = await this.listModels({ baseUrl });
+			if (models.length === 0) {
+				return '';
+			}
+
+			setSessionModel(models[0]);
+			return models[0];
+		} catch {
+			return '';
+		}
 	}
 
 	private async authHeaders(settings: GenSettings): Promise<Record<string, string>> {

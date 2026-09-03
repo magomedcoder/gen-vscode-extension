@@ -2,7 +2,7 @@
 
 [English version](CHANGELOG.md)
 
-## 0.2.0-dev (Версия в разработке)
+## 0.2.0-dev (3 сентября 2026)
 
 - Context Engine + упоминания `@file` / `@folder` / `@codebase` в чате (автодополнение в Composer)
 - Документация: английские docs без суффикса `-ru`; русские - `*-ru.md` со ссылками EN/RU

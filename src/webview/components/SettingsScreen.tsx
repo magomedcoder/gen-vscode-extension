@@ -1,6 +1,7 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { GenSettings } from '../../config/types';
 import { DEFAULT_SETTINGS } from '../../config/types';
+import type { LlmModelOption } from '../../llm/types';
 import { t } from '../i18n';
 import { ChatAgentPage } from './settings/ChatAgentPage';
 import { CommentsPage } from './settings/CommentsPage';
@@ -14,7 +15,7 @@ interface SettingsScreenProps {
 	settings: GenSettings;
 	status?: string;
 	apiKeySet: boolean;
-	models: string[];
+	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
 	onSave: (settings: GenSettings, api?: { apiKey?: string }) => void;
@@ -58,7 +59,7 @@ export function SettingsScreen({
 
 			return {
 				...prev,
-				model: models[0],
+				model: models[0].id,
 			};
 		});
 	}, [models]);

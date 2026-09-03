@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getSettings, hasApiKey, setApiKey, updateSettings } from '../config/settings';
+import { getSettings, hasApiKey, setApiKey, setSessionModel, updateSettings } from '../config/settings';
 import { HttpLlmClient } from '../llm/client';
 import { loadWebviewL10n } from '../l10n/loadBundle';
 import { revealLogsFolder } from '../log/logger';
@@ -129,12 +129,19 @@ export class SettingsPanel {
 		this.modelsAbort = controller;
 
 		try {
-			const models = await this.client.listModels({
+			const models = await this.client.listModelOptions({
 				baseUrl,
 				signal: controller.signal,
 			});
 			if (controller.signal.aborted) {
 				return;
+			}
+
+			if (models.length > 0) {
+				const current = getSettings().model;
+				if (!current || !models.some((item) => item.id === current)) {
+					setSessionModel(models[0].id);
+				}
 			}
 
 			this.post({

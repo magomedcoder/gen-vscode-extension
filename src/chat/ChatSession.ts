@@ -5,7 +5,7 @@ import { StickyPlan } from '../agent/plan';
 import { WorkspacePlanStore } from '../agent/planStore';
 import type { ConfirmChoice } from '../agent/types';
 import { AgentWriteTracker } from '../agent/userEdits';
-import { getSettings, isAgentLikeMode, updateSettings } from '../config/settings';
+import { getSettings, isAgentLikeMode, setSessionModel, updateSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
 import { writeLog } from '../log/logger';
 import type { LlmClient } from '../llm/types';
@@ -520,6 +520,27 @@ export class ChatSession {
 		await this.runTurn(trimmed);
 	}
 
+	private async ensureSessionModel(): Promise<boolean> {
+		const settings = getSettings();
+		if (settings.model.trim()) {
+			return true;
+		}
+
+		try {
+			const models = await this.client.listModels({ 
+				baseUrl: settings.baseUrl 
+			});
+			if (models.length === 0) {
+				return false;
+			}
+
+			setSessionModel(models[0]);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	// После завершения turn - взять следующее из очереди
 	private async drainTurnQueue(): Promise<void> {
 		if (this.inflight) {
@@ -549,7 +570,16 @@ export class ChatSession {
 
 		const clearSeqAtStart = this.clearSeq;
 		const settings = getSettings();
-		if (!settings.baseUrl.trim() || !settings.model.trim()) {
+		if (!settings.baseUrl.trim()) {
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: vscode.l10n.t('chat.error.missingUrlOrModel'),
+			});
+			return;
+		}
+
+		if (!(await this.ensureSessionModel())) {
 			this.append({
 				id: messageId(),
 				role: 'error',

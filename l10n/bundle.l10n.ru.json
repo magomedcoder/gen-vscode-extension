@@ -183,6 +183,7 @@
 	"ui.confirmHostMissing": "Confirm host не зарегистрирован (чат ещё не инициализирован)",
 	"llm.emptyResponse": "LLM-сервер вернул пустой ответ",
 	"llm.needBaseUrl": "Укажите базовый URL",
+	"llm.needModel": "Укажите базовый URL и загрузите модель с сервера",
 	"llm.badToolCallJson": "Модель вернула битый JSON в tool-call (часто обрезка max_tokens). Увеличь max_tokens в настройках и продолжи файл через apply_patch небольшими кусками.",
 	"llm.badJsonHttp": "Некорректный JSON от LLM-сервера (HTTP {0}): {1}",
 	"llm.streamNoBody": "Стрим без тела ответа",

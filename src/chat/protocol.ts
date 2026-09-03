@@ -69,7 +69,7 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean }
 	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean }
 	| { type: 'settingsError'; message: string }
-	| { type: 'models'; models: string[]; requestId: number }
+	| { type: 'models'; models: Array<{ id: string; label: string }>; requestId: number }
 	| { type: 'modelsError'; message: string; requestId: number }
 	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] };
 

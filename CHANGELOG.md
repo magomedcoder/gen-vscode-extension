@@ -2,7 +2,7 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## 0.2.0-dev (Development version)
+## 0.2.0-dev (3 September 2026)
 
 - Context Engine + `@file` / `@folder` / `@codebase` mentions in chat (Composer autocomplete)
 - Docs: English docs without `-ru` suffix; Russian docs as `*-ru.md` with EN/RU cross-links

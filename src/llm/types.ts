@@ -1,6 +1,7 @@
 import type { TokenUsage } from './usage';
+import type { LlmModelOption } from './modelLabel';
 
-export type { TokenUsage };
+export type { TokenUsage, LlmModelOption };
 
 export interface ToolFunctionSchema {
 	name: string;
@@ -64,4 +65,5 @@ export interface ListModelsParams {
 export interface LlmClient {
 	complete(params: CompleteParams): Promise<CompleteResult>;
 	listModels(params?: ListModelsParams): Promise<string[]>;
+	listModelOptions(params?: ListModelsParams): Promise<LlmModelOption[]>;
 }

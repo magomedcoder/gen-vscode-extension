@@ -10,6 +10,7 @@ export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 const STORAGE_KEY = 'gen.settings';
 
 let store: Memento | undefined;
+let sessionModel = '';
 const listeners = new Set<() => void>();
 
 function asNumber(value: unknown, fallback: number): number {
@@ -101,11 +102,43 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 export function initSettings(context: ExtensionContext): void {
 	store = context.globalState;
 	initApiKeyStore(context);
+	sessionModel = '';
+	void migrateStripPersistedModel();
+}
+
+async function migrateStripPersistedModel(): Promise<void> {
+	if (!store) {
+		return;
+	}
+
+	const raw = store.get<Partial<GenSettings>>(STORAGE_KEY);
+	if (!raw || !String(raw.model ?? '').trim()) {
+		return;
+	}
+
+	await store.update(STORAGE_KEY, normalize({ 
+		...raw,
+		model: ''
+	}));
+}
+
+export function setSessionModel(model: string): void {
+	sessionModel = model.trim();
+	for (const listener of listeners) {
+		listener();
+	}
 }
 
 export function getSettings(): GenSettings {
 	const raw = store?.get<Partial<GenSettings>>(STORAGE_KEY, DEFAULT_SETTINGS) ?? DEFAULT_SETTINGS;
-	return normalize(raw);
+	const settings = normalize({ 
+		...raw, 
+		model: ''
+	});
+	return {
+		...settings,
+		model: sessionModel,
+	};
 }
 
 export async function updateSettings(next: GenSettings): Promise<GenSettings> {
@@ -113,13 +146,14 @@ export async function updateSettings(next: GenSettings): Promise<GenSettings> {
 		throw new Error(vscode.l10n.t('config.settingsNotInit'));
 	}
 
-	const normalized = normalize(next);
+	sessionModel = String(next.model ?? '').trim();
+	const normalized = normalize({ ...next, model: '' });
 	await store.update(STORAGE_KEY, normalized);
 	for (const listener of listeners) {
 		listener();
 	}
-	
-	return normalized;
+
+	return getSettings();
 }
 
 export function onSettingsChanged(listener: () => void): { dispose(): void } {

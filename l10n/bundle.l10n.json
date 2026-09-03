@@ -183,6 +183,7 @@
 	"ui.confirmHostMissing": "Confirm host is not registered (chat is not initialized yet)",
 	"llm.emptyResponse": "LLM server returned an empty response",
 	"llm.needBaseUrl": "Set a base URL",
+	"llm.needModel": "Set a base URL and load a model from the server",
 	"llm.badToolCallJson": "The model returned invalid JSON in a tool-call (often max_tokens truncation). Raise max_tokens in settings and continue the file with apply_patch in small chunks.",
 	"llm.badJsonHttp": "Invalid JSON from the LLM server (HTTP {0}): {1}",
 	"llm.streamNoBody": "Stream response has no body",
