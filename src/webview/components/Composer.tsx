@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type SubmitEvent } from 'react';
 import type { ChatMode, MentionSuggestion } from '../../chat/protocol';
+import { activeSlashQuery, filterSlashCommands } from '../../chat/slashCommands';
+import type { SlashCommand } from '../../chat/slashCommands';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 
@@ -16,6 +18,8 @@ interface ContextChip {
 	insert: string;
 }
 
+type SuggestKind = 'mention' | 'slash';
+
 function activeMentionQuery(text: string, cursor: number): { start: number; query: string } | undefined {
 	const before = text.slice(0, cursor);
 	const at = before.lastIndexOf('@');
@@ -28,7 +32,7 @@ function activeMentionQuery(text: string, cursor: number): { start: number; quer
 	}
 
 	const fragment = before.slice(at + 1);
-	if (/\s/.test(fragment) && !/^(file|folder|codebase)\s+\S*$/i.test(fragment)) {
+	if (/\s/.test(fragment) && !/^(file|folder|codebase|git|link)\s+\S*$/i.test(fragment)) {
 		return undefined;
 	}
 
@@ -44,10 +48,16 @@ function chipFromSuggestion(item: MentionSuggestion): ContextChip {
 	};
 }
 
+function slashDetail(cmd: SlashCommand): string {
+	return t(cmd.detailKey);
+}
+
 export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 	const [draft, setDraft] = useState('');
 	const [chips, setChips] = useState<ContextChip[]>([]);
 	const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
+	const [slashSuggestions, setSlashSuggestions] = useState<SlashCommand[]>([]);
+	const [suggestKind, setSuggestKind] = useState<SuggestKind>('mention');
 	const [suggestIndex, setSuggestIndex] = useState(0);
 	const requestId = useRef(0);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -75,6 +85,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 			}
 
 			setSuggestions(data.items ?? []);
+			setSuggestKind('mention');
 			setSuggestIndex(0);
 		};
 
@@ -82,7 +93,23 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
+	const clearSuggest = () => {
+		setSuggestions([]);
+		setSlashSuggestions([]);
+	};
+
 	const requestSuggestions = (text: string, cursor: number) => {
+		const slash = activeSlashQuery(text, cursor);
+		if (slash) {
+			const items = filterSlashCommands(slash.query);
+			setSlashSuggestions(items);
+			setSuggestions([]);
+			setSuggestKind('slash');
+			setSuggestIndex(0);
+			return;
+		}
+
+		setSlashSuggestions([]);
 		const active = activeMentionQuery(text, cursor);
 		if (!active) {
 			setSuggestions([]);
@@ -91,6 +118,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 
 		const id = requestId.current + 1;
 		requestId.current = id;
+		setSuggestKind('mention');
 		vscodeApi.postMessage({
 			type: 'mentionSuggest',
 			requestId: id,
@@ -98,7 +126,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 		});
 	};
 
-	const applySuggestion = (item: MentionSuggestion) => {
+	const applyMentionSuggestion = (item: MentionSuggestion) => {
 		const el = textareaRef.current;
 		const cursor = el?.selectionStart ?? draft.length;
 		const active = activeMentionQuery(draft, cursor);
@@ -111,10 +139,21 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 
 		const next = `${draft.slice(0, active.start)}${draft.slice(cursor)}`.replace(/\s{2,}/g, ' ');
 		setDraft(next);
-		setSuggestions([]);
+		clearSuggest();
 		requestAnimationFrame(() => {
 			el?.focus();
 			el?.setSelectionRange(active.start, active.start);
+		});
+	};
+
+	const applySlashSuggestion = (cmd: SlashCommand) => {
+		setDraft(`/${cmd.name}`);
+		clearSuggest();
+		requestAnimationFrame(() => {
+			const el = textareaRef.current;
+			el?.focus();
+			const pos = cmd.name.length + 1;
+			el?.setSelectionRange(pos, pos);
 		});
 	};
 
@@ -132,7 +171,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 
 		setDraft('');
 		setChips([]);
-		setSuggestions([]);
+		clearSuggest();
 		vscodeApi.postMessage({ type: 'send', text });
 	};
 
@@ -141,29 +180,36 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 		submit();
 	};
 
+	const menuOpen = (suggestKind === 'mention' && suggestions.length > 0) || (suggestKind === 'slash' && slashSuggestions.length > 0);
+	const menuLen = suggestKind === 'slash' ? slashSuggestions.length : suggestions.length;
+
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (suggestions.length > 0) {
+		if (menuOpen) {
 			if (event.key === 'ArrowDown') {
 				event.preventDefault();
-				setSuggestIndex((i) => (i + 1) % suggestions.length);
+				setSuggestIndex((i) => (i + 1) % menuLen);
 				return;
 			}
 
 			if (event.key === 'ArrowUp') {
 				event.preventDefault();
-				setSuggestIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
+				setSuggestIndex((i) => (i - 1 + menuLen) % menuLen);
 				return;
 			}
 
 			if (event.key === 'Enter' || event.key === 'Tab') {
 				event.preventDefault();
-				applySuggestion(suggestions[suggestIndex] ?? suggestions[0]);
+				if (suggestKind === 'slash') {
+					applySlashSuggestion(slashSuggestions[suggestIndex] ?? slashSuggestions[0]!);
+				} else {
+					applyMentionSuggestion(suggestions[suggestIndex] ?? suggestions[0]!);
+				}
 				return;
 			}
 
 			if (event.key === 'Escape') {
 				event.preventDefault();
-				setSuggestions([]);
+				clearSuggest();
 				return;
 			}
 		}
@@ -175,11 +221,31 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 	};
 
 	const canSend = Boolean(draft.trim()) || chips.length > 0;
+	const specialMode = mode === 'debug' || mode === 'design' || mode === 'plan';
 
 	return (
 		<form className="composer" onSubmit={onSubmit}>
 			<div className="composer__box">
-				{suggestions.length > 0 && (
+				{suggestKind === 'slash' && slashSuggestions.length > 0 ? (
+					<ul className="mention-menu" role="listbox" aria-label={t('chat.composer.slashAria')}>
+						{slashSuggestions.map((item, i) => (
+							<li key={item.name}>
+								<button
+									type="button"
+									className={`mention-menu__item${i === suggestIndex ? ' mention-menu__item--active' : ''}`}
+									onMouseDown={(e) => {
+										e.preventDefault();
+										applySlashSuggestion(item);
+									}}
+								>
+									<span className="mention-menu__label">/{item.name}</span>
+									<span className="mention-menu__detail">{slashDetail(item)}</span>
+								</button>
+							</li>
+						))}
+					</ul>
+				) : null}
+				{suggestKind === 'mention' && suggestions.length > 0 ? (
 					<ul className="mention-menu" role="listbox">
 						{suggestions.map((item, i) => (
 							<li key={`${item.insert}-${i}`}>
@@ -188,7 +254,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 									className={`mention-menu__item${i === suggestIndex ? ' mention-menu__item--active' : ''}`}
 									onMouseDown={(e) => {
 										e.preventDefault();
-										applySuggestion(item);
+										applyMentionSuggestion(item);
 									}}
 								>
 									<span className="mention-menu__label">{item.label}</span>
@@ -197,7 +263,7 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 							</li>
 						))}
 					</ul>
-				)}
+				) : null}
 				{chips.length > 0 ? (
 					<ul className="composer-chips" aria-label={t('chat.composer.chipsAria')}>
 						{chips.map((chip) => (
@@ -243,39 +309,36 @@ export function Composer({ busy, queuedCount, mode }: ComposerProps) {
 					onKeyDown={onKeyDown}
 				/>
 				<div className="composer__footer">
-					<div className="mode-toggle" role="group" aria-label={t('chat.composer.modeAria')}>
-						<button
-							type="button"
-							className={`mode-toggle__btn${mode === 'ask' ? ' mode-toggle__btn--active' : ''}`}
-							disabled={busy}
-							onClick={() => setMode('ask')}
-						>
-							{t('chat.composer.modeAsk')}
-						</button>
-						<button
-							type="button"
-							className={`mode-toggle__btn${mode === 'agent' ? ' mode-toggle__btn--active' : ''}`}
-							disabled={busy}
-							onClick={() => setMode('agent')}
-						>
-							{t('chat.composer.modeAgent')}
-						</button>
-						<button
-							type="button"
-							className={`mode-toggle__btn${mode === 'debug' ? ' mode-toggle__btn--active' : ''}`}
-							disabled={busy}
-							onClick={() => setMode('debug')}
-						>
-							{t('chat.composer.modeDebug')}
-						</button>
-						<button
-							type="button"
-							className={`mode-toggle__btn${mode === 'design' ? ' mode-toggle__btn--active' : ''}`}
-							disabled={busy}
-							onClick={() => setMode('design')}
-						>
-							{t('chat.composer.modeDesign')}
-						</button>
+					<div className="composer__modes">
+						<div className="mode-toggle" role="group" aria-label={t('chat.composer.modeAria')}>
+							<button
+								type="button"
+								className={`mode-toggle__btn${mode === 'ask' ? ' mode-toggle__btn--active' : ''}`}
+								disabled={busy}
+								onClick={() => setMode('ask')}
+							>
+								{t('chat.composer.modeAsk')}
+							</button>
+							<button
+								type="button"
+								className={`mode-toggle__btn${mode === 'agent' ? ' mode-toggle__btn--active' : ''}`}
+								disabled={busy}
+								onClick={() => setMode('agent')}
+							>
+								{t('chat.composer.modeAgent')}
+							</button>
+						</div>
+						{specialMode ? (
+							<button
+								type="button"
+								className="mode-badge"
+								disabled={busy}
+								title={t('chat.composer.slashExitHint')}
+								onClick={() => setMode('agent')}
+							>
+								/{mode}
+							</button>
+						) : null}
 					</div>
 					<div className="composer__actions">
 						{busy ? (

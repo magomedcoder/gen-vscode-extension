@@ -9,8 +9,16 @@ import { clearIgnoreCache } from './gitIgnore';
 import { formatStickyPlanForPrompt, StickyPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
 import { getGenRulesManager } from '../project/genrules';
+import { loadProjectRulesAppendix } from '../project/projectRules';
+import { discoverSkills, formatSkillsCatalog } from '../project/skills';
+import { recordUsage } from '../stores/usageStore';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
+import type { ExtendedToolContext } from './tools';
+import { TodoStore } from './todoStore';
+import { isMutatingTool } from './auth';
+import { getSubagent } from './subagents';
+import { defaultWorkspaceCwd, ShellSession } from './shellSession';
 import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
 import type { AgentWriteTracker } from './userEdits';
 
@@ -118,15 +126,29 @@ export class AgentSession {
 		writes?: AgentWriteTracker;
 		planEditsAppendix?: string;
 		mode?: ChatMode;
+		sessionAllow?: string[];
+		onAlwaysAllow?: (pattern: string) => void;
+		// Глубина вложенного субагента (0 = основной агент)
+		subagentDepth?: number;
+		// Принудительно только read-only tools (explore)
+		readonlySubagent?: boolean;
+		// Доп. system prompt для субагентов
+		subagentSystem?: string;
+		maxIterationsOverride?: number;
 	}): Promise<void> {
 		const settings = getSettings();
-		const maxIterations = settings.agentMaxIterations;
-		const unlimited = maxIterations === 0;
+		const maxIterations = params.maxIterationsOverride
+			?? settings.agentMaxIterations;
+		const unlimited = !params.maxIterationsOverride && maxIterations === 0;
 		let toolsEnabled = true;
 		const plan = params.plan ?? new StickyPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
 		const writes = params.writes;
-		const agentMode: ChatMode = params.mode === 'debug' || params.mode === 'design' ? params.mode : 'agent';
+		const todos = new TodoStore();
+		const shell = new ShellSession(defaultWorkspaceCwd());
+		const depth = params.subagentDepth ?? 0;
+		const agentMode: ChatMode =
+			params.mode === 'debug' || params.mode === 'design' || params.mode === 'plan' ? params.mode : 'agent';
 		clearIgnoreCache();
 
 		const userContent = params.editorContext
@@ -137,28 +159,97 @@ export class AgentSession {
 		const planSnap = plan.snapshot();
 		const planAppendix = planSnap?.approved ? formatStickyPlanForPrompt(planSnap) : '';
 		const planEditsAppendix = params.planEditsAppendix?.trim() ?? '';
-		const genRulesAppendix = getGenRulesManager()?.getPromptAppendix() ?? '';
+		const genRulesAppendix =
+			(await loadProjectRulesAppendix())
+			?? getGenRulesManager()?.getPromptAppendix()
+			?? '';
+		const skillsAppendix = depth === 0 ? (formatSkillsCatalog(await discoverSkills()) ?? '') : '';
+		const customSystem = [settings.systemPrompt.trim(), params.subagentSystem?.trim() ?? ''].filter(Boolean).join('\n\n');
 		const apiMessages: ChatMessage[] = [
 			{
 				role: 'system',
-				content: buildAgentSystemPrompt({
+				content: [
+					customSystem,
+					buildAgentSystemPrompt({
 					toolsAvailable: true,
 					authLevel: settings.agentAuthLevel,
 					deniedPaths: settings.deniedPaths,
 					userEditsAppendix,
 					planAppendix,
 					planEditsAppendix,
-					genRulesAppendix,
+					genRulesAppendix: [genRulesAppendix, skillsAppendix].filter(Boolean).join('\n\n'),
 					planWriteToFile: settings.planWriteToFile,
 					mode: agentMode,
-				})
+				}),
+				].filter(Boolean).join('\n\n'),
 			},
 			...historyToApiMessages(params.history),
 			{
 				role: 'user',
-				content: userContent
+				content: userContent,
 			},
 		];
+
+		const toolCtxBase: ExtendedToolContext = {
+			signal: params.signal,
+			confirm: params.confirm,
+			revealFile: params.revealFile,
+			trackMutation: params.trackMutation,
+			plan,
+			onPlanChanged: params.onPlanChanged,
+			checkpoint,
+			writes,
+			todos,
+			shell,
+			sessionAllow: params.sessionAllow,
+			onAlwaysAllow: params.onAlwaysAllow,
+			subagentDepth: depth,
+			runSubagent: async ({ type, prompt, signal }) => {
+				const def = getSubagent(type);
+				const child = new AgentSession(this.client);
+				const chunks: string[] = [];
+				await child.run({
+					history: [],
+					userText: prompt,
+					signal,
+					confirm: params.confirm,
+					revealFile: params.revealFile,
+					trackMutation: params.trackMutation,
+					sessionAllow: params.sessionAllow,
+					onAlwaysAllow: params.onAlwaysAllow,
+					subagentDepth: depth + 1,
+					readonlySubagent: def?.readonly ?? true,
+					subagentSystem: def?.prompt,
+					maxIterationsOverride: def?.maxIterations ?? 12,
+					mode: 'agent',
+					ui: {
+						append: (message) => {
+							if (message.role === 'assistant' && message.content.trim()) {
+								chunks.push(message.content.trim());
+							}
+							
+							if (message.role === 'error') {
+								chunks.push(`[error] ${message.content}`);
+							}
+
+							params.ui.append({
+								...message,
+								content: message.role === 'assistant'
+									? `[subagent:${type}] ${message.content}`
+									: message.content,
+							});
+						},
+						update: (id, patch) => params.ui.update(id, patch),
+					},
+				});
+				return chunks.slice(-3).join('\n\n') || '(subagent finished with no text)';
+			},
+		};
+
+		const toolOpts = {
+			readonly: params.readonlySubagent === true || agentMode === 'plan',
+			disableTask: depth > 0,
+		};
 
 		for (let iteration = 0; unlimited || iteration < maxIterations; iteration += 1) {
 			if (params.signal.aborted) {
@@ -176,7 +267,7 @@ export class AgentSession {
 			const result = await this.client.complete({
 				messages: apiMessages,
 				signal: params.signal,
-				tools: toolsEnabled ? getAgentLlmTools() : undefined,
+				tools: toolsEnabled ? getAgentLlmTools(agentMode, toolOpts) : undefined,
 				toolChoice: toolsEnabled ? 'auto' : 'none',
 				onDelta: (chunk) => {
 					streamed += chunk;
@@ -213,6 +304,13 @@ export class AgentSession {
 				content,
 				usage: result.usage,
 			});
+			if (result.usage) {
+				recordUsage(
+					settings.model,
+					result.usage.promptTokens ?? 0,
+					result.usage.completionTokens ?? 0,
+				);
+			}
 
 			if (toolCalls.length === 0) {
 				if (!content) {
@@ -253,22 +351,12 @@ export class AgentSession {
 				})),
 			});
 
-			for (let i = 0; i < orderedCalls.length; i += 1) {
+			const runOne = async (i: number) => {
 				if (params.signal.aborted) {
 					throw toAbortError();
 				}
-
-				const call = orderedCalls[i];
-				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, {
-					signal: params.signal,
-					confirm: params.confirm,
-					revealFile: params.revealFile,
-					trackMutation: params.trackMutation,
-					plan,
-					onPlanChanged: params.onPlanChanged,
-					checkpoint,
-					writes,
-				});
+				const call = orderedCalls[i]!;
+				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, toolCtxBase);
 				const lengthHint = !toolResult.ok && result.finishReason === 'length'
 					? vscode.l10n.t('agent.responseTruncated')
 					: '';
@@ -276,10 +364,10 @@ export class AgentSession {
 				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
 
 				liveCalls[i] = {
-					...liveCalls[i],
+					...liveCalls[i]!,
 					status,
 					result: resultText,
-					path: toolResult.path ?? liveCalls[i].path,
+					path: toolResult.path ?? liveCalls[i]!.path,
 					diff: toolResult.diff,
 					hunks: toolResult.hunks,
 				};
@@ -297,13 +385,67 @@ export class AgentSession {
 					toolStatus: status,
 				});
 
-				apiMessages.push({
-					role: 'tool',
+				return {
+					role: 'tool' as const,
 					tool_call_id: call.id,
 					name: call.function.name,
 					content: redactSecrets(resultText).text,
-				});
+					denied: Boolean(toolResult.denied),
+				};
+			};
+
+			// Tools только на чтение — параллельно; мутирующие — строго по очереди.
+			const toolApiMessages: ChatMessage[] = [];
+			let i = 0;
+			while (i < orderedCalls.length) {
+				if (params.signal.aborted) {
+					throw toAbortError();
+				}
+
+				const call = orderedCalls[i]!;
+				if (isMutatingTool(call.function.name) || call.function.name === 'propose_plan' || call.function.name === 'ask_question') {
+					const msg = await runOne(i);
+					if (msg.denied && !settings.continueLoopOnDeny) {
+						apiMessages.push({
+							role: 'tool',
+							tool_call_id: msg.tool_call_id,
+							name: msg.name,
+							content: msg.content
+						});
+						return;
+					}
+					toolApiMessages.push({
+						role: 'tool',
+						tool_call_id: msg.tool_call_id,
+						name: msg.name,
+						content: msg.content
+					});
+					i += 1;
+					continue;
+				}
+
+				let j = i;
+				while (j < orderedCalls.length && !isMutatingTool(orderedCalls[j]!.function.name) && orderedCalls[j]!.function.name !== 'propose_plan' && orderedCalls[j]!.function.name !== 'ask_question') {
+					j += 1;
+				}
+
+				const batch = await Promise.all(Array.from({ length: j - i }, (_, k) => runOne(i + k)));
+
+				for (const msg of batch) {
+					toolApiMessages.push({
+						role: 'tool',
+						tool_call_id: msg.tool_call_id,
+						name: msg.name,
+						content: msg.content
+					});
+					if (msg.denied && !settings.continueLoopOnDeny) {
+						apiMessages.push(...toolApiMessages);
+						return;
+					}
+				}
+				i = j;
 			}
+			apiMessages.push(...toolApiMessages);
 		}
 
 		if (unlimited) {

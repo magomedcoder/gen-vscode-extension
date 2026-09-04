@@ -15,7 +15,9 @@ export function buildAgentSystemPrompt(options?: {
 	const toolsAvailable = options?.toolsAvailable ?? true;
 	const authLevel = options?.authLevel ?? 'ask';
 	const planWriteToFile = options?.planWriteToFile !== false;
-	const mode = options?.mode === 'debug' || options?.mode === 'design' ? options.mode : 'agent';
+	const mode = options?.mode === 'debug' || options?.mode === 'design' || options?.mode === 'plan'
+		? options.mode
+		: 'agent';
 	const deniedPaths = (options?.deniedPaths ?? []).map((item) => item.trim()).filter((item) => item && !item.startsWith('#'));
 
 	const lines = [
@@ -23,7 +25,9 @@ export function buildAgentSystemPrompt(options?: {
 			? 'Ты Gen в режиме Debug - разбираешь ошибки и логи приложения в VS Code.'
 			: mode === 'design'
 				? 'Ты Gen в режиме Design - помогаешь с UI/UX: смотришь страницы через Simple Browser и fetch_page.'
-				: 'Ты Gen - агент-помощник программиста в VS Code.',
+				: mode === 'plan'
+					? 'Ты Gen в режиме Plan - только анализ и план. Не редактируй файлы и не запускай мутирующие команды.'
+					: 'Ты Gen - агент-помощник программиста в VS Code.',
 		'Отвечай на языке пользователя, кратко и по делу.',
 		'Работай только в рамках текущего workspace; не предлагай действия вне проекта.',
 		'Если дан контекст редактора (файл, выделение), опирайся на него.',
@@ -38,6 +42,11 @@ export function buildAgentSystemPrompt(options?: {
 		lines.push(
 			'Алгоритм Design: 1) уточни URL preview (часто http://localhost:...); 2) open_browser чтобы показать UI; 3) fetch_page для HTML/текста; 4) опиши проблемы UX и правь код (CSS/разметка) через apply_patch.',
 			'fetch_page не выполняет JS и не кликает по UI - для динамики опирайся на код и описание пользователя. Внешние (не localhost) URL требуют подтверждения.',
+		);
+	} else if (mode === 'plan') {
+		lines.push(
+			'Режим Plan: используй read/search/codebase_search/glob/grep и propose_plan. Не вызывай write_file, apply_patch, delete_file, run_command.',
+			'Когда план готов - propose_plan с шагами и path. Пользователь подтвердит, затем можно перейти в /agent.',
 		);
 	}
 

@@ -2,7 +2,23 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## 0.2.0-dev (3 September 2026)
+## 0.3.0-dev (Development version)
+
+- Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init`
+- **Plan** mode: read-only tool filter (no mutating edits/commands until you switch back)
+- Permissions v2 foundation: `approvalPolicy` (allow / ask / review / deny), Always + suggested pattern, session allowlist, `autoApprove`, `continueLoopOnDeny`, capability toggles
+- Confirm card: **Always** button + pattern hint
+- Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `skill`
+- Project rules & skills: `AGENTS.md` / `.genrules`; skills discovery + `skill` tool; `/init` creates/updates `AGENTS.md`
+- Agent loop: parallel read-only tool calls; tool output truncation (`toolOutputMaxChars`)
+- Settings: `systemPrompt`, `smallModel`; usage ledger store
+- Ctrl+L - add editor selection to chat
+- MCP (stdio MVP): settings `mcpServers` (JSON on Chat & Agent page); tools `list_mcp_tools`, `call_mcp_tool`
+- Subagents: tool `task` (`explore` read-only / `general`); nesting limit `subagentDepth`
+- Shell: cwd persist across `run_command`; `background=true` + tool `await_shell`
+- Mentions: `@git`, `@branch_diff`, `@rules`, `@link` (+ Composer autocomplete)
+
+## 0.2.0 (3 September 2026)
 
 - Context Engine + `@file` / `@folder` / `@codebase` mentions in chat (Composer autocomplete)
 - Docs: English docs without `-ru` suffix; Russian docs as `*-ru.md` with EN/RU cross-links

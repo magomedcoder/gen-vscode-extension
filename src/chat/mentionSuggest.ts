@@ -1,16 +1,17 @@
 import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 import { deniedDirectoryExcludeGlob } from '../agent/policy';
+import type { MentionKind } from './mentions';
 
 export interface MentionSuggestion {
-	kind: 'file' | 'folder' | 'codebase';
+	kind: MentionKind;
 	label: string;
 	insert: string;
 	detail?: string;
 }
 
 function kindTemplates(): Array<{
-	kind: 'file' | 'folder' | 'codebase';
+	kind: MentionKind;
 	label: string;
 	insert: string;
 	detail: string;
@@ -20,19 +21,43 @@ function kindTemplates(): Array<{
 			kind: 'file',
 			label: '@file',
 			insert: '@file ',
-			detail: vscode.l10n.t('chat.mention.detail.file'),
+			detail: vscode.l10n.t('chat.mention.detail.file')
 		},
 		{
 			kind: 'folder',
 			label: '@folder',
 			insert: '@folder ',
-			detail: vscode.l10n.t('chat.mention.detail.folder'),
+			detail: vscode.l10n.t('chat.mention.detail.folder')
 		},
 		{
 			kind: 'codebase',
 			label: '@codebase',
 			insert: '@codebase ',
-			detail: vscode.l10n.t('chat.mention.detail.codebase'),
+			detail: vscode.l10n.t('chat.mention.detail.codebase')
+		},
+		{
+			kind: 'git',
+			label: '@git',
+			insert: '@git ',
+			detail: vscode.l10n.t('chat.mention.detail.git')
+		},
+		{
+			kind: 'branch_diff',
+			label: '@branch_diff',
+			insert: '@branch_diff',
+			detail: vscode.l10n.t('chat.mention.detail.branchDiff')
+		},
+		{
+			kind: 'rules',
+			label: '@rules',
+			insert: '@rules',
+			detail: vscode.l10n.t('chat.mention.detail.rules')
+		},
+		{
+			kind: 'link',
+			label: '@link',
+			insert: '@link ',
+			detail: vscode.l10n.t('chat.mention.detail.link')
 		},
 	];
 }
@@ -41,18 +66,31 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 	const q = query.trim().toLowerCase();
 	const prefix = q.replace(/^@/, '');
 
-	if (!prefix || 'file'.startsWith(prefix) || 'folder'.startsWith(prefix) || 'codebase'.startsWith(prefix)) {
-		const kindHits = kindTemplates().filter((k) => k.kind.startsWith(prefix) || prefix.length === 0);
-		if (prefix.length === 0 || kindHits.length > 0 && !prefix.includes('/') && !prefix.includes('.')) {
-			if (!prefix.includes(' ') && !/[./]/.test(prefix)) {
-				return kindHits.map((k) => ({
-					kind: k.kind,
-					label: k.label,
-					insert: k.insert,
-					detail: k.detail,
-				}));
+	const kindNames = ['file', 'folder', 'codebase', 'git', 'branch_diff', 'rules', 'link'];
+	if (!prefix || kindNames.some((k) => k.startsWith(prefix) || prefix.startsWith(k))) {
+		const kindHits = kindTemplates().filter((k) => k.kind.startsWith(prefix) || prefix.length === 0 || prefix.startsWith(k.kind));
+		if (!prefix.includes(' ') && !/[./]/.test(prefix) || kindHits.some((k) => k.kind === 'branch_diff' || k.kind === 'rules')) {
+			if (!prefix.includes('/') && !prefix.includes('.')) {
+				const hits = kindTemplates().filter((k) => !prefix || k.kind.startsWith(prefix) || k.kind.includes(prefix));
+				if (hits.length && !prefix.includes(' ')) {
+					return hits.map((k) => ({
+						kind: k.kind,
+						label: k.label,
+						insert: k.insert,
+						detail: k.detail,
+					}));
+				}
 			}
 		}
+	}
+
+	if (prefix.startsWith('git')) {
+		return [{
+			kind: 'git',
+			label: '@git HEAD',
+			insert: '@git HEAD ',
+			detail: vscode.l10n.t('chat.mention.detail.gitShow'),
+		}];
 	}
 
 	const folder = vscode.workspace.workspaceFolders?.[0];
@@ -60,7 +98,9 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 		return [];
 	}
 
-	const pathQuery = prefix.replace(/^(file|folder|codebase)\s+/, '').replace(/^(file|folder|codebase):/, '').trim();
+	const pathQuery = prefix.replace(/^(file|folder|codebase|git|link)\s+/, '')
+		.replace(/^(file|folder|codebase|git|link):/, '')
+		.trim();
 
 	const kind: 'file' | 'folder' = prefix.startsWith('folder') ? 'folder' : 'file';
 

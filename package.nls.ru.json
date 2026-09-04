@@ -5,6 +5,7 @@
 	"command.commentSelection.title": "Gen: Прокомментировать выделение",
 	"command.commentFile.title": "Gen: Прокомментировать файл",
 	"command.openChat.title": "Открыть чат",
+	"command.addSelectionToChat.title": "Gen: Добавить выделение в чат",
 	"viewsContainers.panel.gen.title": "Gen",
 	"views.gen.chatView.name": "Чат"
 }

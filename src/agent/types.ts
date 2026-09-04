@@ -6,11 +6,17 @@ import type { DiffHunkPayload } from './diff';
 import type { StickyPlan } from './plan';
 import type { AgentWriteTracker } from './userEdits';
 
-export type ConfirmChoice = 'apply' | 'skip' | 'abort';
+export type ConfirmChoice = 'apply' | 'skip' | 'abort' | 'always';
 
 export interface ToolContext {
 	signal?: AbortSignal;
-	confirm?(request: { title: string; detail?: string }): Promise<ConfirmChoice>;
+	confirm?(request: {
+		title: string;
+		detail?: string;
+		hint?: string;
+		suggestion?: string;
+		allowAlways?: boolean;
+	}): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;
 	trackMutation?(uri: Uri): void;
 	plan?: StickyPlan;

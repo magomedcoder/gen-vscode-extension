@@ -17,6 +17,9 @@ export function ConfirmCard({ confirm }: ConfirmCardProps) {
 			skipLabel={confirm.skipLabel}
 			stopLabel={confirm.stopLabel}
 			rejectLabel={confirm.rejectLabel}
+			alwaysLabel={confirm.alwaysLabel}
+			suggestion={confirm.suggestion}
+			allowAlways={confirm.allowAlways}
 			onChoose={(choice) => {
 				vscodeApi.postMessage({
 					type: 'confirmChoice',

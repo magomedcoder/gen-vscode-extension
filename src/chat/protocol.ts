@@ -42,6 +42,9 @@ export interface PendingConfirm {
 	skipLabel: string;
 	stopLabel: string;
 	rejectLabel: string;
+	alwaysLabel?: string;
+	suggestion?: string;
+	allowAlways?: boolean;
 }
 
 export interface ChatProjectStatus {
@@ -74,7 +77,7 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] };
 
 export interface MentionSuggestion {
-	kind: 'file' | 'folder' | 'codebase';
+	kind: 'file' | 'folder' | 'codebase' | 'git' | 'branch_diff' | 'rules' | 'link';
 	label: string;
 	insert: string;
 	detail?: string;

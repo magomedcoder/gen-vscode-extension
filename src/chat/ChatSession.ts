@@ -15,6 +15,7 @@ import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { getEditorChatContext } from './editorContext';
 import { CHAT_VIEW_ID } from './ids';
 import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
+import { parseSlashMode } from './slashCommands';
 import type { DiffHunkPayload } from '../agent/diff';
 import { revertHunkInText } from '../agent/diff';
 import { pathExists, resolveWorkspacePath } from '../agent/workspacePath';
@@ -51,6 +52,7 @@ export class ChatSession {
 	private pendingConfirm?: PendingConfirmInternal;
 	private planBootstrapped = false;
 	private readonly turnQueue: string[] = [];
+	private readonly sessionAllow: string[] = [];
 	private readonly subs: vscode.Disposable[] = [];
 
 	constructor(
@@ -98,6 +100,9 @@ export class ChatSession {
 					skipLabel: this.pendingConfirm.skipLabel,
 					stopLabel: this.pendingConfirm.stopLabel,
 					rejectLabel: this.pendingConfirm.rejectLabel,
+					alwaysLabel: this.pendingConfirm.alwaysLabel,
+					suggestion: this.pendingConfirm.suggestion,
+					allowAlways: this.pendingConfirm.allowAlways,
 				}
 				: undefined,
 		};
@@ -261,6 +266,8 @@ export class ChatSession {
 		variant?: PendingConfirm['variant'];
 		applyLabel?: string;
 		rejectLabel?: string;
+		suggestion?: string;
+		allowAlways?: boolean;
 	}): Promise<ConfirmChoice> {
 		if (this.pendingConfirm) {
 			this.settleConfirm('abort');
@@ -280,6 +287,9 @@ export class ChatSession {
 				skipLabel: vscode.l10n.t('agent.confirmSkip'),
 				stopLabel: vscode.l10n.t('agent.confirmStop'),
 				rejectLabel: request.rejectLabel ?? vscode.l10n.t('comment.reject'),
+				alwaysLabel: vscode.l10n.t('agent.confirmAlways'),
+				suggestion: request.suggestion,
+				allowAlways: request.allowAlways,
 				resolve,
 			};
 			this.emit();
@@ -497,6 +507,30 @@ export class ChatSession {
 			return;
 		}
 
+		const slash = parseSlashMode(trimmed);
+		if (slash) {
+			if (slash.command === 'export') {
+				await this.exportSessionMarkdown();
+				return;
+			}
+
+			if (slash.command === 'init') {
+				await this.runInitRules(slash.rest);
+				return;
+			}
+
+			if (slash.mode && slash.mode !== getSettings().chatMode) {
+				await this.setMode(slash.mode);
+			}
+
+			if (!slash.rest) {
+				return;
+			}
+
+			await this.send(slash.rest);
+			return;
+		}
+
 		if (this.inflight) {
 			if (this.turnQueue.length >= MAX_TURN_QUEUE) {
 				this.append({
@@ -622,6 +656,12 @@ export class ChatSession {
 					writes: this.writes,
 					planEditsAppendix: planReload.planEditsAppendix,
 					mode: settings.chatMode,
+					sessionAllow: this.sessionAllow,
+					onAlwaysAllow: (pattern) => {
+						if (pattern && !this.sessionAllow.includes(pattern)) {
+							this.sessionAllow.push(pattern);
+						}
+					},
 					ui: {
 						append: (message) => {
 							if (this.clearSeq !== clearSeqAtStart) {
@@ -708,5 +748,84 @@ export class ChatSession {
 		}
 
 		await this.drainTurnQueue();
+	}
+
+	async exportSessionMarkdown(): Promise<void> {
+		const lines = this.messages.map((m) => {
+			if (m.role === 'user') {
+				return `## Пользователь\n\n${m.content}`;
+			}
+
+			if (m.role === 'assistant') {
+				return `## Ассистент\n\n${m.content}`;
+			}
+
+			if (m.role === 'error') {
+				return `## Ошибка\n\n${m.content}`;
+			}
+
+			return `## Tool ${m.toolName ?? ''}\n\n\`\`\`\n${m.content}\n\`\`\``;
+		});
+		const doc = await vscode.workspace.openTextDocument({
+			content: `# Экспорт чата Gen\n\n${lines.join('\n\n')}\n`,
+			language: 'markdown',
+		});
+		await vscode.window.showTextDocument(doc, { preview: false });
+	}
+
+	async runInitRules(hint?: string): Promise<void> {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		if (!folder) {
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: vscode.l10n.t('policy.noWorkspace'),
+			});
+			return;
+		}
+
+		const uri = vscode.Uri.joinPath(folder.uri, 'AGENTS.md');
+		const stub = [
+			'# AGENTS.md',
+			'',
+			'Правила проекта для Gen / coding-агентов.',
+			'',
+			hint ? `## Заметки\n\n${hint}` : '## Обзор\n\nОпиши архитектуру, соглашения и ограничения проекта.',
+			'',
+		].join('\n');
+		try {
+			await vscode.workspace.fs.stat(uri);
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: 'AGENTS.md уже есть. Отредактируй его или добавь `.genrules` для правил Gen.',
+			});
+		} catch {
+			await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(stub));
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: 'Создан AGENTS.md в корне workspace. Заполни правила проекта для агента.',
+			});
+			await vscode.window.showTextDocument(uri);
+		}
+		this.emit();
+	}
+
+	async addSelectionToChat(): Promise<void> {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.selection.isEmpty) {
+			return;
+		}
+		
+		const doc = editor.document;
+		const text = doc.getText(editor.selection);
+		const rel = vscode.workspace.asRelativePath(doc.uri);
+		const start = editor.selection.start.line + 1;
+		const end = editor.selection.end.line + 1;
+		const mention = `@file ${rel}`;
+		const block = `${mention}\n\`\`\`\n${text.slice(0, 8000)}\n\`\`\`\n(lines ${start}-${end})`;
+		await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+		await this.send(block);
 	}
 }

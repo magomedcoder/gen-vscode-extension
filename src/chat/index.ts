@@ -17,5 +17,8 @@ export function registerChat(context: vscode.ExtensionContext): vscode.Disposabl
 		vscode.commands.registerCommand('gen.openChat', async () => {
 			await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
 		}),
+		vscode.commands.registerCommand('gen.addSelectionToChat', async () => {
+			await provider.addSelectionToChat();
+		}),
 	);
 }

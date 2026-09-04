@@ -40,7 +40,7 @@
 
 ## Замечания
 
-- Режимы чата **Debug** / **Design** - тот же agent loop со спец. system prompt. Debug: `find_logs` + `read_log_tail` + диагностики; Design: `open_browser` + `fetch_page` (без выполнения JS / кликов пока).
+- Режимы чата **Debug** / **Design** включаются slash-командами `/debug` / `/design` (тот же agent loop со спец. system prompt). Debug: `find_logs` + `read_log_tail` + диагностики; Design: `open_browser` + `fetch_page` (без выполнения JS / кликов пока).
 - Несколько файлов: сначала `propose_plan` -> файл `.gen/plan.md`; прогресс - `update_plan`. План переживает «Очистить» чат.
 - Большой файл: короткая заготовка `write_file`, дальше `apply_patch` кусками.
 - Обзор проекта: `codebase_search` по фоновому индексу; точный grep - `search_files`.

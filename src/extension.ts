@@ -8,11 +8,14 @@ import { initLogger } from './log/logger';
 import { initGenRulesManager } from './project/genrules';
 import { DiffContentProvider, registerDiffContentProvider } from './preview/showDiff';
 
+import { initUsageStore } from './stores/usageStore';
+
 export function activate(context: vscode.ExtensionContext): void {
 	initSettings(context);
 	initLogger(context);
 	initIndexManager(context);
 	initGenRulesManager(context);
+	initUsageStore(context);
 
 	const diffProvider = new DiffContentProvider();
 

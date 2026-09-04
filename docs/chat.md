@@ -6,10 +6,14 @@ Chat lives in the bottom **Gen** panel.
 
 ## Modes
 
-| Mode      | Behavior                                                                          |
-| --------- | --------------------------------------------------------------------------------- |
-| **Ask**   | Text only. Selection in the active editor is added to context.                    |
-| **Agent** | Loop: LLM -> tool calls -> tool results -> LLM again (up to the iteration limit). |
+| Mode       | How to enable     | Behavior                                                                          |
+| ---------- | ----------------- | --------------------------------------------------------------------------------- |
+| **Ask**    | button / `/ask`   | Text only. Selection in the active editor is added to context.                    |
+| **Agent**  | button / `/agent` | Loop: LLM -> tool calls -> tool results -> LLM again (up to the iteration limit). |
+| **Debug**  | `/debug`          | Like Agent, focused on logs and diagnostics (`find_logs`, `read_log_tail`).       |
+| **Design** | `/design`         | Like Agent, focused on UI preview (`open_browser`, `fetch_page`).                 |
+
+Type `/` in the input for slash-command autocomplete. You can attach a question: `/debug why is auth failing?`. Active Debug/Design shows as a badge next to Ask/Agent (click to return to Agent).
 
 ## Agent access level
 
@@ -63,6 +67,10 @@ In the input, type `@` and choose:
 | `@file path`                    | File contents                                 |
 | `@folder path`                  | Files from a folder (capped)                  |
 | `@codebase` / `@codebase query` | Fragments from the local index + open editors |
+| `@git` / `@git SHA`             | Recent commits or `git show` for a SHA        |
+| `@branch_diff`                  | `git status` + `diff --stat`                  |
+| `@rules`                        | AGENTS.md / `.genrules`                       |
+| `@link url`                     | Fetched page text (capped)                    |
 
 Autocomplete: arrows / Tab / Enter.
 

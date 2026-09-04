@@ -40,7 +40,7 @@ Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject)
 
 ## Notes
 
-- Chat modes **Debug** / **Design** use the same agent loop with a focused system prompt. Debug prefers `find_logs` + `read_log_tail` + diagnostics; Design uses `open_browser` + `fetch_page` (no JS execution / no clicks yet).
+- Chat modes **Debug** / **Design** are enabled via slash commands `/debug` / `/design` (same agent loop with a focused system prompt). Debug prefers `find_logs` + `read_log_tail` + diagnostics; Design uses `open_browser` + `fetch_page` (no JS execution / no clicks yet).
 - Multiple files: start with `propose_plan` -> `.gen/plan.md`; progress via `update_plan`. The plan survives **Clear** chat.
 - Large file: short `write_file` scaffold, then `apply_patch` in chunks.
 - Project overview: `codebase_search` on the background index; exact grep - `search_files`.

@@ -3,6 +3,7 @@ import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type To
 import { resolveCommandCwd, throwIfAborted } from '../workspacePath';
 import { runShellCommand } from '../shellExec';
 import { confirmAlwaysOrSkip } from './confirm';
+import type { ShellSession } from '../shellSession';
 
 function asStringArray(args: Record<string, unknown>, key: string): string[] {
 	const value = args[key];
@@ -15,13 +16,13 @@ function asStringArray(args: Record<string, unknown>, key: string): string[] {
 
 export const runCommandTool: ToolDefinition = {
 	name: 'run_command',
-	description: 'Запустить команду в каталоге workspace через execFile (без shell/pipe). Запрещены rm/curl/eval-флаги/install/git push. Всегда требует подтверждения.',
+	description: 'Запустить команду в workspace через execFile (без shell/pipe). cwd сохраняется между вызовами. background=true - вернуть job_id для await_shell.',
 	parameters: {
 		type: 'object',
 		properties: {
 			command: {
 				type: 'string',
-				description: 'Исполняемый файл (go, python, npm, ... - без allowlist языков)',
+				description: 'Исполняемый файл (go, python, npm, ...)',
 			},
 			args: {
 				type: 'array',
@@ -30,11 +31,15 @@ export const runCommandTool: ToolDefinition = {
 			},
 			cwd: {
 				type: 'string',
-				description: 'Рабочий каталог относительно workspace (по умолчанию корень)',
+				description: 'Рабочий каталог относительно текущего shell cwd / workspace',
 			},
 			timeout_ms: {
 				type: 'integer',
 				description: 'Таймаут в миллисекундах (по умолчанию 60000, максимум 300000)',
+			},
+			background: {
+				type: 'boolean',
+				description: 'Запустить в фоне и вернуть job_id',
 			},
 		},
 		required: ['command'],
@@ -42,17 +47,50 @@ export const runCommandTool: ToolDefinition = {
 	},
 	async execute(args, ctx: ToolContext): Promise<ToolResult> {
 		throwIfAborted(ctx.signal);
-		const resolved = await resolveCommandCwd(asString(args, 'cwd', '.'));
+		const shell = (ctx as ToolContext & { shell?: ShellSession }).shell;
 		const command = asString(args, 'command').trim();
 		const cmdArgs = asStringArray(args, 'args');
 		const timeoutMs = asOptionalInt(args, 'timeout_ms');
-		const cwd = resolved.cwd;
+		const background = args.background === true;
 
-		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runCommand', resolved.relative || '.'), `${command} ${cmdArgs.join(' ')}`.trim());
+		let cwd: string;
+		let relative: string;
+		if (shell) {
+			cwd = shell.resolveCwd(asString(args, 'cwd', ''));
+			relative = vscode.workspace.asRelativePath(cwd, false);
+		} else {
+			const resolved = await resolveCommandCwd(asString(args, 'cwd', '.'));
+			cwd = resolved.cwd;
+			relative = resolved.relative;
+		}
+
+		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runCommand', relative || '.'), `${command} ${cmdArgs.join(' ')}`.trim());
 		if (denied) {
 			return {
 				...denied,
-				path: resolved.relative,
+				path: relative,
+			};
+		}
+
+		if (background) {
+			if (!shell) {
+				return {
+					ok: false,
+					content: 'background: недоступна shell-сессия'
+				};
+			}
+
+			const job = shell.startBackground(command, cmdArgs, cwd, ctx.signal);
+			shell.applyCd(command, cmdArgs);
+			return {
+				ok: true,
+				path: relative,
+				content: JSON.stringify({
+					job_id: job.id,
+					command: job.commandLine,
+					cwd: job.cwd,
+					hint: 'Вызови await_shell с этим job_id',
+				}, null, 2),
 			};
 		}
 
@@ -63,10 +101,13 @@ export const runCommandTool: ToolDefinition = {
 			timeoutMs,
 			signal: ctx.signal,
 		});
+		if (shell && result.ok) {
+			shell.applyCd(command, cmdArgs);
+		}
 
 		return {
 			ok: result.ok,
-			path: resolved.relative,
+			path: relative,
 			content: result.content,
 		};
 	},

@@ -39,6 +39,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
+	addSelectionToChat(): Promise<void> {
+		return this.session.addSelectionToChat();
+	}
+
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
 		this.view = webviewView;
 

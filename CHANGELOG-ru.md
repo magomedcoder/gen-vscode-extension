@@ -2,7 +2,23 @@
 
 [English version](CHANGELOG.md)
 
-## 0.2.0-dev (3 сентября 2026)
+## 0.3.0-dev (Версия в разработке)
+
+- Slash-режимы: `/debug` `/design` `/plan` `/ask` `/agent`; также `/export` `/init`
+- Режим **Plan**: фильтр tools только на чтение (без мутаций, пока не вернётесь в Agent)
+- Permissions v2: `approvalPolicy` (allow / ask / review / deny), Always + подсказка паттерна, session allowlist, `autoApprove`, `continueLoopOnDeny`, capability toggles
+- Карточка подтверждения: кнопка **Always** + hint паттерна
+- Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `skill`
+- Rules и skills: `AGENTS.md` / `.genrules`; discovery skills + tool `skill`; `/init` создаёт/обновляет `AGENTS.md`
+- Цикл агента: параллельные read-only tool calls; обрезка вывода tools (`toolOutputMaxChars`)
+- Настройки: `systemPrompt`, `smallModel`; локальный usage ledger
+- Ctrl+L - добавить выделение редактора в чат
+- MCP (stdio MVP): настройка `mcpServers` (JSON на странице «Чат и агент»); tools `list_mcp_tools`, `call_mcp_tool`
+- Субагенты: tool `task` (`explore` только чтение / `general`); лимит вложенности `subagentDepth`
+- Shell: сохранение cwd между `run_command`; `background=true` + tool `await_shell`
+- Упоминания: `@git`, `@branch_diff`, `@rules`, `@link` (+ автодополнение в Composer)
+
+## 0.2.0 (3 сентября 2026)
 
 - Context Engine + упоминания `@file` / `@folder` / `@codebase` в чате (автодополнение в Composer)
 - Документация: английские docs без суффикса `-ru`; русские - `*-ru.md` со ссылками EN/RU

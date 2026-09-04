@@ -36,6 +36,11 @@
         "command": "gen.openChat",
         "title": "%command.openChat.title%",
         "category": "%extension.category%"
+      },
+      {
+        "command": "gen.addSelectionToChat",
+        "title": "%command.addSelectionToChat.title%",
+        "category": "%extension.category%"
       }
     ],
     "keybindings": [
@@ -43,6 +48,12 @@
         "command": "gen.openChat",
         "key": "ctrl+alt+g",
         "mac": "cmd+alt+g"
+      },
+      {
+        "command": "gen.addSelectionToChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus && editorHasSelection"
       },
       {
         "command": "gen.commentSelection",

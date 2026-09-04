@@ -39,6 +39,30 @@ body {
 	min-width: 0;
 }
 
+.composer__modes {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.mode-badge {
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-button-background));
+	border-radius: 4px;
+	padding: 2px 8px;
+	font-size: 11px;
+	font-family: inherit;
+	cursor: pointer;
+	background: color-mix(in srgb, var(--vscode-button-background) 22%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.mode-badge:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
 .mode-toggle {
 	display: inline-flex;
 	flex-wrap: wrap;
@@ -969,6 +993,17 @@ body[data-screen='settings'] .settings {
 .field__hint {
 	font-size: 11px;
 	opacity: 0.75;
+}
+
+.field__hint--error {
+	opacity: 1;
+	color: var(--vscode-errorForeground, #f44747);
+}
+
+.field__input--code {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 12px;
+	resize: vertical;
 }
 
 .field__label {

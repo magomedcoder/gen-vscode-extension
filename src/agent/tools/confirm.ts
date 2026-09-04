@@ -10,8 +10,16 @@ export function abortTurn(): never {
 	throw err;
 }
 
-export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
+export async function confirmOrSkip(
+	ctx: ToolContext,
+	title: string,
+	detail?: string,
+	opts?: { suggestion?: string; allowAlways?: boolean },
+): Promise<ToolResult | undefined> {
 	throwIfAborted(ctx.signal);
+	if ((ctx as ToolContext & { skipConfirm?: boolean }).skipConfirm || getAgentAuthLevel() === 'open') {
+		return undefined;
+	}
 	if (!ctx.confirm) {
 		return {
 			ok: false,
@@ -35,6 +43,8 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 		void Promise.resolve(ctx.confirm!({
 			title,
 			detail: detail ? previewText(detail) : undefined,
+			suggestion: opts?.suggestion,
+			allowAlways: opts?.allowAlways,
 		})).then((value) => {
 			ctx.signal?.removeEventListener('abort', onAbort);
 			resolve(value);
@@ -44,7 +54,12 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 		});
 	});
 
-	if (choice === 'apply') {
+	if (choice === 'apply' || choice === 'always') {
+		const onAlways = (ctx as ToolContext & { onAlwaysAllow?: (pattern: string) => void }).onAlwaysAllow;
+		if (choice === 'always' && opts?.suggestion && onAlways) {
+			onAlways(opts.suggestion);
+		}
+
 		return undefined;
 	}
 
@@ -59,10 +74,6 @@ export async function confirmOrSkip(ctx: ToolContext, title: string, detail?: st
 	abortTurn();
 }
 
-/**
- * Подтверждение для опасных tools (команды, план, overwrite user-diff).
- * В режиме «Без спроса» (`open`) диалог не показывается - действие выполняется и пишется в лог
- */
 export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
 	if (getAgentAuthLevel() === 'open') {
 		return undefined;

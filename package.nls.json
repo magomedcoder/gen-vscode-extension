@@ -5,6 +5,7 @@
 	"command.commentSelection.title": "Gen: Comment selection",
 	"command.commentFile.title": "Gen: Comment entire file",
 	"command.openChat.title": "Open chat",
+	"command.addSelectionToChat.title": "Gen: Add selection to chat",
 	"viewsContainers.panel.gen.title": "Gen",
 	"views.gen.chatView.name": "Chat"
 }

@@ -1,3 +1,4 @@
+import { normalizeApprovalPolicy } from '../agent/permissionPolicy';
 import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
 import { initApiKeyStore } from './apiKey';
@@ -63,7 +64,7 @@ function normalizeAuthLevel(raw: Partial<GenSettings> & { agentConfirmWrites?: b
 
 function normalizeChatMode(raw: unknown): ChatMode {
 	const mode = String(raw ?? '');
-	if (mode === 'agent' || mode === 'debug' || mode === 'design') {
+	if (mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan') {
 		return mode;
 	}
 
@@ -77,9 +78,19 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 	return {
 		baseUrl: String(raw.baseUrl ?? '').trim(),
 		model: String(raw.model ?? '').trim(),
+		smallModel: String(raw.smallModel ?? '').trim(),
 		chatMode,
 		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 0, 40),
 		agentAuthLevel: normalizeAuthLevel(raw),
+		approvalPolicy: normalizeApprovalPolicy(raw.approvalPolicy),
+		autoApprove: raw.autoApprove === true,
+		continueLoopOnDeny: raw.continueLoopOnDeny !== false,
+		enableWorkspaceContext: raw.enableWorkspaceContext !== false,
+		enableFileReading: raw.enableFileReading !== false,
+		enableTerminal: raw.enableTerminal !== false,
+		webSearchEnabled: raw.webSearchEnabled !== false,
+		webFetchEnabled: raw.webFetchEnabled !== false,
+		systemPrompt: String(raw.systemPrompt ?? '').trim(),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
 		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),
 		requestTimeoutMs: Math.max(1000, Math.floor(asNumber(raw.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs))),
@@ -96,6 +107,22 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),
 		planWriteToFile: raw.planWriteToFile !== false,
 		loggingEnabled: raw.loggingEnabled === true,
+		toolOutputMaxChars: Math.max(1000, Math.floor(asNumber(raw.toolOutputMaxChars, DEFAULT_SETTINGS.toolOutputMaxChars))),
+		mcpServers: Array.isArray(raw.mcpServers)
+			? raw.mcpServers
+				.filter((s): s is NonNullable<typeof s> => Boolean(s && typeof s === 'object'))
+				.map((s) => ({
+					name: String((s as { name?: string }).name ?? '').trim(),
+					transport: 'stdio' as const,
+					command: String((s as { command?: string }).command ?? '').trim(),
+					args: Array.isArray((s as { args?: unknown }).args)
+						? ((s as { args: unknown[] }).args).map(String)
+						: undefined,
+					env: (s as { env?: Record<string, string> }).env,
+					enabled: (s as { enabled?: boolean }).enabled !== false,
+				})).filter((s) => s.name && s.command)
+			: [],
+		subagentDepth: clamp(Math.floor(asNumber(raw.subagentDepth, DEFAULT_SETTINGS.subagentDepth)), 1, 4),
 	};
 }
 
