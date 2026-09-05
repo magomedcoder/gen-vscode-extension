@@ -10,39 +10,42 @@
 
 Подтверждения - **карточка в чате Gen** (Применить / Пропустить / Стоп или Применить / Отклонить). Панель чата фокусируется автоматически; отдельной вкладки нет.
 
-| Tool                   | Действие                                               | Подтверждать                                                                  |
-| ---------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `get_workspace_info`   | Папки workspace, имя, число документов                 | нет                                                                           |
-| `get_active_editor`    | Активный редактор: путь, язык, курсор, выделение       | нет                                                                           |
-| `get_open_editors`     | Открытые вкладки                                       | нет                                                                           |
-| `list_dir`             | Список файлов/папок (без игнорируемых)                 | нет                                                                           |
-| `read_file`            | Прочитать файл (опц. диапазон строк)                   | нет                                                                           |
-| `search_files`         | Glob и/или поиск текста                                | нет                                                                           |
-| `codebase_search`      | Поиск по локальному индексу (триграммы, `.gen/index/`) | нет                                                                           |
-| `propose_plan`         | План шагов; сохраняется в сессии (sticky)              | Спросить                                                                      |
-| `update_plan`          | Статусы шагов / replace / clear активного плана        | replace - Спросить; иначе нет                                                 |
-| `write_file`           | Создать / полностью перезаписать                       | Спросить: если файл уже есть; запрещён, если пользователь правил после агента |
-| `apply_patch`          | Замена `old_string` -> `new_string`                    | Спросить; также при правках пользователя поверх снимка агента                 |
-| `apply_workspace_edit` | Несколько правок атомарно                              | Спросить; также при правках пользователя на любом из файлов                   |
-| `delete_file`          | Удалить файл (не папку)                                | Спросить                                                                      |
-| `create_dir`           | Создать каталог                                        | нет                                                                           |
-| `open_file`            | Открыть файл в редакторе                               | нет                                                                           |
-| `close_file`           | Закрыть вкладку (не грязную)                           | нет                                                                           |
-| `reveal_line`          | Перейти к строке                                       | нет                                                                           |
-| `git_status`           | `git status` + `diff --stat` (без commit/push)         | нет                                                                           |
-| `get_diagnostics`      | Ошибки TS/ESLint и т.п.                                | нет                                                                           |
-| `find_logs`            | Найти `*.log` / `logs/` в workspace                    | нет                                                                           |
-| `read_log_tail`        | Хвост лог-файла (последние N строк)                    | нет                                                                           |
-| `open_browser`         | Открыть URL в Simple Browser VS Code                   | Спросить                                                                      |
-| `fetch_page`           | HTTP GET текста/HTML страницы (Design Mode)            | Спросить; remote (не localhost) - всегда confirm                              |
-| `run_command`          | Команда в cwd workspace (allow + denylist)             | Спросить                                                                      |
-| `run_tests`            | Тесты проекта (npm / go / cargo / pytest)              | Спросить                                                                      |
+| Tool                   | Действие                                                             | Подтверждать                                                                  |
+| ---------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `get_workspace_info`   | Папки workspace, имя, число документов                               | нет                                                                           |
+| `get_active_editor`    | Активный редактор: путь, язык, курсор, выделение                     | нет                                                                           |
+| `get_open_editors`     | Открытые вкладки                                                     | нет                                                                           |
+| `list_dir`             | Список файлов/папок (без игнорируемых)                               | нет                                                                           |
+| `read_file`            | Прочитать файл (опц. диапазон строк); PDF через `pdftotext`          | нет                                                                           |
+| `search_files`         | Glob и/или поиск текста                                              | нет                                                                           |
+| `codebase_search`      | Поиск по локальному индексу (триграммы, `.gen/index/`)               | нет                                                                           |
+| `propose_plan`         | План шагов; сохраняется в сессии (sticky)                            | Спросить                                                                      |
+| `update_plan`          | Статусы шагов / replace / clear активного плана                      | replace - Спросить; иначе нет                                                 |
+| `write_file`           | Создать / полностью перезаписать                                     | Спросить: если файл уже есть; запрещён, если пользователь правил после агента |
+| `apply_patch`          | Замена `old_string` -> `new_string`                                  | Спросить; также при правках пользователя поверх снимка агента                 |
+| `apply_workspace_edit` | Несколько правок атомарно                                            | Спросить; также при правках пользователя на любом из файлов                   |
+| `edit_notebook`        | Править / вставить ячейку Jupyter (`.ipynb`)                         | Спросить (confirmAlwaysOrSkip)                                                |
+| `delete_file`          | Удалить файл (не папку)                                              | Спросить                                                                      |
+| `create_dir`           | Создать каталог                                                      | нет                                                                           |
+| `open_file`            | Открыть файл в редакторе                                             | нет                                                                           |
+| `close_file`           | Закрыть вкладку (не грязную)                                         | нет                                                                           |
+| `reveal_line`          | Перейти к строке                                                     | нет                                                                           |
+| `git_status`           | `git status` + `diff --stat` (без commit/push)                       | нет                                                                           |
+| `get_diagnostics`      | Ошибки TS/ESLint и т.п.                                              | нет                                                                           |
+| `lsp`                  | definition / references / hover / symbols (line/character - 0-based) | нет                                                                           |
+| `find_logs`            | Найти `*.log` / `logs/` в workspace                                  | нет                                                                           |
+| `read_log_tail`        | Хвост лог-файла (последние N строк)                                  | нет                                                                           |
+| `open_browser`         | Открыть URL в Simple Browser VS Code                                 | Спросить                                                                      |
+| `fetch_page`           | HTTP GET текста/HTML страницы (Design Mode)                          | Спросить; remote (не localhost) - всегда confirm                              |
+| `run_command`          | Команда в cwd workspace (allow + denylist)                           | Спросить                                                                      |
+| `run_tests`            | Тесты проекта (npm / go / cargo / pytest)                            | Спросить                                                                      |
 
 ## Замечания
 
 - Режимы чата **Debug** / **Design** включаются slash-командами `/debug` / `/design` (тот же agent loop со спец. system prompt). Debug: `find_logs` + `read_log_tail` + диагностики; Design: `open_browser` + `fetch_page` (без выполнения JS / кликов пока).
 - Несколько файлов: сначала `propose_plan` -> файл `.gen/plan.md`; прогресс - `update_plan`. План переживает «Очистить» чат.
 - Большой файл: короткая заготовка `write_file`, дальше `apply_patch` кусками.
+- После успешного `write_file` / `apply_patch`, если у файла есть диагностики, в ответ tool добавляется короткая подсказка (tool не падает). Opt-in `formatAfterEdit` в настройках запускает `editor.action.formatDocument` после этих правок.
 - Обзор проекта: `codebase_search` по фоновому индексу; точный grep - `search_files`.
 - Если пользователь правил файл после агента: полный `write_file` отклоняется; правь через `apply_patch` / `apply_workspace_edit` по свежему `read_file`.
 - `run_command` без shell/pipe. Запрещённые бинарники - из `deniedCommands`. Eval / git write / package install остаются в коде. Confirm в режиме **Спросить**; в **Без спроса** - без диалога.

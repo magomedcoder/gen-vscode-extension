@@ -1,5 +1,6 @@
 import { DEFAULT_APPROVAL_POLICY } from '../config/approvalTypes';
 import type { ApprovalActionType, ApprovalPolicy, ApprovalRule } from '../config/approvalTypes';
+import { isDeniedRelativePath } from './policy';
 export type { ApprovalActionType, ApprovalMode, ApprovalPolicy, ApprovalRule } from '../config/approvalTypes';
 export { DEFAULT_APPROVAL_POLICY } from '../config/approvalTypes';
 
@@ -87,6 +88,16 @@ export function isRiskySubject(action: ApprovalActionType, subject: string): boo
 	return false;
 }
 
+// Совпадение пути с sensitivePathPatterns (например `.env`, `.env.*`) - те же glob’ы, что deniedPaths
+export function matchesSensitivePath(subject: string, patterns: readonly string[]): boolean {
+	const s = subject.trim().replace(/\\/g, '/');
+	if (!s || patterns.length === 0) {
+		return false;
+	}
+
+	return isDeniedRelativePath(s, patterns);
+}
+
 export function suggestPattern(action: ApprovalActionType, toolName: string, subject: string): string | undefined {
 	const s = subject.trim();
 	if (!s) {
@@ -114,6 +125,17 @@ export function suggestPattern(action: ApprovalActionType, toolName: string, sub
 		} catch {
 			return undefined;
 		}
+	}
+
+	// mcp / task / skill / outside: sessionAllow сверяет `${action}:${subject}` и `subject`
+	if (action === 'mcp' || action === 'task' || action === 'skill' || action === 'outside') {
+		const slash = s.indexOf('/');
+		if (slash > 0) {
+			// Префикс до первого `/` - например mcp:server* для server/tool
+			return `${action}:${s.slice(0, slash)}*`;
+		}
+
+		return `${action}:${s}`;
 	}
 
 	return `${toolName}:${s}`;

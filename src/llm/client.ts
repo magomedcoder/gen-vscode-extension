@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { getApiKey, buildAuthHeaders } from '../config/apiKey';
 import { getSettings, setSessionModel, type GenSettings } from '../config/settings';
-import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
+import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, parseRetryAfterMs, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
+import type { LlmRetryInfo } from './types';
 import { logLlm } from './log';
 import { parseModelsListResponse, type LlmModelOption } from './modelLabel';
 import { parseUsage } from './usage';
@@ -248,7 +249,7 @@ export class HttpLlmClient implements LlmClient {
 
 	async complete(params: CompleteParams): Promise<CompleteResult> {
 		const settings = this.getConfig();
-		const model = await this.resolveSessionModel(settings);
+		const model = params.model?.trim() || await this.resolveSessionModel(settings);
 		if (!model) {
 			throw new Error(vscode.l10n.t('llm.needModel'));
 		}
@@ -278,14 +279,14 @@ export class HttpLlmClient implements LlmClient {
 			if (stream) {
 				body.stream_options = { include_usage: true };
 				try {
-					return await this.requestStream(body, params.signal, settings, onDelta);
+					return await this.requestStream(body, params.signal, settings, onDelta, params.onRetry);
 				} catch (err) {
 					if (!(err instanceof LlmHttpError) || err.status !== 400) {
 						throw err;
 					}
 
 					delete body.stream_options;
-					return this.requestStream(body, params.signal, settings, onDelta);
+					return this.requestStream(body, params.signal, settings, onDelta, params.onRetry);
 				}
 			}
 
@@ -296,7 +297,7 @@ export class HttpLlmClient implements LlmClient {
 				},
 				body: JSON.stringify(body),
 				signal: params.signal,
-			}, settings);
+			}, settings, params.onRetry);
 
 			if (data.error?.message) {
 				throw new Error(data.error.message);
@@ -436,6 +437,7 @@ export class HttpLlmClient implements LlmClient {
 			result: T; 
 			status: number 
 		}>,
+		onRetry?: (info: LlmRetryInfo) => void,
 	): Promise<T> {
 		let last: unknown;
 		for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -467,7 +469,15 @@ export class HttpLlmClient implements LlmClient {
 					throw err;
 				}
 
-				await this.sleep(retryDelayMs(attempt - 1));
+				const retryAfterMs = err instanceof LlmHttpError ? err.retryAfterMs : undefined;
+				const delayMs = retryDelayMs(attempt - 1, retryAfterMs);
+				onRetry?.({
+					attempt: attempt + 1,
+					maxAttempts: MAX_ATTEMPTS,
+					status,
+					delayMs,
+				});
+				await this.sleep(delayMs);
 			}
 		}
 
@@ -479,6 +489,7 @@ export class HttpLlmClient implements LlmClient {
 		signal: AbortSignal | undefined,
 		settings: GenSettings,
 		onDelta?: (chunk: string) => void,
+		onRetry?: (info: LlmRetryInfo) => void,
 	): Promise<CompleteResult> {
 		const url = new URL('/v1/chat/completions', settings.baseUrl).toString();
 		const headers = {
@@ -486,7 +497,12 @@ export class HttpLlmClient implements LlmClient {
 			...(await this.authHeaders(settings)),
 		};
 
-		return this.withRetry('POST', url, () => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta));
+		return this.withRetry(
+			'POST',
+			url,
+			() => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta),
+			onRetry,
+		);
 	}
 
 	private async requestStreamOnce(
@@ -529,7 +545,12 @@ export class HttpLlmClient implements LlmClient {
 					parsed = undefined;
 				}
 
-				throw new LlmHttpError(httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)), response.status);
+				throw new LlmHttpError(
+					httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)),
+					response.status,
+					undefined,
+					parseRetryAfterMs(response.headers.get('Retry-After')),
+				);
 			}
 
 			if (ctype.includes('application/json') && !ctype.includes('event-stream')) {
@@ -622,14 +643,24 @@ export class HttpLlmClient implements LlmClient {
 		}
 	}
 
-	private async requestJson<T>(path: string, init: RequestInit, settings: GenSettings): Promise<T> {
+	private async requestJson<T>(
+		path: string,
+		init: RequestInit,
+		settings: GenSettings,
+		onRetry?: (info: LlmRetryInfo) => void,
+	): Promise<T> {
 		const url = new URL(path, settings.baseUrl).toString();
 		const headers = {
 			...((init.headers as Record<string, string> | undefined) ?? {}),
 			...(await this.authHeaders(settings)),
 		};
 
-		return this.withRetry(init.method ?? 'GET', url, () => this.requestJsonOnce<T>(url, { ...init, headers }, init.signal ?? undefined, settings.requestTimeoutMs));
+		return this.withRetry(
+			init.method ?? 'GET',
+			url,
+			() => this.requestJsonOnce<T>(url, { ...init, headers }, init.signal ?? undefined, settings.requestTimeoutMs),
+			onRetry,
+		);
 	}
 
 	private async requestJsonOnce<T>(
@@ -673,7 +704,12 @@ export class HttpLlmClient implements LlmClient {
 			}
 
 			if (!response.ok) {
-				throw new LlmHttpError(httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)), response.status);
+				throw new LlmHttpError(
+					httpErrorMessage(response.status, parseErrorDetail(text, parsed, response.statusText)),
+					response.status,
+					undefined,
+					parseRetryAfterMs(response.headers.get('Retry-After')),
+				);
 			}
 
 			return {

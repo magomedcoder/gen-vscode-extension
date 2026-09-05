@@ -25,9 +25,14 @@ export interface LlmToolCall {
 	function: LlmToolCallFunction;
 }
 
+// Часть multimodal user-сообщения (OpenAI-compatible)
+export type ChatContentPart =
+	| { type: 'text'; text: string }
+	| { type: 'image_url'; image_url: { url: string } };
+
 export type ChatMessage = | {
 		role: 'system' | 'user';
-		content: string;
+		content: string | ChatContentPart[];
 	}
 	| {
 		role: 'assistant';
@@ -41,12 +46,23 @@ export type ChatMessage = | {
 		name?: string;
 	};
 
+export interface LlmRetryInfo {
+	attempt: number;
+	maxAttempts: number;
+	status?: number;
+	delayMs: number;
+}
+
 export interface CompleteParams {
 	messages: ChatMessage[];
 	signal?: AbortSignal;
 	tools?: LlmToolDefinition[];
 	toolChoice?: 'auto' | 'none' | 'required';
 	onDelta?: (chunk: string) => void;
+	// Вызывается перед паузой между повторами HTTP-запроса
+	onRetry?: (info: LlmRetryInfo) => void;
+	// Переопределение модели (например smallModel для /compact)
+	model?: string;
 }
 
 export interface CompleteResult {

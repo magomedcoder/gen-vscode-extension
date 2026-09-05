@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { buildAuthHeaders } from '../config/apiKey.js';
 import { HttpLlmClient } from '../llm/client.js';
-import { isRetryableError, LlmHttpError, retryDelayMs, withCause } from '../llm/errors.js';
+import { isRetryableError, LlmHttpError, parseRetryAfterMs, retryDelayMs, withCause } from '../llm/errors.js';
 import type { GenSettings } from '../config/types.js';
 import { DEFAULT_SETTINGS } from '../config/types.js';
 
@@ -52,6 +52,25 @@ suite('retry helpers', () => {
 		assert.strictEqual(retryDelayMs(0), 400);
 		assert.strictEqual(retryDelayMs(1), 800);
 		assert.strictEqual(retryDelayMs(2), 1600);
+	});
+
+	test('Retry-After поднимает задержку и ограничен 60с', () => {
+		assert.strictEqual(retryDelayMs(0, 5_000), 5_000);
+		assert.strictEqual(retryDelayMs(2, 1_000), 1_600);
+		assert.strictEqual(retryDelayMs(0, 120_000), 60_000);
+	});
+
+	test('parseRetryAfterMs: delta-seconds и HTTP-date', () => {
+		assert.strictEqual(parseRetryAfterMs(null), undefined);
+		assert.strictEqual(parseRetryAfterMs(''), undefined);
+		assert.strictEqual(parseRetryAfterMs('5'), 5_000);
+		assert.strictEqual(parseRetryAfterMs('0'), 0);
+
+		const future = new Date(Date.now() + 10_000).toUTCString();
+		const parsed = parseRetryAfterMs(future);
+		assert.ok(parsed !== undefined && parsed > 5_000 && parsed <= 10_000);
+
+		assert.strictEqual(parseRetryAfterMs('not-a-date'), undefined);
 	});
 
 	test('withCause сохраняет cause', () => {

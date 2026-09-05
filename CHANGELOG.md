@@ -4,6 +4,9 @@
 
 ## 0.3.0-dev (Development version)
 
+- Settings: dedicated **MCP** page (cards: enable/disable, status, tools list + JSON advanced); settings **search**
+- Security: approval policy UI, auto-approve / continue-on-deny, capability toggles; Always confirm + `suggestPattern` session allowlist
+- LLM: honor `Retry-After` on 429/5xx; show retry status in composer while busy
 - Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init`
 - **Plan** mode: read-only tool filter (no mutating edits/commands until you switch back)
 - Permissions v2 foundation: `approvalPolicy` (allow / ask / review / deny), Always + suggested pattern, session allowlist, `autoApprove`, `continueLoopOnDeny`, capability toggles
@@ -13,10 +16,14 @@
 - Agent loop: parallel read-only tool calls; tool output truncation (`toolOutputMaxChars`)
 - Settings: `systemPrompt`, `smallModel`; usage ledger store
 - Ctrl+L - add editor selection to chat
-- MCP (stdio MVP): settings `mcpServers` (JSON on Chat & Agent page); tools `list_mcp_tools`, `call_mcp_tool`
+- MCP (stdio MVP): settings `mcpServers` (dedicated MCP page); tools `list_mcp_tools`, `call_mcp_tool`
 - Subagents: tool `task` (`explore` read-only / `general`); nesting limit `subagentDepth`
 - Shell: cwd persist across `run_command`; `background=true` + tool `await_shell`
 - Mentions: `@git`, `@branch_diff`, `@rules`, `@link` (+ Composer autocomplete)
+- Wave 3: `edit_notebook`, `lsp`, `semantic_search`/`search_docs`; `plan_enter`/`plan_exit`/`switch_mode` + multitask; `.gen/plans` + `.gen/agents`/`generate_agent`
+- Wave 3: custom slash `.gen/commands`, `/compact` `/new` `/undo` `/sessions` `/models`; `!command`; hooks `.gen/hooks.json`
+- Wave 3: multi-session + fork; MCP cwd/timeout; formatAfterEdit + diagnostics nudge; provider presets + remote embeddings
+- Wave 4: Usage page; doom loop / external dir / `/redo`; `@code` `@Docs` `@agent` + image attachments; personas / scout / auto-title
 
 ## 0.2.0 (3 September 2026)
 

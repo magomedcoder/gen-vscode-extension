@@ -15,6 +15,8 @@ export interface McpServerConfig {
 	command: string;
 	args?: string[];
 	env?: Record<string, string>;
+	cwd?: string;
+	timeoutMs?: number;
 	enabled: boolean;
 }
 
@@ -23,6 +25,19 @@ export interface McpToolInfo {
 	name: string;
 	description?: string;
 	inputSchema?: object;
+}
+
+// Статус одного MCP-сервера для настроек и list_mcp_tools
+export interface McpServerStatus {
+	name: string;
+	enabled: boolean;
+	connected: boolean;
+	toolCount: number;
+	tools: Array<{ 
+		name: string; 
+		description?: string 
+	}>;
+	error?: string;
 }
 
 interface JsonRpcMessage {
@@ -46,12 +61,15 @@ class StdioMcpConnection {
 		reject: (e: Error) => void 
 	}>();
 	private tools: McpToolInfo[] = [];
+	private readonly requestTimeoutMs: number;
 	readonly name: string;
 
 	constructor(cfg: McpServerConfig) {
 		this.name = cfg.name;
+		this.requestTimeoutMs = cfg.timeoutMs && cfg.timeoutMs >= 1000 ? cfg.timeoutMs : 30_000;
 		this.proc = spawn(cfg.command, cfg.args ?? [], {
 			stdio: ['pipe', 'pipe', 'pipe'],
+			cwd: cfg.cwd || undefined,
 			env: {
 				...process.env,
 				...cfg.env
@@ -121,7 +139,7 @@ class StdioMcpConnection {
 					this.pending.delete(id);
 					reject(new Error(`MCP ${this.name}: таймаут на ${method}`));
 				}
-			}, 30_000);
+			}, this.requestTimeoutMs);
 		});
 	}
 
@@ -182,6 +200,8 @@ class StdioMcpConnection {
 
 class McpManager {
 	private connections = new Map<string, StdioMcpConnection>();
+	// Последняя ошибка подключения по имени сервера
+	private lastErrors = new Map<string, string>();
 	private connecting?: Promise<void>;
 
 	async refresh(): Promise<void> {
@@ -201,6 +221,7 @@ class McpManager {
 		}
 
 		this.connections.clear();
+		this.lastErrors.clear();
 		const servers = getSettings().mcpServers ?? [];
 		for (const cfg of servers) {
 			if (!cfg.enabled || cfg.transport !== 'stdio' || !cfg.command) {
@@ -212,6 +233,8 @@ class McpManager {
 				await conn.initialize();
 				this.connections.set(cfg.name, conn);
 			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				this.lastErrors.set(cfg.name, message);
 				console.error(`MCP ${cfg.name} ошибка:`, err);
 			}
 		}
@@ -236,14 +259,22 @@ class McpManager {
 		return conn.callTool(toolName, args);
 	}
 
-	status(): Array<{ name: string; connected: boolean; toolCount: number }> {
+	status(): McpServerStatus[] {
 		const servers = getSettings().mcpServers ?? [];
 		return servers.map((s) => {
 			const c = this.connections.get(s.name);
+			const tools = (c?.listTools() ?? []).map((t) => ({
+				name: t.name,
+				description: t.description,
+			}));
+			const error = this.lastErrors.get(s.name);
 			return {
 				name: s.name,
+				enabled: Boolean(s.enabled),
 				connected: Boolean(c),
-				toolCount: c?.listTools().length ?? 0,
+				toolCount: tools.length,
+				tools,
+				...(error ? { error } : {}),
 			};
 		});
 	}

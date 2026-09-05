@@ -5,6 +5,7 @@ import { AGENT_LIMITS } from '../policy';
 import { asBoolean, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from './confirm';
+import { enhanceSuccessfulWrite } from './postEdit';
 
 export const applyPatchTool: ToolDefinition = {
 	name: 'apply_patch',
@@ -133,12 +134,12 @@ export const applyPatchTool: ToolDefinition = {
 		const note = userDiffBefore ? vscode.l10n.t('tool.userEditsNotedPatch') : '';
 		const mini = computeMiniDiff(original, next.text);
 
-		return {
+		return enhanceSuccessfulWrite({
 			ok: true,
 			path: resolved.relative,
 			diff: mini.text,
 			hunks: toDiffHunkPayloads(mini.hunks, original, { path: resolved.relative }),
 			content: vscode.l10n.t('tool.patchApplied', resolved.relative, next.count, note),
-		};
+		}, doc.uri);
 	},
 };

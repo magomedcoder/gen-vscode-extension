@@ -23,6 +23,13 @@ suite('pickFewShot', () => {
 });
 
 suite('buildCommentMessages', () => {
+	const textOf = (content: string | Array<{ type: string; text?: string }>): string => {
+		if (typeof content === 'string') {
+			return content;
+		}
+		return content.map((p) => (p.type === 'text' ? (p.text ?? '') : '')).join('');
+	};
+
 	test('подмешивает custom system prompt', () => {
 		const messages = buildCommentMessages({
 			languageId: 'typescript',
@@ -34,7 +41,7 @@ suite('buildCommentMessages', () => {
 
 		const system = messages.find((m) => m.role === 'system');
 		assert.ok(system && system.role === 'system');
-		assert.ok(system.content.includes('Комментируй только публичные API.'));
+		assert.ok(textOf(system.content as string | Array<{ type: string; text?: string }>).includes('Комментируй только публичные API.'));
 	});
 
 	test('few-shot соответствует языку файла', () => {
@@ -48,8 +55,8 @@ suite('buildCommentMessages', () => {
 
 		assert.strictEqual(messages[1]?.role, 'user');
 		assert.strictEqual(messages[3]?.role, 'user');
-		assert.ok(messages[1]?.content.includes('Язык: python'));
-		assert.ok(messages[3]?.content.includes('Язык: python'));
-		assert.ok(messages[3]?.content.includes('main.py'));
+		assert.ok(textOf(messages[1]!.content as string | Array<{ type: string; text?: string }>).includes('Язык: python'));
+		assert.ok(textOf(messages[3]!.content as string | Array<{ type: string; text?: string }>).includes('Язык: python'));
+		assert.ok(textOf(messages[3]!.content as string | Array<{ type: string; text?: string }>).includes('main.py'));
 	});
 });

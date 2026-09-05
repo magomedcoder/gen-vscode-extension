@@ -11,28 +11,34 @@ export function App() {
 		screen,
 		chat,
 		settings,
+		personas,
 		apiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
 		modelsLoading,
+		mcpServers,
 		saveSettings,
 		loadModels,
 		openLogsFolder,
+		refreshMcp,
 	} = useGenBridge();
 
 	if (screen === 'settings') {
 		return (
 			<SettingsScreen
 				settings={settings}
+				personas={personas}
 				apiKeySet={apiKeySet}
 				status={settingsStatus}
 				models={models}
 				modelsStatus={modelsStatus}
 				modelsLoading={modelsLoading}
+				mcpServers={mcpServers}
 				onSave={saveSettings}
 				onLoadModels={loadModels}
 				onOpenLogsFolder={openLogsFolder}
+				onRefreshMcp={refreshMcp}
 			/>
 		);
 	}
@@ -41,12 +47,23 @@ export function App() {
 
 	return (
 		<div className="app">
-			<ChatHeader usage={chat.usage} />
+			<ChatHeader
+				usage={chat.usage}
+				maxContextTokens={chat.maxContextTokens}
+				sessionId={chat.sessionId}
+				sessions={chat.sessions}
+			/>
 			<ProjectSetupBanner project={chat.project} />
 			<MessageList messages={chat.messages} busy={chat.busy} />
 			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
 			<div className="composer-dock">
-				<Composer busy={chat.busy || confirming} queuedCount={chat.queuedCount ?? 0} mode={chat.mode} />
+				<Composer
+					busy={chat.busy || confirming}
+					busyDetail={chat.busy ? chat.busyDetail : undefined}
+					queuedCount={chat.queuedCount ?? 0}
+					mode={chat.mode}
+					customSlashCommands={chat.customSlashCommands}
+				/>
 			</div>
 		</div>
 	);

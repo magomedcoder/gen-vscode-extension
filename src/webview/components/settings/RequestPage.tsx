@@ -31,6 +31,19 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 			</label>
 
 			<label className="field">
+				<span className="field__label">{t('settings.maxContextTokens.label')}</span>
+				<input
+					className="field__input"
+					type="number"
+					min={1024}
+					step={1024}
+					value={draft.maxContextTokens}
+					onChange={(e) => setField('maxContextTokens', parseNumberInput(e.target.value, draft.maxContextTokens))}
+				/>
+				<span className="field__hint">{t('settings.maxContextTokens.hint')}</span>
+			</label>
+
+			<label className="field">
 				<span className="field__label">{t('settings.timeout.label')}</span>
 				<input
 					className="field__input"
@@ -52,6 +65,29 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 					value={draft.maxInputChars}
 					onChange={(e) => setField('maxInputChars', parseNumberInput(e.target.value, draft.maxInputChars))}
 				/>
+			</label>
+
+			<label className="field field--row">
+				<input
+					type="checkbox"
+					checked={draft.visionEnabled}
+					onChange={(e) => setField('visionEnabled', e.target.checked)}
+				/>
+				<span className="field__label">{t('settings.visionEnabled.label')}</span>
+			</label>
+			<span className="field__hint">{t('settings.visionEnabled.hint')}</span>
+
+			<label className="field">
+				<span className="field__label">{t('settings.attachmentImageMaxBase64.label')}</span>
+				<input
+					className="field__input"
+					type="number"
+					min={10000}
+					step={10000}
+					value={draft.attachmentImageMaxBase64}
+					onChange={(e) => setField('attachmentImageMaxBase64', parseNumberInput(e.target.value, draft.attachmentImageMaxBase64))}
+				/>
+				<span className="field__hint">{t('settings.attachmentImageMaxBase64.hint')}</span>
 			</label>
 		</>
 	);

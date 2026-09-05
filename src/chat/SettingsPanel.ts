@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
 import { getSettings, hasApiKey, setApiKey, setSessionModel, updateSettings } from '../config/settings';
+import { getMcpManager } from '../integrations/mcpClient';
 import { HttpLlmClient } from '../llm/client';
 import { loadWebviewL10n } from '../l10n/loadBundle';
 import { revealLogsFolder } from '../log/logger';
+import { discoverPersonas } from '../project/personas';
+import { readUsage, resetUsage } from '../stores/usageStore';
 import { CHAT_VIEW_ID } from './ids';
 import { createNonce, renderChatHtml } from './chatHtml';
-import type { FromWebviewMessage, ToWebviewMessage } from './protocol';
+import type { FromWebviewMessage, PersonaOption, ToWebviewMessage } from './protocol';
 
 const VIEW_TYPE = 'gen.settings';
 
@@ -68,11 +71,25 @@ export class SettingsPanel {
 		void this.panel.webview.postMessage(message);
 	}
 
+	private async listPersonaOptions(): Promise<PersonaOption[]> {
+		try {
+			const list = await discoverPersonas();
+			return list.map((p) => ({
+				id: p.id,
+				name: p.name,
+				description: p.description,
+			}));
+		} catch {
+			return [];
+		}
+	}
+
 	private async postSettings(): Promise<void> {
 		this.post({
 			type: 'settings',
 			settings: getSettings(),
 			apiKeySet: await hasApiKey(),
+			personas: await this.listPersonaOptions(),
 		});
 	}
 
@@ -101,6 +118,22 @@ export class SettingsPanel {
 			case 'openLogsFolder':
 				await revealLogsFolder();
 				return;
+			case 'loadUsage':
+				this.post({
+					type: 'usageLedger',
+					ledger: readUsage(),
+				});
+				return;
+			case 'resetUsage':
+				resetUsage();
+				this.post({
+					type: 'usageLedger',
+					ledger: readUsage(),
+				});
+				return;
+			case 'refreshMcp':
+				await this.postMcpStatus();
+				return;
 			case 'saveSettings':
 				try {
 					if (typeof msg.apiKey === 'string' && msg.apiKey.trim()) {
@@ -112,7 +145,10 @@ export class SettingsPanel {
 						type: 'settingsSaved',
 						settings: saved,
 						apiKeySet: await hasApiKey(),
+						personas: await this.listPersonaOptions(),
 					});
+					// После сохранения - обновить MCP в фоне и прислать статус
+					void this.postMcpStatus();
 				} catch (err) {
 					this.post({
 						type: 'settingsError',
@@ -121,6 +157,16 @@ export class SettingsPanel {
 				}
 				return;
 		}
+	}
+
+	// Переподключить MCP и отправить статус в webview
+	private async postMcpStatus(): Promise<void> {
+		const mcp = getMcpManager();
+		await mcp.refresh();
+		this.post({
+			type: 'mcpStatus',
+			servers: mcp.status(),
+		});
 	}
 
 	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {

@@ -100,6 +100,7 @@ export function MessageList({ messages, busy }: MessageListProps) {
 				}).map((msg) => {
 					const isEditing = msg.role === 'user' && editingId === msg.id;
 					const canEdit = !busy && !editingId && msg.role === 'user' && Boolean(msg.content.trim());
+					const canFork = !busy && (msg.role === 'user' || msg.role === 'assistant') && Boolean(msg.id);
 
 					return (
 						<div key={msg.id} className={`msg msg--${msg.role}${isEditing ? ' msg--editing' : ''}`}>
@@ -144,15 +145,26 @@ export function MessageList({ messages, busy }: MessageListProps) {
 									: msg.role === 'assistant' ? null : (
 										<>
 											<div className="msg__body">{msg.content}</div>
-											{canEdit ? (
+											{canEdit || canFork ? (
 												<div className="msg__meta">
-													<button
-														type="button"
-														className="msg__edit-btn"
-														onClick={() => startEdit(msg)}
-													>
-														{t('chat.messages.edit')}
-													</button>
+													{canEdit ? (
+														<button
+															type="button"
+															className="msg__edit-btn"
+															onClick={() => startEdit(msg)}
+														>
+															{t('chat.messages.edit')}
+														</button>
+													) : null}
+													{canFork ? (
+														<button
+															type="button"
+															className="msg__edit-btn"
+															onClick={() => vscodeApi.postMessage({ type: 'forkSession', messageId: msg.id })}
+														>
+															{t('chat.messages.fork')}
+														</button>
+													) : null}
 												</div>
 											) : null}
 										</>
@@ -163,6 +175,15 @@ export function MessageList({ messages, busy }: MessageListProps) {
 							{msg.role === 'assistant' && !isEditing ? (
 								<div className="msg__meta">
 									<TokenMeter usage={msg.usage} />
+									{canFork ? (
+										<button
+											type="button"
+											className="msg__edit-btn"
+											onClick={() => vscodeApi.postMessage({ type: 'forkSession', messageId: msg.id })}
+										>
+											{t('chat.messages.fork')}
+										</button>
+									) : null}
 								</div>
 							) : null}
 						</div>

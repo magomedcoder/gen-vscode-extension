@@ -6,6 +6,7 @@ const WRITE_TOOLS = new Set([
 	'apply_patch',
 	'apply_workspace_edit',
 	'create_dir',
+	'edit_notebook',
 ]);
 
 const DELETE_TOOLS = new Set(['delete_file']);

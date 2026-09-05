@@ -5,6 +5,7 @@ import { asString, type ToolContext, type ToolDefinition, type ToolResult } from
 import { denyWriteOverUserEdits } from '../userEdits';
 import { pathExists, resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 import { confirmOrSkip, shouldConfirmWrites } from './confirm';
+import { enhanceSuccessfulWrite } from './postEdit';
 
 export const writeFileTool: ToolDefinition = {
 	name: 'write_file',
@@ -102,7 +103,7 @@ export const writeFileTool: ToolDefinition = {
 		}
 
 		const mini = computeMiniDiff(before, content);
-		return {
+		return enhanceSuccessfulWrite({
 			ok: true,
 			path: resolved.relative,
 			diff: mini.text,
@@ -110,6 +111,6 @@ export const writeFileTool: ToolDefinition = {
 			content: exists
 				? vscode.l10n.t('tool.fileOverwritten', resolved.relative, bytes.byteLength)
 				: vscode.l10n.t('tool.fileCreated', resolved.relative, bytes.byteLength),
-		};
+		}, resolved.uri);
 	},
 };

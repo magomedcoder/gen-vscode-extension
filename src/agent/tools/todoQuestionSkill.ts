@@ -167,7 +167,7 @@ export const askQuestionTool: ToolDefinition = {
 
 export const skillTool: ToolDefinition = {
 	name: 'skill',
-	description: 'Загрузить SKILL.md по имени в контекст (из .gen/skills, .claude/skills, .agents/skills, .cursor/skills).',
+	description: 'Загрузить SKILL.md по имени в контекст (из .gen/skills, .agents/skills).',
 	parameters: {
 		type: 'object',
 		properties: {

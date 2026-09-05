@@ -1,24 +1,24 @@
 import type { ApprovalPolicy } from './approvalTypes';
 import { DEFAULT_APPROVAL_POLICY } from './approvalTypes';
 
-export type ChatMode = 'ask' | 'agent' | 'debug' | 'design' | 'plan';
+export type ChatMode = 'ask' | 'agent' | 'debug' | 'design' | 'plan' | 'multitask';
 export type AgentAuthLevel = 'auto' | 'ask' | 'open';
 export type CommentStyle = 'inline' | 'block';
 
 // Режимы с tool-calling (не «просто чат»)
 export function isAgentLikeMode(mode: ChatMode): boolean {
-	return mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan';
+	return mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask';
 }
 
 export interface GenSettings {
 	baseUrl: string;
 	model: string;
 	/**
-	 * Дешёвая модель для title / summary / compaction (пусто — как основная).
+	 * Дешёвая модель для title / summary / compaction (пусто - как основная).
 	 */
 	smallModel: string;
 	/**
-	 * Режим чата по умолчанию: ask / agent / debug / design / plan
+	 * Режим чата по умолчанию: ask / agent / debug / design / plan / multitask
 	 */
 	chatMode: ChatMode;
 	/**
@@ -43,13 +43,21 @@ export interface GenSettings {
 	 */
 	autoApprove: boolean;
 	/**
-	 * Не рвать agent loop после deny — вернуть причину модели и продолжить
+	 * Не рвать agent loop после deny - вернуть причину модели и продолжить
 	 */
 	continueLoopOnDeny: boolean;
 	/**
 	 * Подмешивать контекст workspace в prompt
 	 */
 	enableWorkspaceContext: boolean;
+	/**
+	 * Always-on: короткая сводка (git status -sb, недавние файлы) в каждый turn.
+	 */
+	alwaysOnWorkspaceContext: boolean;
+	/**
+	 * Показать vscode notification, когда ход агента завершён.
+	 */
+	notifyOnComplete: boolean;
 	/**
 	 * Разрешить чтение файлов tools
 	 */
@@ -90,6 +98,11 @@ export interface GenSettings {
 	 */
 	maxTokens: number;
 	/**
+	 * Оценка размера контекстного окна (для context ring в шапке чата).
+	 * default - 128000
+	 */
+	maxContextTokens: number;
+	/**
 	 * Таймаут HTTP-запроса в миллисекундах
 	 *
 	 * min - 1000
@@ -120,9 +133,22 @@ export interface GenSettings {
 	commentSystemPrompt: string;
 	/**
 	 * Glob-шаблоны запрещённых путей (по одному на строку).
-	 * Пусто - ничего не запрещать.
+	 * Пусто - ничего не запрещать. 
+	 * На первом запуске НЕ автозаполняем (см. EXAMPLE_DENIED_PATHS).
+	 * Для `.env*` по умолчанию используй `sensitivePathPatterns`, а не этот список.
 	 */
 	deniedPaths: string[];
+	/**
+	 * Glob’ы чувствительных путей: запись/удаление всегда ask (или deny по политике),
+	 * даже при autoApprove / session-allow. Default: `.env`, `.env.*`.
+	 * Не путать с `deniedPaths` (жёсткий deny на уровне sandbox).
+	 */
+	sensitivePathPatterns: string[];
+	/**
+	 * Разрешить пути вне workspace folders (external_directory).
+	 * false (default) - deny; true - resolve + approval action `outside`.
+	 */
+	allowExternalDirectory: boolean;
 	/**
 	 * Имена бинарников, запрещённых для run_command (по одному на строку).
 	 * Пусто - не запрещать по имени (eval / git write / package install остаются в коде).
@@ -158,7 +184,7 @@ export interface GenSettings {
 	 */
 	toolOutputMaxChars: number;
 	/**
-	 * MCP-серверы (stdio): имя, команда, args, env, enabled.
+	 * MCP-серверы (stdio): имя, команда, args, env, cwd, timeoutMs, enabled.
 	 */
 	mcpServers: Array<{
 		name: string;
@@ -166,6 +192,10 @@ export interface GenSettings {
 		command: string;
 		args?: string[];
 		env?: Record<string, string>;
+		// Рабочая директория процесса MCP
+		cwd?: string;
+		// Таймаут JSON-RPC запроса в мс
+		timeoutMs?: number;
 		enabled: boolean;
 	}>;
 	/**
@@ -173,9 +203,57 @@ export interface GenSettings {
 	 * min - 1, max - 4, default - 2
 	 */
 	subagentDepth: number;
+	/**
+	 * Доп. каталоги skills (относительно workspace или абсолютные).
+	 * Базовые: `.gen/skills`, `.agents/skills`.
+	 */
+	skillsPaths: string[];
+	/**
+	 * HTTPS URL на удалённые SKILL.md (имя из basename URL).
+	 */
+	skillsUrls: string[];
+	/**
+	 * HTTPS URL с инструкциями - текст append к project rules.
+	 */
+	instructionUrls: string[];
+	/**
+	 * Id персоны из `.gen/personas/*.md` (пусто - без персоны).
+	 */
+	personaId: string;
+	/**
+	 * После успешного write_file / apply_patch форматировать документ (editor.action.formatDocument).
+	 * По умолчанию выключено.
+	 */
+	formatAfterEdit: boolean;
+	/**
+	 * Включить semantic_search / embeddings.
+	 */
+	indexingEnabled: boolean;
+	/**
+	 * Base URL для OpenAI-compatible POST /embeddings (пусто - как baseUrl).
+	 */
+	embeddingsBaseUrl: string;
+	/**
+	 * Модель эмбеддингов.
+	 */
+	embeddingsModel: string;
+	/**
+	 * Передавать картинки в chat completions как image_url (OpenAI-compatible multimodal).
+	 * По умолчанию выключено: в сообщение попадает только `[image path]`.
+	 */
+	visionEnabled: boolean;
+	/**
+	 * Максимум длины base64 одной картинки в запросе к модели (символы).
+	 * default - 400000
+	 */
+	attachmentImageMaxBase64: number;
 }
 
+// Примеры для кнопки в Security settings - не подставляются в deniedPaths автоматически
 export const EXAMPLE_DENIED_PATHS: string[] = ['.env','.env.*','credentials.json','secrets.json','id_rsa','id_ed25519','id_ecdsa','.npmrc','.pypirc','.netrc','*.pem','*.key','*.p12','*.pfx','node_modules','.git',];
+
+// Default sensitivePathPatterns: правки `.env*` -> ask/deny, отдельно от deniedPaths
+export const DEFAULT_SENSITIVE_PATH_PATTERNS: string[] = ['.env', '.env.*'];
 
 export const EXAMPLE_DENIED_COMMANDS: string[] = ['sudo', 'doas', 'su', 'rm', 'rmdir', 'unlink', 'dd', 'mkfs', 'fdisk', 'chmod', 'chown', 'chgrp', 'curl', 'wget', 'nc', 'ncat', 'netcat', 'ssh', 'scp', 'sftp', 'docker', 'podman', 'kubectl', 'nerdctl', 'sh', 'bash', 'zsh', 'fish', 'dash', 'csh', 'tcsh', 'cmd', 'powershell', 'pwsh',];
 
@@ -197,6 +275,8 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	autoApprove: false,
 	continueLoopOnDeny: true,
 	enableWorkspaceContext: true,
+	alwaysOnWorkspaceContext: false,
+	notifyOnComplete: false,
 	enableFileReading: true,
 	enableTerminal: true,
 	webSearchEnabled: true,
@@ -204,12 +284,15 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	systemPrompt: '',
 	temperature: 0.2,
 	maxTokens: 8192,
+	maxContextTokens: 128_000,
 	requestTimeoutMs: 120_000,
 	maxInputChars: 8000,
 	commentStyle: 'inline',
 	previewBeforeApply: true,
 	commentSystemPrompt: '',
 	deniedPaths: [],
+	sensitivePathPatterns: [...DEFAULT_SENSITIVE_PATH_PATTERNS],
+	allowExternalDirectory: false,
 	deniedCommands: [...EXAMPLE_DENIED_COMMANDS],
 	secretPatterns: [],
 	authHeader: 'Authorization',
@@ -219,4 +302,14 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	toolOutputMaxChars: 12_000,
 	mcpServers: [],
 	subagentDepth: 2,
+	skillsPaths: [],
+	skillsUrls: [],
+	instructionUrls: [],
+	personaId: '',
+	formatAfterEdit: false,
+	indexingEnabled: true,
+	embeddingsBaseUrl: '',
+	embeddingsModel: 'text-embedding-3-small',
+	visionEnabled: false,
+	attachmentImageMaxBase64: 400_000,
 };

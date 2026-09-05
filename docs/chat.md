@@ -66,6 +66,9 @@ In the input, type `@` and choose:
 | ------------------------------- | --------------------------------------------- |
 | `@file path`                    | File contents                                 |
 | `@folder path`                  | Files from a folder (capped)                  |
+| `@code`                         | Editor selection or symbol near the cursor    |
+| `@Docs` / `@Docs query`         | Search `docs/` and markdown                   |
+| `@agent name`                   | Body of `.gen/agents/{name}.md`               |
 | `@codebase` / `@codebase query` | Fragments from the local index + open editors |
 | `@git` / `@git SHA`             | Recent commits or `git show` for a SHA        |
 | `@branch_diff`                  | `git status` + `diff --stat`                  |
@@ -73,6 +76,8 @@ In the input, type `@` and choose:
 | `@link url`                     | Fetched page text (capped)                    |
 
 Autocomplete: arrows / Tab / Enter.
+
+Images: paste or drag-and-drop into Composer -> saved under `.gen/attachments/` with an `[image path]` marker in the message. If **visionEnabled** is on, the model also receives `image_url` parts (capped by `attachmentImageMaxBase64`).
 
 More on the index: [codebase-index.md](codebase-index.md).
 

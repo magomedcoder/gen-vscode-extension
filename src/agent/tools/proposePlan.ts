@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { formatPlan, parsePlanArgs } from '../plan';
 import type { StickyPlan, StickyPlanSnapshot} from '../plan';
+import { normalizePlanSlug, writeNamedPlan } from '../plansStore';
 import { asObjectArray, asString } from '../types';
 import type { ToolContext, ToolDefinition, ToolResult } from '../types';
 import { throwIfAborted } from '../workspacePath';
@@ -8,7 +9,7 @@ import { confirmAlwaysOrSkip } from './confirm';
 
 export const proposePlanTool: ToolDefinition = {
 	name: 'propose_plan',
-	description: 'Показать план правок (несколько файлов) и дождаться Approve. План сохраняется в `.gen/plan.md` и сессии на следующие ходы. Вызывать до write/patch/delete, если задача затрагивает больше одного файла или нужна составная цель.',
+	description: 'Показать план правок (несколько файлов) и дождаться Approve. План сохраняется в `.gen/plan.md` и сессии. Опциональный slug - ещё и в `.gen/plans/<slug>.md`.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -38,6 +39,10 @@ export const proposePlanTool: ToolDefinition = {
 					required: ['title'],
 				},
 			},
+			slug: {
+				type: 'string',
+				description: 'Опционально: сохранить копию в `.gen/plans/<slug>.md`',
+			},
 		},
 		required: ['title', 'steps'],
 		additionalProperties: false,
@@ -58,9 +63,33 @@ export const proposePlanTool: ToolDefinition = {
 
 		ctx.plan?.approve(plan);
 		ctx.onPlanChanged?.();
+
+		const slugRaw = asString(args, 'slug').trim();
+		let namedNote = '';
+		if (slugRaw) {
+			const slug = normalizePlanSlug(slugRaw);
+			if (!slug) {
+				namedNote = `\n(slug «${slugRaw}» некорректен - копия в .gen/plans не записана)`;
+			} else {
+				try {
+					const { relativePath } = await writeNamedPlan(slug, {
+						title: plan.title,
+						approved: true,
+						steps: plan.steps.map((s) => ({
+							...s,
+							status: 'pending' as const,
+						})),
+					});
+					namedNote = `\nКопия: ${relativePath}`;
+				} catch (err) {
+					namedNote = `\nНе удалось записать multi-plan: ${err instanceof Error ? err.message : String(err)}`;
+				}
+			}
+		}
+
 		return {
 			ok: true,
-			content: vscode.l10n.t('plan.approvedSaved', formatted),
+			content: vscode.l10n.t('plan.approvedSaved', formatted) + namedNote,
 		};
 	},
 };

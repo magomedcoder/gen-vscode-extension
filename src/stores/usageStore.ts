@@ -42,6 +42,11 @@ export function getUsageMap(): Record<string, ModelUsage> {
 	return Object.fromEntries(memory.entries());
 }
 
+// Алиас для UI Usage & Quota
+export function readUsage(): Record<string, ModelUsage> {
+	return getUsageMap();
+}
+
 export function resetUsage(): void {
 	memory.clear();
 	void store?.update(STORAGE_KEY, {});

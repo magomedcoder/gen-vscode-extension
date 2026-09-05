@@ -66,13 +66,18 @@
 | ------------------------------- | ---------------------------------------------------- |
 | `@file path`                    | Содержимое файла                                     |
 | `@folder path`                  | Файлы из папки (с лимитом)                           |
+| `@code`                         | Выделение в редакторе или символ у курсора           |
+| `@Docs` / `@Docs query`         | Поиск по `docs/` и markdown                          |
+| `@agent name`                   | Тело `.gen/agents/{name}.md`                         |
 | `@codebase` / `@codebase query` | Фрагменты из локального индекса + открытые редакторы |
 | `@git` / `@git SHA`             | Последние коммиты или `git show` по SHA              |
 | `@branch_diff`                  | `git status` + `diff --stat`                         |
 | `@rules`                        | AGENTS.md / `.genrules`                              |
 | `@link url`                     | Текст страницы (HTTP fetch, с лимитом)               |
 
-Автодополнение: стрелки / Tab / Enter. 
+Автодополнение: стрелки / Tab / Enter.
+
+Картинки: вставка (paste) или drag-and-drop в Composer -> файл в `.gen/attachments/` и маркер `[image path]` в сообщении. Если в настройках включён **visionEnabled**, в запрос к модели добавляются `image_url` (с лимитом `attachmentImageMaxBase64`).
 
 Подробнее про индекс: [codebase-index-ru.md](codebase-index-ru.md).
 

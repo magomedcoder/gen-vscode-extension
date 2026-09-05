@@ -8,16 +8,22 @@ export function buildAgentSystemPrompt(options?: {
 	planAppendix?: string;
 	planEditsAppendix?: string;
 	genRulesAppendix?: string;
+	// Каталог skills (имена/пути) - модель должна звать tool skill
+	skillsAppendix?: string;
 	planWriteToFile?: boolean;
-	// Фокус режима: agent (по умолчанию), debug, design
+	// Фокус режима: agent (по умолчанию), debug, design, plan, multitask
 	mode?: ChatMode;
 }): string {
 	const toolsAvailable = options?.toolsAvailable ?? true;
 	const authLevel = options?.authLevel ?? 'ask';
 	const planWriteToFile = options?.planWriteToFile !== false;
-	const mode = options?.mode === 'debug' || options?.mode === 'design' || options?.mode === 'plan'
-		? options.mode
-		: 'agent';
+	const mode =
+		options?.mode === 'debug'
+		|| options?.mode === 'design'
+		|| options?.mode === 'plan'
+		|| options?.mode === 'multitask'
+			? options.mode
+			: 'agent';
 	const deniedPaths = (options?.deniedPaths ?? []).map((item) => item.trim()).filter((item) => item && !item.startsWith('#'));
 
 	const lines = [
@@ -27,7 +33,9 @@ export function buildAgentSystemPrompt(options?: {
 				? 'Ты Gen в режиме Design - помогаешь с UI/UX: смотришь страницы через Simple Browser и fetch_page.'
 				: mode === 'plan'
 					? 'Ты Gen в режиме Plan - только анализ и план. Не редактируй файлы и не запускай мутирующие команды.'
-					: 'Ты Gen - агент-помощник программиста в VS Code.',
+					: mode === 'multitask'
+						? 'Ты Gen в режиме Multitask - координатор. Не правь файлы сам: делегируй через tool task.'
+						: 'Ты Gen - агент-помощник программиста в VS Code.',
 		'Отвечай на языке пользователя, кратко и по делу.',
 		'Работай только в рамках текущего workspace; не предлагай действия вне проекта.',
 		'Если дан контекст редактора (файл, выделение), опирайся на него.',
@@ -45,8 +53,14 @@ export function buildAgentSystemPrompt(options?: {
 		);
 	} else if (mode === 'plan') {
 		lines.push(
-			'Режим Plan: используй read/search/codebase_search/glob/grep и propose_plan. Не вызывай write_file, apply_patch, delete_file, run_command.',
-			'Когда план готов - propose_plan с шагами и path. Пользователь подтвердит, затем можно перейти в /agent.',
+			'Режим Plan: используй read/search/codebase_search/glob/grep и propose_plan / write_plan. Не вызывай write_file, apply_patch, delete_file, run_command.',
+			'Когда план готов - propose_plan с шагами и path. Пользователь подтвердит, затем plan_exit или /agent.',
+			'Смена режима: plan_enter / plan_exit / switch_mode.',
+		);
+	} else if (mode === 'multitask') {
+		lines.push(
+			'Режим Multitask: ты координатор. Мутирующие tools недоступны - поручай подзадачи через task (explore / general / scout / docs-researcher / code-reviewer / кастомные агенты из `.gen/agents/`).',
+			'Сам читай код, строй план (propose_plan / write_plan), собирай отчёты субагентов и давай итоговый ответ.',
 		);
 	}
 
@@ -61,9 +75,10 @@ export function buildAgentSystemPrompt(options?: {
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Логи: find_logs, read_log_tail. UI: open_browser, fetch_page.',
 			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). В режиме «Спросить» - confirm; в «Чтение» - запрещены; в «Без спроса» - без диалога.',
+			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask). Субагенты: task. Кастомные агенты: generate_agent -> `.gen/agents/`.',
 			planWriteToFile
-				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план пишется в `.gen/plan.md`. Прогресс: update_plan. Один файл можно править без плана.'
-				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план только в памяти на текущую сессию (запись в файл отключена). Прогресс: update_plan. Один файл можно править без плана.',
+				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план пишется в `.gen/plan.md`. Опциональный slug - ещё `.gen/plans/<slug>.md`. write_plan / list_plans для multi-plan. Прогресс: update_plan. Один файл можно править без плана.'
+				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план только в памяти на текущую сессию (запись sticky файла отключена). write_plan всё ещё пишет в `.gen/plans/`. Прогресс: update_plan. Один файл можно править без плана.',
 			planWriteToFile
 				? 'Пока активен план - следуй ему и файлу `.gen/plan.md` (пользователь может править файл; при перезапуске VS Code план загружается только из файла). Новая задача: update_plan replace/clear или удаление `.gen/plan.md`.'
 				: 'Пока активен план - следуй ему в текущей сессии. Если есть `.gen/plan.md`, он подхватывается при старте и перед ходом. Новая задача: update_plan replace/clear.',
@@ -82,6 +97,11 @@ export function buildAgentSystemPrompt(options?: {
 		lines.push('Когда задача решена, дай итоговый текстовый ответ без лишних tool-вызовов.');
 	} else {
 		lines.push('Сервер LLM не поддерживает tools в этом запросе - отвечай только текстом, без попыток вызвать инструменты.');
+	}
+
+	const skillsAppendix = options?.skillsAppendix?.trim();
+	if (skillsAppendix) {
+		lines.push(skillsAppendix);
 	}
 
 	const planAppendix = options?.planAppendix?.trim();

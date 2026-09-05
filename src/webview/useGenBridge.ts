@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatViewState, PanelScreen, ToWebviewMessage } from '../chat/protocol';
+import type { ChatViewState, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../chat/protocol';
 import type { GenSettings } from '../config/types';
 import { DEFAULT_SETTINGS } from '../config/types';
 import type { LlmModelOption } from '../llm/types';
@@ -21,11 +21,13 @@ export function useGenBridge() {
 	const [screen] = useState<PanelScreen>(readInitialScreen);
 	const [chat, setChat] = useState<ChatViewState>(EMPTY_CHAT);
 	const [settings, setSettings] = useState<GenSettings>(DEFAULT_SETTINGS);
+	const [personas, setPersonas] = useState<PersonaOption[]>([]);
 	const [apiKeySet, setApiKeySet] = useState(false);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
 	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
 	const [modelsLoading, setModelsLoading] = useState(false);
+	const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
 	const modelsRequestId = useRef(0);
 
 	useEffect(() => {
@@ -42,10 +44,16 @@ export function useGenBridge() {
 				case 'settings':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
+					if (data.personas) {
+						setPersonas(data.personas);
+					}
 					return;
 				case 'settingsSaved':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
+					if (data.personas) {
+						setPersonas(data.personas);
+					}
 					setSettingsStatus(t('settings.status.saved'));
 					return;
 				case 'settingsError':
@@ -81,6 +89,9 @@ export function useGenBridge() {
 					}
 					setModelsLoading(false);
 					setModelsStatus(data.message);
+					return;
+				case 'mcpStatus':
+					setMcpServers(data.servers);
 					return;
 			}
 		};
@@ -124,17 +135,24 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'openLogsFolder' });
 	}, []);
 
+	const refreshMcp = useCallback(() => {
+		vscodeApi.postMessage({ type: 'refreshMcp' });
+	}, []);
+
 	return {
 		screen,
 		chat,
 		settings,
+		personas,
 		apiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
 		modelsLoading,
+		mcpServers,
 		saveSettings,
 		loadModels,
 		openLogsFolder,
+		refreshMcp,
 	};
 }

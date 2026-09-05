@@ -43,7 +43,12 @@ export function httpErrorMessage(status: number, detail: string): string {
 }
 
 export class LlmHttpError extends Error {
-	constructor(message: string, readonly status: number, cause?: unknown) {
+	constructor(
+		message: string,
+		readonly status: number,
+		cause?: unknown,
+		readonly retryAfterMs?: number,
+	) {
 		super(message, cause instanceof Error ? { cause } : undefined);
 		this.name = 'LlmHttpError';
 	}
@@ -61,8 +66,40 @@ export function isRetryableError(err: unknown): boolean {
 	return err instanceof TypeError;
 }
 
-export function retryDelayMs(attempt: number): number {
-	return 400 * 2 ** attempt;
+// Парсит Retry-After: delta-seconds или HTTP-date -> миллисекунды
+export function parseRetryAfterMs(header: string | null): number | undefined {
+	if (!header?.trim()) {
+		return undefined;
+	}
+
+	const trimmed = header.trim();
+	if (/^\d+$/.test(trimmed)) {
+		const seconds = Number(trimmed);
+		if (!Number.isFinite(seconds) || seconds < 0) {
+			return undefined;
+		}
+
+		return seconds * 1000;
+	}
+
+	const when = Date.parse(trimmed);
+	if (Number.isNaN(when)) {
+		return undefined;
+	}
+
+	const ms = when - Date.now();
+	return ms > 0 ? ms : 0;
+}
+
+const MAX_RETRY_DELAY_MS = 60_000;
+
+export function retryDelayMs(attempt: number, retryAfterMs?: number): number {
+	const backoff = 400 * 2 ** attempt;
+	if (retryAfterMs === undefined) {
+		return backoff;
+	}
+
+	return Math.min(Math.max(backoff, retryAfterMs), MAX_RETRY_DELAY_MS);
 }
 
 export function parseErrorDetail(text: string, parsed: unknown, statusText: string): string {

@@ -3,8 +3,9 @@ import type { LlmToolDefinition } from '../../llm/types';
 import { getSettings } from '../../config/settings';
 import { logAgentTool } from '../audit';
 import { denyMutatingIfAuto, isMutatingTool } from '../auth';
-import { evaluateApproval, toolActionType } from '../permissionPolicy';
+import { evaluateApproval, matchesSensitivePath, suggestPattern, toolActionType } from '../permissionPolicy';
 import { mutationPathsFromArgs } from '../plan';
+import { isOutsideWorkspaceInput } from '../policy';
 import { extractPathFromPartialJson, parseToolArguments, toLlmToolDefinition, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { applyPatchTool } from './applyPatch';
 import { applyWorkspaceEditTool } from './applyWorkspaceEdit';
@@ -32,17 +33,28 @@ import { fileSearchTool, webSearchTool } from './fileSearchWeb';
 import { askQuestionTool, skillTool, todoReadTool, todoWriteTool } from './todoQuestionSkill';
 import { callMcpToolTool, listMcpToolsTool } from './mcp';
 import { awaitShellTool, taskTool } from './taskShell';
+import { editNotebookTool } from './editNotebook';
+import { lspTool } from './lsp';
+import { planEnterTool, planExitTool, switchModeTool } from './modeSwitch';
+import { listPlansTool, writePlanTool } from './writePlan';
+import { generateAgentTool } from './generateAgent';
+import { searchDocsTool, semanticSearchTool } from './semanticSearch';
 import type { TodoStore } from '../todoStore';
 import type { ShellSession } from '../shellSession';
 import type { TaskToolContext } from './taskShell';
+import type { ChatMode } from '../../config/types';
 
 export type ExtendedToolContext = ToolContext & TaskToolContext & {
 	sessionAllow?: string[];
 	onAlwaysAllow?: (pattern: string) => void;
+	/** Паттерн для кнопки Always (из suggestPattern); читает confirmAlwaysOrSkip */
+	suggestAlwaysPattern?: string;
 	todos?: TodoStore;
 	skipConfirm?: boolean;
 	shell?: ShellSession;
 	subagentDepth?: number;
+	/** Смена режима чата из tools plan_enter / plan_exit / switch_mode */
+	setChatMode?: (mode: ChatMode) => void | Promise<void>;
 };
 
 const TOOLS: ToolDefinition[] = [
@@ -56,21 +68,30 @@ const TOOLS: ToolDefinition[] = [
 	grepTool,
 	fileSearchTool,
 	codebaseSearchTool,
+	semanticSearchTool,
+	searchDocsTool,
 	findLogsTool,
 	readLogTailTool,
 	proposePlanTool,
 	updatePlanTool,
+	writePlanTool,
+	listPlansTool,
+	planEnterTool,
+	planExitTool,
+	switchModeTool,
 	todoWriteTool,
 	todoReadTool,
 	askQuestionTool,
 	skillTool,
 	taskTool,
+	generateAgentTool,
 	listMcpToolsTool,
 	callMcpToolTool,
 	webSearchTool,
 	writeFileTool,
 	applyPatchTool,
 	applyWorkspaceEditTool,
+	editNotebookTool,
 	deleteFileTool,
 	createDirTool,
 	openFileTool,
@@ -80,6 +101,7 @@ const TOOLS: ToolDefinition[] = [
 	fetchPageTool,
 	gitStatusTool,
 	getDiagnosticsTool,
+	lspTool,
 	runCommandTool,
 	awaitShellTool,
 	runTestsTool,
@@ -110,7 +132,7 @@ export function getAgentLlmTools(mode?: string, opts?: { readonly?: boolean; dis
 			return false;
 		}
 
-		if (mode === 'plan' && isMutatingTool(tool.name)) {
+		if ((mode === 'plan' || mode === 'multitask') && isMutatingTool(tool.name)) {
 			return false;
 		}
 
@@ -159,6 +181,10 @@ function subjectFromArgs(name: string, rawArguments: string): string {
 	return name;
 }
 
+function workspaceFoldersFs(): string[] {
+	return (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+}
+
 export async function executeAgentTool(name: string, rawArguments: string, ctx: ToolContext = {}): Promise<ToolResult> {
 	const tool = BY_NAME.get(name);
 	if (!tool) {
@@ -181,12 +207,61 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 	}
 
 	const settings = getSettings();
-	const action = toolActionType(name);
+	let action = toolActionType(name);
 	const subject = subjectFromArgs(name, rawArguments);
 	const ext = ctx as ExtendedToolContext;
+	const pathLike = Boolean(extractPathFromPartialJson(rawArguments) || (() => {
+		try {
+			const args = parseToolArguments(rawArguments);
+			return typeof args.path === 'string';
+		} catch {
+			return false;
+		}
+	})());
+
+	// external_directory: путь вне workspace -> action `outside` или deny
+	if (pathLike && (action === 'edits' || action === 'delete' || name === 'read_file' || name === 'list_dir' || name === 'open_file' || name === 'create_dir' || name === 'apply_patch' || name === 'apply_workspace_edit' || name === 'write_file' || name === 'delete_file' || name === 'edit_notebook')) {
+		const outside = isOutsideWorkspaceInput(subject, workspaceFoldersFs());
+		if (outside) {
+			if (!settings.allowExternalDirectory) {
+				const content = `Отклонено: путь вне workspace (allowExternalDirectory=false): ${subject}`;
+				logAgentTool({
+					name,
+					status: 'denied',
+					ms: Date.now() - started,
+					detail: content,
+				});
+				return {
+					ok: false,
+					denied: true,
+					content,
+				};
+			}
+
+			action = 'outside';
+		}
+	}
+
+	// Паттерн Always для confirmAlwaysOrSkip (после remapping outside)
+	ext.suggestAlwaysPattern = action ? suggestPattern(action, name, subject) : undefined;
+
+	// Чувствительные пути (.env*): force ask/deny на запись/удаление
+	const sensitiveWrite = Boolean(
+		action
+		&& (action === 'edits' || action === 'delete' || action === 'outside')
+		&& matchesSensitivePath(subject, settings.sensitivePathPatterns),
+	);
+
+	// permission.task / субагенты: чуть строже (не наследовать sessionAllow, не auto-skip confirm)
+	const nestedStrict = (ext.subagentDepth ?? 0) > 0;
+
 	// Здесь только центральный deny / session-allow; once/always UX остаётся в confirm-хелперах tools
 	if (action && settings.agentAuthLevel !== 'open') {
-		const decision = evaluateApproval(action, subject, settings.approvalPolicy, ext.sessionAllow);
+		let decision = evaluateApproval(action, subject, settings.approvalPolicy, nestedStrict ? undefined : ext.sessionAllow);
+		if (sensitiveWrite && decision === 'allow') {
+			decision = 'ask';
+		}
+
 		if (decision === 'deny') {
 			const content = `Отклонено политикой подтверждений (${action}): ${subject}`;
 			logAgentTool({
@@ -202,9 +277,10 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 			};
 		}
 
-		if (decision === 'allow' || settings.autoApprove) {
-			// Не дублировать confirm для allowlist / auto-approve
-			(ext as { skipConfirm?: boolean }).skipConfirm = true;
+		const canSkip = decision === 'allow' || settings.autoApprove;
+		if (canSkip && !sensitiveWrite && !(nestedStrict && isMutatingTool(name))) {
+			// Не дублировать confirm для allowlist / auto-approve (не .env*, не мутации субагента)
+			ext.skipConfirm = true;
 		}
 	}
 

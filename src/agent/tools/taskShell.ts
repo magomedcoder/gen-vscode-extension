@@ -1,8 +1,7 @@
-import * as vscode from 'vscode';
 import { getSettings } from '../../config/settings';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { throwIfAborted } from '../workspacePath';
-import { getSubagent } from '../subagents';
+import { listSubagentIds, resolveSubagent } from '../subagents';
 import { confirmAlwaysOrSkip } from './confirm';
 
 export interface TaskToolContext extends ToolContext {
@@ -16,13 +15,13 @@ export interface TaskToolContext extends ToolContext {
 
 export const taskTool: ToolDefinition = {
 	name: 'task',
-	description: 'Запустить субагента (explore | general) для подзадачи. Explore - только чтение; general - полный набор tools.',
+	description: 'Запустить субагента (explore | general | scout | docs-researcher | code-reviewer | кастомный из `.gen/agents/`) для подзадачи. Explore/scout/presets - read-only; general - полный набор tools.',
 	parameters: {
 		type: 'object',
 		properties: {
 			subagent_type: {
 				type: 'string',
-				description: 'explore | general',
+				description: 'explore | general | scout | docs-researcher | code-reviewer | имя кастомного агента',
 			},
 			prompt: {
 				type: 'string',
@@ -43,7 +42,7 @@ export const taskTool: ToolDefinition = {
 				content: `Достигнут лимит вложенности субагентов (${maxDepth})`
 			};
 		}
-		
+
 		const type = asString(args, 'subagent_type').trim() || 'explore';
 		const prompt = asString(args, 'prompt').trim();
 		if (!prompt) {
@@ -53,11 +52,12 @@ export const taskTool: ToolDefinition = {
 			};
 		}
 
-		const def = getSubagent(type);
+		const def = await resolveSubagent(type);
 		if (!def) {
+			const known = (await listSubagentIds()).join(', ');
 			return {
 				ok: false,
-				content: `Неизвестный subagent_type "${type}". Используй explore или general.`
+				content: `Неизвестный subagent_type "${type}". Доступно: ${known}`,
 			};
 		}
 
@@ -68,6 +68,8 @@ export const taskTool: ToolDefinition = {
 			};
 		}
 
+		// permission.task: confirmAlwaysOrSkip + evaluateApproval(action=task) в executeAgentTool.
+		// Вложенный субагент не наследует sessionAllow родителя (строже) - см. AgentSession.runSubagent.
 		const denied = await confirmAlwaysOrSkip(ctx, `Задача -> ${def.name}`, prompt.slice(0, 400));
 		if (denied) {
 			return denied;
@@ -125,7 +127,7 @@ export const awaitShellTool: ToolDefinition = {
 				content: 'Shell-сессия недоступна'
 			};
 		}
-		
+
 		const jobId = asString(args, 'job_id').trim();
 		const job = shell.getJob(jobId);
 		if (!job) {
@@ -141,7 +143,7 @@ export const awaitShellTool: ToolDefinition = {
 			throwIfAborted(ctx.signal);
 			await new Promise((r) => setTimeout(r, 200));
 		}
-		
+
 		return {
 			ok: job.done ? (job.exitCode === 0) : true,
 			content: shell.formatJob(job) + (job.done ? '' : '\n(статус: ещё выполняется / таймаут ожидания)'),

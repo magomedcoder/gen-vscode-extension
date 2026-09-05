@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 import type { ChatMode } from '../config/types';
-import type { ChatMessage, LlmClient, LlmToolCall } from '../llm/types';
+import type { ChatMessage, LlmClient, LlmRetryInfo, LlmToolCall } from '../llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { pathFromToolArguments } from './diff';
 import { AgentCheckpoint } from './checkpoint';
@@ -11,16 +11,19 @@ import { buildAgentSystemPrompt } from './prompts';
 import { getGenRulesManager } from '../project/genrules';
 import { loadProjectRulesAppendix } from '../project/projectRules';
 import { discoverSkills, formatSkillsCatalog } from '../project/skills';
+import { formatPersonaAppendix, resolvePersona } from '../project/personas';
 import { recordUsage } from '../stores/usageStore';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
 import type { ExtendedToolContext } from './tools';
 import { TodoStore } from './todoStore';
 import { isMutatingTool } from './auth';
-import { getSubagent } from './subagents';
+import { resolveSubagent } from './subagents';
 import { defaultWorkspaceCwd, ShellSession } from './shellSession';
 import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
 import type { AgentWriteTracker } from './userEdits';
+import { confirmOrSkip } from './tools/confirm';
+import { buildUserContentWithImages, type ImageAttachment } from '../chat/attachments';
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -42,6 +45,44 @@ function truncate(text: string, max = 4000): string {
 	}
 
 	return `${text.slice(0, max)}\n${vscode.l10n.t('agent.truncatedChars', text.length - max)}`;
+}
+
+// Отпечаток tool+args для doom loop (похожие вызовы, не полный JSON)
+function doomArgsFingerprint(name: string, rawArgs: string): string {
+	try {
+		const args = JSON.parse(rawArgs) as Record<string, unknown>;
+		const keys = ['path', 'command', 'url', 'query', 'old_string', 'pattern', 'cwd', 'job_id', 'subagent_type', 'file'];
+		const parts: string[] = [];
+		for (const key of keys) {
+			if (!(key in args)) {
+				continue;
+			}
+
+			const value = args[key];
+			const text = typeof value === 'string' ? value.slice(0, 160) : JSON.stringify(value)?.slice(0, 160) ?? '';
+			parts.push(`${key}=${text}`);
+		}
+
+		if (parts.length === 0) {
+			return `${name}\n${rawArgs.trim().slice(0, 240)}`;
+		}
+
+		return `${name}\n${parts.join('|')}`;
+	} catch {
+		return `${name}\n${rawArgs.trim().slice(0, 240)}`;
+	}
+}
+
+function normalizeAgentMode(mode: ChatMode | undefined): ChatMode {
+	if (mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask') {
+		return mode;
+	}
+
+	return 'agent';
+}
+
+function isReadonlyMode(mode: ChatMode): boolean {
+	return mode === 'plan' || mode === 'multitask';
 }
 
 function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
@@ -115,6 +156,7 @@ export class AgentSession {
 		history: ChatUiMessage[];
 		userText: string;
 		editorContext?: string;
+		attachments?: readonly ImageAttachment[];
 		signal: AbortSignal;
 		ui: AgentUiSink;
 		confirm?: ToolContext['confirm'];
@@ -128,6 +170,9 @@ export class AgentSession {
 		mode?: ChatMode;
 		sessionAllow?: string[];
 		onAlwaysAllow?: (pattern: string) => void;
+		setChatMode?: (mode: ChatMode) => void | Promise<void>;
+		// Колбэк перед паузой HTTP-retry (пробрасывается в LLM client)
+		onRetry?: (info: LlmRetryInfo) => void;
 		// Глубина вложенного субагента (0 = основной агент)
 		subagentDepth?: number;
 		// Принудительно только read-only tools (explore)
@@ -147,13 +192,13 @@ export class AgentSession {
 		const todos = new TodoStore();
 		const shell = new ShellSession(defaultWorkspaceCwd());
 		const depth = params.subagentDepth ?? 0;
-		const agentMode: ChatMode =
-			params.mode === 'debug' || params.mode === 'design' || params.mode === 'plan' ? params.mode : 'agent';
+		let agentMode: ChatMode = normalizeAgentMode(params.mode);
 		clearIgnoreCache();
 
-		const userContent = params.editorContext
+		const userText = params.editorContext
 			? `${params.userText}\n\n---\nКонтекст:\n${params.editorContext}`
 			: params.userText;
+		const userContent = await buildUserContentWithImages(userText, params.attachments);
 
 		const userEditsAppendix = writes ? await writes.buildPromptAppendix() : '';
 		const planSnap = plan.snapshot();
@@ -164,24 +209,39 @@ export class AgentSession {
 			?? getGenRulesManager()?.getPromptAppendix()
 			?? '';
 		const skillsAppendix = depth === 0 ? (formatSkillsCatalog(await discoverSkills()) ?? '') : '';
-		const customSystem = [settings.systemPrompt.trim(), params.subagentSystem?.trim() ?? ''].filter(Boolean).join('\n\n');
+		let personaAppendix = '';
+		if (depth === 0 && settings.personaId.trim()) {
+			const persona = await resolvePersona(settings.personaId);
+			if (persona) {
+				personaAppendix = formatPersonaAppendix(persona);
+			}
+		}
+		const customSystem = [
+			settings.systemPrompt.trim(),
+			personaAppendix,
+			params.subagentSystem?.trim() ?? '',
+		].filter(Boolean).join('\n\n');
+
+		const buildSystem = (toolsAvailable: boolean, mode: ChatMode) => [
+			customSystem,
+			buildAgentSystemPrompt({
+				toolsAvailable,
+				authLevel: settings.agentAuthLevel,
+				deniedPaths: settings.deniedPaths,
+				userEditsAppendix,
+				planAppendix,
+				planEditsAppendix,
+				genRulesAppendix,
+				skillsAppendix,
+				planWriteToFile: settings.planWriteToFile,
+				mode,
+			}),
+		].filter(Boolean).join('\n\n');
+
 		const apiMessages: ChatMessage[] = [
 			{
 				role: 'system',
-				content: [
-					customSystem,
-					buildAgentSystemPrompt({
-					toolsAvailable: true,
-					authLevel: settings.agentAuthLevel,
-					deniedPaths: settings.deniedPaths,
-					userEditsAppendix,
-					planAppendix,
-					planEditsAppendix,
-					genRulesAppendix: [genRulesAppendix, skillsAppendix].filter(Boolean).join('\n\n'),
-					planWriteToFile: settings.planWriteToFile,
-					mode: agentMode,
-				}),
-				].filter(Boolean).join('\n\n'),
+				content: buildSystem(true, agentMode),
 			},
 			...historyToApiMessages(params.history),
 			{
@@ -204,8 +264,22 @@ export class AgentSession {
 			sessionAllow: params.sessionAllow,
 			onAlwaysAllow: params.onAlwaysAllow,
 			subagentDepth: depth,
+			setChatMode: async (mode) => {
+				await params.setChatMode?.(mode);
+				if (mode === 'ask') {
+					toolsEnabled = false;
+					agentMode = 'agent';
+				} else {
+					agentMode = normalizeAgentMode(mode);
+				}
+				// Обновить system prompt под новый режим
+				apiMessages[0] = {
+					role: 'system',
+					content: buildSystem(toolsEnabled, agentMode),
+				};
+			},
 			runSubagent: async ({ type, prompt, signal }) => {
-				const def = getSubagent(type);
+				const def = await resolveSubagent(type);
 				const child = new AgentSession(this.client);
 				const chunks: string[] = [];
 				await child.run({
@@ -215,19 +289,21 @@ export class AgentSession {
 					confirm: params.confirm,
 					revealFile: params.revealFile,
 					trackMutation: params.trackMutation,
-					sessionAllow: params.sessionAllow,
+					// permission.task: субагент не наследует sessionAllow родителя (строже)
+					sessionAllow: undefined,
 					onAlwaysAllow: params.onAlwaysAllow,
 					subagentDepth: depth + 1,
 					readonlySubagent: def?.readonly ?? true,
 					subagentSystem: def?.prompt,
 					maxIterationsOverride: def?.maxIterations ?? 12,
 					mode: 'agent',
+					onRetry: params.onRetry,
 					ui: {
 						append: (message) => {
 							if (message.role === 'assistant' && message.content.trim()) {
 								chunks.push(message.content.trim());
 							}
-							
+
 							if (message.role === 'error') {
 								chunks.push(`[error] ${message.content}`);
 							}
@@ -246,15 +322,19 @@ export class AgentSession {
 			},
 		};
 
-		const toolOpts = {
-			readonly: params.readonlySubagent === true || agentMode === 'plan',
-			disableTask: depth > 0,
-		};
+		// Doom loop: одинаковый tool+args падает 3 раза подряд -> confirm на следующий вызов
+		let doomKey = '';
+		let doomFails = 0;
 
 		for (let iteration = 0; unlimited || iteration < maxIterations; iteration += 1) {
 			if (params.signal.aborted) {
 				throw toAbortError();
 			}
+
+			const toolOpts = {
+				readonly: params.readonlySubagent === true || isReadonlyMode(agentMode),
+				disableTask: depth > 0,
+			};
 
 			const assistantId = messageId();
 			let streamed = '';
@@ -275,21 +355,14 @@ export class AgentSession {
 						content: streamed
 					});
 				},
+				onRetry: params.onRetry,
 			});
 
 			if (result.toolsFallback && toolsEnabled) {
 				toolsEnabled = false;
 				apiMessages[0] = {
 					role: 'system',
-					content: buildAgentSystemPrompt({
-						toolsAvailable: false,
-						userEditsAppendix,
-						planAppendix,
-						planEditsAppendix,
-						genRulesAppendix,
-						planWriteToFile: settings.planWriteToFile,
-						mode: agentMode,
-					}),
+					content: buildSystem(false, agentMode),
 				};
 				params.ui.append({
 					id: messageId(),
@@ -329,7 +402,7 @@ export class AgentSession {
 				if (b.function.name === 'propose_plan' && a.function.name !== 'propose_plan') {
 					return 1;
 				}
-				
+
 				return 0;
 			});
 
@@ -356,11 +429,68 @@ export class AgentSession {
 					throw toAbortError();
 				}
 				const call = orderedCalls[i]!;
+				const failKey = doomArgsFingerprint(call.function.name, call.function.arguments);
+
+				// После 3 одинаковых провалов - принудительный confirm + сброс skipConfirm
+				if (doomKey === failKey && doomFails >= 3) {
+					toolCtxBase.skipConfirm = false;
+					const denied = await confirmOrSkip(
+						toolCtxBase,
+						'Doom loop: повтор падающего tool',
+						`Инструмент «${call.function.name}» уже трижды завершился ошибкой с похожими аргументами. Продолжить ещё раз или сменить подход?`,
+					);
+					if (denied) {
+						const resultText = truncate(denied.content + '\n\n[doom_loop] Смени аргументы или другой tool - тот же вызов уже падал 3 раза.');
+						liveCalls[i] = {
+							...liveCalls[i]!,
+							status: 'denied',
+							result: resultText,
+						};
+						params.ui.update(assistantId, {
+							toolCalls: liveCalls.map((c) => ({ ...c })),
+						});
+						params.ui.append({
+							id: messageId(),
+							role: 'tool',
+							content: resultText,
+							toolCallId: call.id,
+							toolName: call.function.name,
+							toolArgs: call.function.arguments,
+							toolStatus: 'denied',
+						});
+						return {
+							role: 'tool' as const,
+							tool_call_id: call.id,
+							name: call.function.name,
+							content: redactSecrets(resultText).text,
+							denied: true,
+						};
+					}
+				}
+
 				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, toolCtxBase);
 				const lengthHint = !toolResult.ok && result.finishReason === 'length'
 					? vscode.l10n.t('agent.responseTruncated')
 					: '';
-				const resultText = truncate(`${toolResult.content}${lengthHint}`);
+				let resultText = truncate(`${toolResult.content}${lengthHint}`);
+
+				if (!toolResult.ok && !toolResult.denied) {
+					if (doomKey === failKey) {
+						doomFails += 1;
+					} else {
+						doomKey = failKey;
+						doomFails = 1;
+					}
+
+					if (doomFails >= 3) {
+						toolCtxBase.skipConfirm = false;
+						resultText = truncate(`${resultText}\n\n[doom_loop] Тот же tool+похожие args упал ${doomFails} раз подряд. Не повторяй без изменений - смени подход или попроси подтверждение.`);
+					}
+				} else if (toolResult.ok) {
+					doomKey = '';
+					doomFails = 0;
+				}
+
 				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
 
 				liveCalls[i] = {
@@ -394,7 +524,7 @@ export class AgentSession {
 				};
 			};
 
-			// Tools только на чтение — параллельно; мутирующие — строго по очереди.
+			// Tools только на чтение - параллельно; мутирующие - строго по очереди.
 			const toolApiMessages: ChatMessage[] = [];
 			let i = 0;
 			while (i < orderedCalls.length) {

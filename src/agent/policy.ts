@@ -108,37 +108,73 @@ export function findContainingFolder(fsPath: string, folderFsPaths: string[]): s
 	return best;
 }
 
-export function resolveAgainstFolders(input: string, folderFsPaths: string[]): { fsPath: string; folder: string } {
+export function resolveAgainstFolders(
+	input: string,
+	folderFsPaths: string[],
+	opts?: { allowOutside?: boolean },
+): { fsPath: string; folder: string; outside: boolean } {
 	if (folderFsPaths.length === 0) {
 		throw new PathPolicyError(vscode.l10n.t('policy.noWorkspace'));
 	}
 
 	const trimmed = input.trim() || '.';
 	const folders = folderFsPaths.map((f) => path.resolve(f));
+	const allowOutside = opts?.allowOutside === true;
 
 	if (path.isAbsolute(trimmed)) {
 		const folder = findContainingFolder(trimmed, folders);
 		if (!folder) {
-			throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
+			if (!allowOutside) {
+				throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
+			}
+
+			return {
+				fsPath: path.resolve(trimmed),
+				folder: folders[0]!,
+				outside: true,
+			};
 		}
 
 		return {
 			fsPath: path.resolve(trimmed),
-			folder
+			folder,
+			outside: false,
 		};
 	}
 
-	const first = folders[0];
+	const first = folders[0]!;
 	const candidate = path.resolve(first, trimmed);
 	const folder = findContainingFolder(candidate, folders);
 	if (!folder) {
-		throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
+		if (!allowOutside) {
+			throw new PathPolicyError(vscode.l10n.t('policy.pathOutside'));
+		}
+
+		return {
+			fsPath: candidate,
+			folder: first,
+			outside: true,
+		};
 	}
 
 	return {
 		fsPath: candidate,
-		folder
+		folder,
+		outside: false,
 	};
+}
+
+// Быстрая проверка: путь уходит за пределы workspace folders (без I/O)
+export function isOutsideWorkspaceInput(input: string, folderFsPaths: string[]): boolean {
+	if (folderFsPaths.length === 0) {
+		return true;
+	}
+
+	try {
+		return resolveAgainstFolders(input, folderFsPaths, { allowOutside: true }).outside;
+	} catch {
+		return true;
+	}
 }
 
 export function assertAllowedPath(fsPath: string, folder: string): string {

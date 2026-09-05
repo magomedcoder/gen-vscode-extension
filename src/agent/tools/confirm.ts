@@ -79,7 +79,11 @@ export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detai
 		return undefined;
 	}
 
-	return confirmOrSkip(ctx, title, detail);
+	const suggestion = (ctx as ToolContext & { suggestAlwaysPattern?: string }).suggestAlwaysPattern;
+	return confirmOrSkip(ctx, title, detail, {
+		allowAlways: true,
+		suggestion,
+	});
 }
 
 export { shouldConfirmDeletes, shouldConfirmWrites };

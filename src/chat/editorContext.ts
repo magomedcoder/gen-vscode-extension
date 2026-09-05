@@ -3,12 +3,18 @@ import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 
 export function getEditorChatContext(): string | undefined {
+	const settings = getSettings();
+	// Без enableWorkspaceContext не подмешиваем и контекст активного редактора
+	if (!settings.enableWorkspaceContext) {
+		return undefined;
+	}
+
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
 		return undefined;
 	}
 
-	const maxChars = getSettings().maxInputChars;
+	const maxChars = settings.maxInputChars;
 	const fileName = path.basename(editor.document.fileName);
 	const languageId = editor.document.languageId;
 	const selected = editor.selection.isEmpty ? '' : editor.document.getText(editor.selection).trim();

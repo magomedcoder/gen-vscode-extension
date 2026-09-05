@@ -26,6 +26,19 @@ suite('parseMentions', () => {
 		assert.strictEqual(mentions[0].arg, 'src/x.ts');
 		assert.strictEqual(mentions[1].arg, 'lib');
 	});
+
+	test('разбирает @code @Docs @agent без поломки @codebase', () => {
+		const text = '@codebase auth и @code плюс @Docs guide и @agent scout';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 4);
+		assert.strictEqual(mentions[0].kind, 'codebase');
+		assert.strictEqual(mentions[0].arg, 'auth');
+		assert.strictEqual(mentions[1].kind, 'code');
+		assert.strictEqual(mentions[2].kind, 'docs');
+		assert.strictEqual(mentions[2].arg, 'guide');
+		assert.strictEqual(mentions[3].kind, 'agent');
+		assert.strictEqual(mentions[3].arg, 'scout');
+	});
 });
 
 suite('packContext', () => {

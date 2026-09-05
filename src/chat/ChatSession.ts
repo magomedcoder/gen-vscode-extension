@@ -10,24 +10,49 @@ import type { ChatMode } from '../config/types';
 import { writeLog } from '../log/logger';
 import type { LlmClient } from '../llm/types';
 import { sumUsage } from '../llm/usage';
+import { resolveBangCommands } from './bangCommand';
+import { compactChatMessages } from './compact';
 import { resolveMentions } from './mentions';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
+import { injectImagePathMarkers, saveImageAttachments } from './attachments';
+import type { ImageAttachment, IncomingImage } from './attachments';
 import { getEditorChatContext } from './editorContext';
 import { CHAT_VIEW_ID } from './ids';
 import type { ChatUiMessage, ChatViewState, PendingConfirm } from './protocol';
-import { parseSlashMode } from './slashCommands';
+import { SessionStore, fallbackTitleFromMessages, isDefaultSessionTitle } from './sessionStore';
+import { generateSessionTitle } from '../agent/systemAgents';
+import { loadProjectRulesAppendix } from '../project/projectRules';
+import { parseSlashMode, type SlashCommand } from './slashCommands';
+import { getAlwaysOnWorkspaceContext } from './workspaceContext';
 import type { DiffHunkPayload } from '../agent/diff';
 import { revertHunkInText } from '../agent/diff';
 import { pathExists, resolveWorkspacePath } from '../agent/workspacePath';
+import { customToSlashCommand, discoverCustomCommands, expandCommandTemplate } from '../project/customCommands';
+import type { CustomCommand } from '../project/customCommands';
 import { getGenRulesManager } from '../project/genrules';
+import { formatPersonaAppendix, resolvePersona } from '../project/personas';
+import { runBeforeSubmitHook } from '../project/hooks';
 
-const STORAGE_KEY = 'gen.chat.messages';
 const MAX_STORED = 80;
 // Максимум сообщений в очереди, пока занят текущий turn
 const MAX_TURN_QUEUE = 8;
+// Стек undo/redo последних user turns
+const MAX_TURN_HISTORY = 12;
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function cloneMessages(messages: ChatUiMessage[]): ChatUiMessage[] {
+	return messages.map((m) => ({ 
+		...m, 
+		toolCalls: m.toolCalls?.map((tc) => ({ ...tc })) 
+	}));
+}
+
+interface TurnHistoryEntry {
+	messages: ChatUiMessage[];
+	checkpoint?: AgentCheckpoint;
 }
 
 async function revealAgentFile(uri: vscode.Uri): Promise<void> {
@@ -43,6 +68,8 @@ interface PendingConfirmInternal extends PendingConfirm {
 export class ChatSession {
 	private messages: ChatUiMessage[];
 	private inflight?: AbortController;
+	// Текст статуса при HTTP-retry (показывается в UI пока busy)
+	private busyDetail?: string;
 	private readonly listeners = new Set<ChatSessionListener>();
 	private readonly agent: AgentSession;
 	private readonly writes = new AgentWriteTracker();
@@ -51,15 +78,24 @@ export class ChatSession {
 	private clearSeq = 0;
 	private pendingConfirm?: PendingConfirmInternal;
 	private planBootstrapped = false;
-	private readonly turnQueue: string[] = [];
+	private readonly turnQueue: Array<{ 
+		text: string
+		attachments?: ImageAttachment[] 
+	}> = [];
 	private readonly sessionAllow: string[] = [];
 	private readonly subs: vscode.Disposable[] = [];
+	private customCommands: CustomCommand[] = [];
+	private lastCheckpoint?: AgentCheckpoint;
+	private readonly undoStack: TurnHistoryEntry[] = [];
+	private readonly redoStack: TurnHistoryEntry[] = [];
+	private readonly sessions: SessionStore;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
 		private readonly client: LlmClient,
 	) {
-		this.messages = this.context.workspaceState.get<ChatUiMessage[]>(STORAGE_KEY, []);
+		this.sessions = new SessionStore(this.context.workspaceState);
+		this.messages = [...this.sessions.getCurrent().messages];
 		this.agent = new AgentSession(client);
 		this.planStore = new WorkspacePlanStore(() => {
 			void this.onPlanFileExternallyChanged();
@@ -68,9 +104,11 @@ export class ChatSession {
 		this.subs.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(() => {
 				void this.bootstrapPlan();
+				void this.refreshCustomCommands();
 			}),
 		);
 		void this.bootstrapPlan();
+		void this.refreshCustomCommands();
 	}
 
 	dispose(): void {
@@ -83,12 +121,18 @@ export class ChatSession {
 
 	getState(): ChatViewState {
 		const settings = getSettings();
+		const customSlashCommands: SlashCommand[] = this.customCommands.map(customToSlashCommand);
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
+			busyDetail: this.busyDetail,
 			queuedCount: this.turnQueue.length,
 			mode: settings.chatMode,
 			usage: sumUsage(this.messages),
+			maxContextTokens: settings.maxContextTokens,
+			sessionId: this.sessions.getCurrentSessionId(),
+			sessions: this.sessions.listSessions(),
+			customSlashCommands,
 			pendingConfirm: this.pendingConfirm
 				? {
 					id: this.pendingConfirm.id,
@@ -108,6 +152,19 @@ export class ChatSession {
 		};
 	}
 
+	private async refreshCustomCommands(): Promise<void> {
+		try {
+			this.customCommands = await discoverCustomCommands();
+			this.emit();
+		} catch {
+			this.customCommands = [];
+		}
+	}
+
+	private customSlashExtra(): SlashCommand[] {
+		return this.customCommands.map(customToSlashCommand);
+	}
+
 	subscribe(listener: ChatSessionListener): { dispose(): void } {
 		this.listeners.add(listener);
 		return {
@@ -125,37 +182,91 @@ export class ChatSession {
 	}
 
 	private persist(): void {
-		const slim = this.messages.slice(-MAX_STORED).map((msg) => {
-			if (!msg.toolCalls?.length) {
-				return msg;
-			}
+		this.sessions.saveMessages(this.messages.slice(-MAX_STORED));
+	}
 
-			return {
-				...msg,
-				toolCalls: msg.toolCalls.map((call) => {
-					if (!call.hunks?.length) {
-						return call;
-					}
+	private resetTurnStateForSessionSwitch(): void {
+		this.clearSeq += 1;
+		this.turnQueue.length = 0;
+		this.inflight?.abort();
+		this.inflight = undefined;
+		this.busyDetail = undefined;
+		this.settleConfirm('abort');
+		this.writes.clear();
+		this.sessionAllow.length = 0;
+		this.lastCheckpoint = undefined;
+		this.undoStack.length = 0;
+		this.redoStack.length = 0;
+	}
 
-					return {
-						...call,
-						hunks: call.hunks.map((hunk) => {
-							if (hunk.status === 'pending') {
-								return hunk;
-							}
+	listSessions() {
+		return this.sessions.listSessions();
+	}
 
-							const { oldLines: _o, newLines: _n, beforeContext: _b, afterContext: _a, ...rest } = hunk;
-							return {
-								...rest,
-								oldLines: [],
-								newLines: [],
-							};
-						}),
-					};
-				}),
-			};
-		});
-		void this.context.workspaceState.update(STORAGE_KEY, slim);
+	createSession(): void {
+		this.persist();
+		this.resetTurnStateForSessionSwitch();
+		const created = this.sessions.createSession();
+		this.messages = [...created.messages];
+		this.emit();
+	}
+
+	switchSession(id: string): void {
+		if (id === this.sessions.getCurrentSessionId()) {
+			return;
+		}
+
+		this.persist();
+		this.resetTurnStateForSessionSwitch();
+		const next = this.sessions.switchSession(id);
+		if (!next) {
+			return;
+		}
+
+		this.messages = [...next.messages];
+		this.emit();
+	}
+
+	renameSession(id: string, title: string): void {
+		if (!this.sessions.renameSession(id, title)) {
+			return;
+		}
+
+		this.emit();
+	}
+
+	deleteSession(id: string): void {
+		const wasCurrent = id === this.sessions.getCurrentSessionId();
+		if (wasCurrent) {
+			this.resetTurnStateForSessionSwitch();
+		}
+
+		if (!this.sessions.deleteSession(id)) {
+			return;
+		}
+
+		if (wasCurrent) {
+			this.messages = [...this.sessions.getCurrent().messages];
+		}
+
+		this.emit();
+	}
+
+	forkFromMessage(messageId: string): void {
+		this.persist();
+		this.resetTurnStateForSessionSwitch();
+		const forked = this.sessions.forkFromMessage(this.sessions.getCurrentSessionId(), messageId);
+		if (!forked) {
+			void vscode.window.showWarningMessage(vscode.l10n.t('chat.session.forkFailed'));
+			return;
+		}
+
+		this.messages = [...forked.messages];
+		this.emit();
+	}
+
+	async compactSession(): Promise<void> {
+		await this.runCompact();
 	}
 
 	private onPlanChanged(): void {
@@ -301,8 +412,12 @@ export class ChatSession {
 		this.turnQueue.length = 0;
 		this.inflight?.abort();
 		this.inflight = undefined;
+		this.busyDetail = undefined;
 		this.settleConfirm('abort');
 		this.writes.clear();
+		this.lastCheckpoint = undefined;
+		this.undoStack.length = 0;
+		this.redoStack.length = 0;
 		this.messages = [];
 		this.persist();
 		this.emit();
@@ -501,13 +616,35 @@ export class ChatSession {
 		this.emit();
 	}
 
-	async send(text: string): Promise<void> {
+	async send(text: string, images?: IncomingImage[]): Promise<void> {
 		const trimmed = text.trim();
-		if (!trimmed) {
+		const hasImages = Boolean(images?.length);
+		if (!trimmed && !hasImages) {
 			return;
 		}
 
-		const slash = parseSlashMode(trimmed);
+		let attachments: ImageAttachment[] | undefined;
+		let payload = trimmed;
+		if (hasImages) {
+			try {
+				attachments = await saveImageAttachments(images!);
+				payload = injectImagePathMarkers(trimmed, attachments);
+			} catch (err) {
+				this.append({
+					id: messageId(),
+					role: 'error',
+					content: vscode.l10n.t(
+						'chat.error.attachImage',
+						err instanceof Error ? err.message : String(err),
+					),
+				});
+				return;
+			}
+		}
+
+		await this.refreshCustomCommands();
+		const extra = this.customSlashExtra();
+		const slash = parseSlashMode(payload, extra);
 		if (slash) {
 			if (slash.command === 'export') {
 				await this.exportSessionMarkdown();
@@ -516,6 +653,85 @@ export class ChatSession {
 
 			if (slash.command === 'init') {
 				await this.runInitRules(slash.rest);
+				return;
+			}
+
+			if (slash.command === 'new') {
+				this.createSession();
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: vscode.l10n.t('chat.slash.new.done'),
+				});
+				return;
+			}
+
+			if (slash.command === 'compact') {
+				await this.runCompact();
+				return;
+			}
+
+			if (slash.command === 'undo') {
+				await this.runUndo();
+				return;
+			}
+
+			if (slash.command === 'redo') {
+				await this.runRedo();
+				return;
+			}
+
+			if (slash.command === 'sessions') {
+				const list = this.sessions.listSessions();
+				const lines = list.map((s, i) => {
+					const mark = s.id === this.sessions.getCurrentSessionId() ? ' ' : ' ';
+					return `${mark} ${i + 1}. ${s.title} (${s.messageCount})`;
+				});
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: vscode.l10n.t('chat.slash.sessions.info', list.length, lines.join('\n') || '-'),
+				});
+				return;
+			}
+
+			if (slash.command === 'models') {
+				const settings = getSettings();
+				const model = settings.model.trim() || '-';
+				const small = settings.smallModel.trim() || '-';
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: vscode.l10n.t('chat.slash.models.info', model, small),
+				});
+				return;
+			}
+
+			if (slash.custom) {
+				const custom = this.customCommands.find((c) => c.name === slash.command);
+				if (!custom) {
+					return;
+				}
+
+				if (custom.mode && custom.mode !== getSettings().chatMode) {
+					await this.setMode(custom.mode);
+				}
+
+				if (custom.model?.trim()) {
+					setSessionModel(custom.model.trim());
+				}
+
+				const expanded = expandCommandTemplate(custom.body, slash.rest);
+				if (!expanded) {
+					this.append({
+						id: messageId(),
+						role: 'assistant',
+						content: vscode.l10n.t('chat.slash.custom.empty', custom.name),
+					});
+					return;
+				}
+
+				await this.send(expanded);
 				return;
 			}
 
@@ -531,6 +747,16 @@ export class ChatSession {
 			return;
 		}
 
+		const hook = await runBeforeSubmitHook(payload);
+		if (hook.vetoed) {
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: hook.stderr?.trim() || vscode.l10n.t('chat.hooks.veto', 'beforeSubmit', hook.command ?? ''),
+			});
+			return;
+		}
+
 		if (this.inflight) {
 			if (this.turnQueue.length >= MAX_TURN_QUEUE) {
 				this.append({
@@ -541,7 +767,7 @@ export class ChatSession {
 				return;
 			}
 
-			this.turnQueue.push(trimmed);
+			this.turnQueue.push({ text: payload, attachments });
 			this.emit();
 			return;
 		}
@@ -549,9 +775,187 @@ export class ChatSession {
 		this.append({
 			id: messageId(),
 			role: 'user',
-			content: trimmed,
+			content: payload,
+			attachments,
 		});
-		await this.runTurn(trimmed);
+		await this.runTurn(payload, attachments);
+	}
+
+	private async runCompact(): Promise<void> {
+		if (this.inflight) {
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: vscode.l10n.t('chat.compact.busy'),
+			});
+			return;
+		}
+
+		if (!(await this.ensureSessionModel())) {
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: vscode.l10n.t('chat.error.missingUrlOrModel'),
+			});
+			return;
+		}
+
+		const controller = new AbortController();
+		this.inflight = controller;
+		this.emit();
+		try {
+			const result = await compactChatMessages(this.messages, this.client, {
+				signal: controller.signal,
+			});
+			if (!result.compacted) {
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: result.reason ?? vscode.l10n.t('chat.compact.nothingToDo', 4),
+				});
+				return;
+			}
+
+			this.messages = result.messages;
+			this.persist();
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.compact.done'),
+			});
+		} catch (err) {
+			const cancelled = isAbortError(err) || controller.signal.aborted;
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: cancelled
+					? vscode.l10n.t('chat.error.cancelled')
+					: err instanceof Error ? err.message : String(err),
+			});
+		} finally {
+			if (this.inflight === controller) {
+				this.inflight = undefined;
+			}
+			this.emit();
+		}
+	}
+
+	private async runUndo(): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const entry = this.undoStack.pop();
+		if (!entry) {
+			// Fallback: старое поведение без стека (один lastCheckpoint)
+			if (this.lastCheckpoint && this.lastCheckpoint.size > 0) {
+				const restored = await this.lastCheckpoint.restore();
+				this.lastCheckpoint = undefined;
+				this.writes.clear();
+				const trimmed = this.trimLastUserTurn();
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: restored.length > 0
+						? vscode.l10n.t('chat.slash.undo.restored', restored.length)
+						: trimmed
+							? vscode.l10n.t('chat.slash.undo.trimmed')
+							: vscode.l10n.t('chat.slash.undo.empty'),
+				});
+				return;
+			}
+
+			const trimmed = this.trimLastUserTurn();
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: trimmed
+					? vscode.l10n.t('chat.slash.undo.trimmed')
+					: vscode.l10n.t('chat.slash.undo.empty'),
+			});
+			return;
+		}
+
+		this.redoStack.push({
+			messages: cloneMessages(this.messages),
+			checkpoint: this.lastCheckpoint,
+		});
+		if (this.redoStack.length > MAX_TURN_HISTORY) {
+			this.redoStack.shift();
+		}
+
+		let restoredFiles = 0;
+		if (entry.checkpoint && entry.checkpoint.size > 0) {
+			const paths = await entry.checkpoint.restore();
+			restoredFiles = paths.length;
+			this.writes.clear();
+		}
+
+		this.messages = cloneMessages(entry.messages);
+		this.lastCheckpoint = undefined;
+		this.persist();
+		this.emit();
+		this.append({
+			id: messageId(),
+			role: 'assistant',
+			content: restoredFiles > 0
+				? vscode.l10n.t('chat.slash.undo.restored', restoredFiles)
+				: vscode.l10n.t('chat.slash.undo.trimmed'),
+		});
+	}
+
+	private async runRedo(): Promise<void> {
+		if (this.inflight) {
+			return;
+		}
+
+		const entry = this.redoStack.pop();
+		if (!entry) {
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.slash.redo.empty'),
+			});
+			return;
+		}
+
+		this.undoStack.push({
+			messages: cloneMessages(this.messages),
+			checkpoint: this.lastCheckpoint,
+		});
+		if (this.undoStack.length > MAX_TURN_HISTORY) {
+			this.undoStack.shift();
+		}
+
+		this.messages = cloneMessages(entry.messages);
+		this.lastCheckpoint = entry.checkpoint;
+		this.persist();
+		this.emit();
+		this.append({
+			id: messageId(),
+			role: 'assistant',
+			content: vscode.l10n.t('chat.slash.redo.done'),
+		});
+	}
+
+	// Удалить последний ход пользователя и всё после него
+	private trimLastUserTurn(): boolean {
+		let lastUser = -1;
+		for (let i = this.messages.length - 1; i >= 0; i -= 1) {
+			if (this.messages[i]!.role === 'user') {
+				lastUser = i;
+				break;
+			}
+		}
+
+		if (lastUser < 0) {
+			return false;
+		}
+
+		this.messages = this.messages.slice(0, lastUser);
+		this.persist();
+		this.emit();
+		return true;
 	}
 
 	private async ensureSessionModel(): Promise<boolean> {
@@ -591,13 +995,14 @@ export class ChatSession {
 		this.append({
 			id: messageId(),
 			role: 'user',
-			content: next,
+			content: next.text,
+			attachments: next.attachments,
 		});
-		await this.runTurn(next);
+		await this.runTurn(next.text, next.attachments);
 	}
 
 	// Запуск хода: последнее сообщение уже user с этим текстом
-	private async runTurn(trimmed: string): Promise<void> {
+	private async runTurn(trimmed: string, attachments?: readonly ImageAttachment[]): Promise<void> {
 		if (this.inflight) {
 			return;
 		}
@@ -624,14 +1029,46 @@ export class ChatSession {
 
 		const controller = new AbortController();
 		this.inflight = controller;
+		this.busyDetail = undefined;
 		this.emit();
 
 		const historyBeforeUser = this.messages.slice(0, -1);
 		const checkpoint = new AgentCheckpoint();
+		// Стек undo: снимок сообщений до хода; checkpoint допишем в конце
+		this.undoStack.push({
+			messages: cloneMessages(historyBeforeUser),
+			checkpoint: undefined,
+		});
+		if (this.undoStack.length > MAX_TURN_HISTORY) {
+			this.undoStack.shift();
+		}
+		this.redoStack.length = 0;
 		const mentions = await resolveMentions(trimmed);
+		const bangs = await resolveBangCommands(mentions.cleanText || trimmed, controller.signal);
 		const editorCtx = getEditorChatContext();
-		const mergedContext = [editorCtx, mentions.contextText].filter(Boolean).join('\n\n') || undefined;
-		const llmUserText = mentions.mentions.length > 0 ? (mentions.cleanText || trimmed) : trimmed;
+		const alwaysOn = await getAlwaysOnWorkspaceContext();
+		const mergedContext = [editorCtx, alwaysOn, mentions.contextText, bangs.contextText].filter(Boolean).join('\n\n') || undefined;
+		const llmUserText = bangs.cleanText || mentions.cleanText || trimmed;
+		let turnOk = false;
+
+		const onRetry = (info: { attempt: number; maxAttempts: number; status?: number; delayMs: number }) => {
+			this.busyDetail = vscode.l10n.t(
+				'chat.retrying',
+				info.attempt,
+				info.maxAttempts,
+				info.status ?? '-',
+			);
+			this.emit();
+		};
+
+		const clearRetryStatus = () => {
+			if (!this.busyDetail) {
+				return;
+			}
+
+			this.busyDetail = undefined;
+			this.emit();
+		};
 
 		try {
 			if (isAgentLikeMode(settings.chatMode)) {
@@ -647,6 +1084,7 @@ export class ChatSession {
 					history: historyBeforeUser,
 					userText: llmUserText,
 					editorContext: mergedContext,
+					attachments,
 					signal: controller.signal,
 					confirm: (req) => this.requestConfirm(req),
 					revealFile: revealAgentFile,
@@ -662,6 +1100,8 @@ export class ChatSession {
 							this.sessionAllow.push(pattern);
 						}
 					},
+					setChatMode: (mode) => this.setMode(mode),
+					onRetry,
 					ui: {
 						append: (message) => {
 							if (this.clearSeq !== clearSeqAtStart) {
@@ -672,6 +1112,9 @@ export class ChatSession {
 						update: (id, patch) => {
 							if (this.clearSeq !== clearSeqAtStart) {
 								return;
+							}
+							if (typeof patch.content === 'string' && patch.content.length > 0) {
+								clearRetryStatus();
 							}
 							this.update(id, patch);
 						},
@@ -686,32 +1129,52 @@ export class ChatSession {
 					role: 'assistant',
 					content: '',
 				});
+				const rulesParts: string[] = [];
+				const personaId = getSettings().personaId.trim();
+				if (personaId) {
+					const persona = await resolvePersona(personaId);
+					if (persona) {
+						rulesParts.push(formatPersonaAppendix(persona));
+					}
+				}
+				const projectRules =
+					(await loadProjectRulesAppendix())
+					?? getGenRulesManager()?.getPromptAppendix();
+				if (projectRules?.trim()) {
+					rulesParts.push(projectRules.trim());
+				}
 				const result = await this.client.complete({
-					messages: buildChatCompletionMessages(
+					messages: await buildChatCompletionMessages(
 						historyForAsk,
 						llmUserText,
 						mergedContext,
-						getGenRulesManager()?.getPromptAppendix(),
+						rulesParts.length ? rulesParts.join('\n\n') : undefined,
+						attachments,
 					),
 					signal: controller.signal,
 					onDelta: (chunk) => {
 						if (this.clearSeq !== clearSeqAtStart) {
 							return;
 						}
+						clearRetryStatus();
 						streamed += chunk;
 						this.update(assistantId, {
 							content: streamed
 						});
 					},
+					onRetry,
 				});
 				if (this.clearSeq === clearSeqAtStart) {
+					clearRetryStatus();
 					this.update(assistantId, {
 						content: result.content.trim() || streamed,
 						usage: result.usage,
 					});
 				}
 			}
+			turnOk = !controller.signal.aborted;
 		} catch (err) {
+			turnOk = false;
 			if (this.clearSeq !== clearSeqAtStart) {
 				return;
 			}
@@ -725,6 +1188,7 @@ export class ChatSession {
 			if (this.inflight === controller) {
 				this.inflight = undefined;
 			}
+			this.busyDetail = undefined;
 			if (this.clearSeq === clearSeqAtStart) {
 				this.persist();
 				this.emit();
@@ -735,10 +1199,26 @@ export class ChatSession {
 			return;
 		}
 
+		if (turnOk) {
+			await this.maybeRenameSessionAfterTurn(controller.signal);
+		}
+
 		if (checkpoint.size > 0) {
 			const restored = await offerCheckpointRestore(checkpoint);
 			if (restored.length > 0) {
 				this.writes.clear();
+				this.lastCheckpoint = undefined;
+				// Пользователь откатил файлы сразу - не держим checkpoint в undo
+				const top = this.undoStack[this.undoStack.length - 1];
+				if (top) {
+					top.checkpoint = undefined;
+				}
+			} else {
+				this.lastCheckpoint = checkpoint;
+				const top = this.undoStack[this.undoStack.length - 1];
+				if (top) {
+					top.checkpoint = checkpoint;
+				}
 			}
 		}
 
@@ -747,7 +1227,42 @@ export class ChatSession {
 			writeLog('agent', `[${new Date().toISOString()}] session tokens prompt=${usage.promptTokens} completion=${usage.completionTokens} total=${usage.totalTokens}`);
 		}
 
+		if (getSettings().notifyOnComplete && !controller.signal.aborted) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('chat.notify.complete'));
+		}
+
 		await this.drainTurnQueue();
+	}
+
+	/** После первого успешного хода: LLM-title на smallModel, если ещё «Новый чат». */
+	private async maybeRenameSessionAfterTurn(signal: AbortSignal): Promise<void> {
+		const current = this.sessions.getCurrent();
+		if (!isDefaultSessionTitle(current.title)) {
+			return;
+		}
+
+		const userTurns = this.messages.filter((m) => m.role === 'user').length;
+		if (userTurns < 1) {
+			return;
+		}
+
+		const sessionId = current.id;
+		let title = await generateSessionTitle(this.messages, this.client, { signal });
+		if (!title?.trim()) {
+			title = fallbackTitleFromMessages(this.messages);
+		}
+
+		if (!title?.trim() || isDefaultSessionTitle(title)) {
+			return;
+		}
+
+		if (this.sessions.getCurrentSessionId() !== sessionId) {
+			return;
+		}
+
+		if (this.sessions.renameSession(sessionId, title)) {
+			this.emit();
+		}
 	}
 
 	async exportSessionMarkdown(): Promise<void> {

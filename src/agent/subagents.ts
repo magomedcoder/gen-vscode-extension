@@ -1,4 +1,7 @@
-export type SubagentType = 'explore' | 'general';
+import { discoverCustomAgents, resolveBuiltinPresetSubagent, BUILTIN_PRESETS } from '../project/customAgents';
+
+export type BuiltinSubagentType = 'explore' | 'general' | 'scout';
+export type SubagentType = string;
 
 export interface SubagentDef {
 	id: SubagentType;
@@ -34,10 +37,54 @@ export const BUILTIN_SUBAGENTS: SubagentDef[] = [
 			'Не вызывай tool task повторно. В конце дай сжатый summary результата.',
 		].join(' '),
 	},
+	{
+		id: 'scout',
+		name: 'Scout',
+		description: 'Read-only разведка внешней документации: web_search, fetch_page, search_docs.',
+		readonly: true,
+		maxIterations: 14,
+		prompt: [
+			'Ты субагент Scout. Фокус - внешняя документация и веб.',
+			'Предпочтительно: web_search, fetch_page, search_docs; при необходимости read/grep по локальным docs.',
+			'Не правь файлы и не запускай мутирующие команды.',
+			'Верни отчёт с URL, ключевыми цитатами и выводами.',
+		].join(' '),
+	},
 ];
 
-export function getSubagent(id: string): SubagentDef | undefined {
+export function getBuiltinSubagent(id: string): SubagentDef | undefined {
 	return BUILTIN_SUBAGENTS.find((s) => s.id === id || s.name.toLowerCase() === id.toLowerCase());
+}
+
+// Builtin + кастомные `.gen/agents/*.md` + OpenCursor presets
+export async function resolveSubagent(id: string): Promise<SubagentDef | undefined> {
+	const builtin = getBuiltinSubagent(id);
+	if (builtin) {
+		return builtin;
+	}
+
+	const customs = await discoverCustomAgents();
+	const needle = id.trim().toLowerCase();
+	const custom = customs.find((s) => s.id === needle || s.name.toLowerCase() === needle);
+	if (custom) {
+		return custom;
+	}
+
+	return resolveBuiltinPresetSubagent(id);
+}
+
+// @deprecated используй resolveSubagent для кастомных агентов
+export function getSubagent(id: string): SubagentDef | undefined {
+	return getBuiltinSubagent(id);
+}
+
+export async function listSubagentIds(): Promise<string[]> {
+	const customs = await discoverCustomAgents();
+	return [
+		...BUILTIN_SUBAGENTS.map((s) => s.id),
+		...BUILTIN_PRESETS.map((p) => p.id),
+		...customs.map((s) => s.id),
+	];
 }
 
 export const DEFAULT_SUBAGENT_DEPTH = 2;

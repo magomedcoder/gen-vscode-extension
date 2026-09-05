@@ -5,7 +5,7 @@ import { initApiKeyStore } from './apiKey';
 import { DEFAULT_SETTINGS } from './types';
 import type { AgentAuthLevel, ChatMode, GenSettings } from './types';
 export type { AgentAuthLevel, ChatMode, CommentStyle, GenSettings } from './types';
-export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, isAgentLikeMode } from './types';
+export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 
 const STORAGE_KEY = 'gen.settings';
@@ -64,7 +64,7 @@ function normalizeAuthLevel(raw: Partial<GenSettings> & { agentConfirmWrites?: b
 
 function normalizeChatMode(raw: unknown): ChatMode {
 	const mode = String(raw ?? '');
-	if (mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan') {
+	if (mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask') {
 		return mode;
 	}
 
@@ -74,9 +74,12 @@ function normalizeChatMode(raw: unknown): ChatMode {
 function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean }): GenSettings {
 	const commentStyle = raw.commentStyle === 'block' ? 'block' : 'inline';
 	const chatMode = normalizeChatMode(raw.chatMode);
+	const baseUrl = String(raw.baseUrl ?? '').trim();
+	const authHeader = String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader;
+	const authScheme = String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim();
 
 	return {
-		baseUrl: String(raw.baseUrl ?? '').trim(),
+		baseUrl,
 		model: String(raw.model ?? '').trim(),
 		smallModel: String(raw.smallModel ?? '').trim(),
 		chatMode,
@@ -86,6 +89,8 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		autoApprove: raw.autoApprove === true,
 		continueLoopOnDeny: raw.continueLoopOnDeny !== false,
 		enableWorkspaceContext: raw.enableWorkspaceContext !== false,
+		alwaysOnWorkspaceContext: raw.alwaysOnWorkspaceContext === true,
+		notifyOnComplete: raw.notifyOnComplete === true,
 		enableFileReading: raw.enableFileReading !== false,
 		enableTerminal: raw.enableTerminal !== false,
 		webSearchEnabled: raw.webSearchEnabled !== false,
@@ -93,36 +98,67 @@ function normalize(raw: Partial<GenSettings> & { agentConfirmWrites?: boolean })
 		systemPrompt: String(raw.systemPrompt ?? '').trim(),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
 		maxTokens: Math.max(64, Math.floor(asNumber(raw.maxTokens, DEFAULT_SETTINGS.maxTokens))),
+		maxContextTokens: Math.max(1024, Math.floor(asNumber(raw.maxContextTokens, DEFAULT_SETTINGS.maxContextTokens))),
 		requestTimeoutMs: Math.max(1000, Math.floor(asNumber(raw.requestTimeoutMs, DEFAULT_SETTINGS.requestTimeoutMs))),
 		maxInputChars: Math.max(500, Math.floor(asNumber(raw.maxInputChars, DEFAULT_SETTINGS.maxInputChars))),
 		commentStyle,
 		previewBeforeApply: Boolean(raw.previewBeforeApply ?? DEFAULT_SETTINGS.previewBeforeApply),
 		commentSystemPrompt: String(raw.commentSystemPrompt ?? DEFAULT_SETTINGS.commentSystemPrompt).trim(),
 		deniedPaths: normalizeStringList(raw.deniedPaths),
+		sensitivePathPatterns: 'sensitivePathPatterns' in raw
+			? normalizeStringList(raw.sensitivePathPatterns)
+			: [...DEFAULT_SETTINGS.sensitivePathPatterns],
+		allowExternalDirectory: raw.allowExternalDirectory === true,
 		deniedCommands: 'deniedCommands' in raw
 			? normalizeStringList(raw.deniedCommands).map((item) => item.toLowerCase())
 			: [...DEFAULT_SETTINGS.deniedCommands],
 		secretPatterns: normalizeStringList(raw.secretPatterns),
-		authHeader: String(raw.authHeader ?? DEFAULT_SETTINGS.authHeader).trim() || DEFAULT_SETTINGS.authHeader,
-		authScheme: String(raw.authScheme ?? DEFAULT_SETTINGS.authScheme).trim(),
+		authHeader,
+		authScheme,
 		planWriteToFile: raw.planWriteToFile !== false,
 		loggingEnabled: raw.loggingEnabled === true,
 		toolOutputMaxChars: Math.max(1000, Math.floor(asNumber(raw.toolOutputMaxChars, DEFAULT_SETTINGS.toolOutputMaxChars))),
 		mcpServers: Array.isArray(raw.mcpServers)
 			? raw.mcpServers
 				.filter((s): s is NonNullable<typeof s> => Boolean(s && typeof s === 'object'))
-				.map((s) => ({
-					name: String((s as { name?: string }).name ?? '').trim(),
-					transport: 'stdio' as const,
-					command: String((s as { command?: string }).command ?? '').trim(),
-					args: Array.isArray((s as { args?: unknown }).args)
-						? ((s as { args: unknown[] }).args).map(String)
-						: undefined,
-					env: (s as { env?: Record<string, string> }).env,
-					enabled: (s as { enabled?: boolean }).enabled !== false,
-				})).filter((s) => s.name && s.command)
+				.map((s) => {
+					const row = s as {
+						name?: string;
+						command?: string;
+						args?: unknown;
+						env?: Record<string, string>;
+						cwd?: string;
+						timeoutMs?: number;
+						enabled?: boolean;
+					};
+					const timeoutRaw = row.timeoutMs;
+					const timeoutMs = typeof timeoutRaw === 'number' && Number.isFinite(timeoutRaw)
+						? Math.max(1000, Math.floor(timeoutRaw))
+						: undefined;
+					const cwd = typeof row.cwd === 'string' && row.cwd.trim() ? row.cwd.trim() : undefined;
+					return {
+						name: String(row.name ?? '').trim(),
+						transport: 'stdio' as const,
+						command: String(row.command ?? '').trim(),
+						args: Array.isArray(row.args) ? row.args.map(String) : undefined,
+						env: row.env,
+						cwd,
+						timeoutMs,
+						enabled: row.enabled !== false,
+					};
+				}).filter((s) => s.name && s.command)
 			: [],
 		subagentDepth: clamp(Math.floor(asNumber(raw.subagentDepth, DEFAULT_SETTINGS.subagentDepth)), 1, 4),
+		skillsPaths: normalizeStringList(raw.skillsPaths),
+		skillsUrls: normalizeStringList(raw.skillsUrls),
+		instructionUrls: normalizeStringList(raw.instructionUrls),
+		personaId: String(raw.personaId ?? '').trim(),
+		formatAfterEdit: raw.formatAfterEdit === true,
+		indexingEnabled: raw.indexingEnabled !== false,
+		embeddingsBaseUrl: String(raw.embeddingsBaseUrl ?? '').trim(),
+		embeddingsModel: String(raw.embeddingsModel ?? DEFAULT_SETTINGS.embeddingsModel).trim() || DEFAULT_SETTINGS.embeddingsModel,
+		visionEnabled: raw.visionEnabled === true,
+		attachmentImageMaxBase64: Math.max(10_000, Math.floor(asNumber(raw.attachmentImageMaxBase64, DEFAULT_SETTINGS.attachmentImageMaxBase64))),
 	};
 }
 

@@ -126,7 +126,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				this.session.cancel();
 				return;
 			case 'send':
-				await this.session.send(msg.text);
+				await this.session.send(msg.text, msg.images);
 				return;
 			case 'editMessage':
 				await this.session.editMessage(msg.id, msg.content);
@@ -172,6 +172,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				} catch {}
 				return;
 			}
+			case 'newSession':
+				this.session.createSession();
+				return;
+			case 'switchSession':
+				this.session.switchSession(msg.id);
+				return;
+			case 'renameSession':
+				this.session.renameSession(msg.id, msg.title);
+				return;
+			case 'deleteSession':
+				this.session.deleteSession(msg.id);
+				return;
+			case 'forkSession':
+				this.session.forkFromMessage(msg.messageId);
+				return;
 		}
 	}
 }

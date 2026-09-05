@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveCommandCwd, throwIfAborted } from '../workspacePath';
 import { runShellCommand } from '../shellExec';
+import { formatCommandLine } from '../commandPolicy';
 import { confirmAlwaysOrSkip } from './confirm';
 import type { ShellSession } from '../shellSession';
+import { runBeforeShellHook } from '../../project/hooks';
 
 function asStringArray(args: Record<string, unknown>, key: string): string[] {
 	const value = args[key];
@@ -64,11 +66,22 @@ export const runCommandTool: ToolDefinition = {
 			relative = resolved.relative;
 		}
 
-		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runCommand', relative || '.'), `${command} ${cmdArgs.join(' ')}`.trim());
+		const commandLine = formatCommandLine(command, cmdArgs);
+		const denied = await confirmAlwaysOrSkip(ctx, vscode.l10n.t('agent.confirm.runCommand', relative || '.'), commandLine);
 		if (denied) {
 			return {
 				...denied,
 				path: relative,
+			};
+		}
+
+		const hook = await runBeforeShellHook(commandLine, ctx.signal);
+		if (hook.vetoed) {
+			return {
+				ok: false,
+				denied: true,
+				path: relative,
+				content: hook.stderr?.trim() || vscode.l10n.t('chat.hooks.veto', 'beforeShell', commandLine),
 			};
 		}
 

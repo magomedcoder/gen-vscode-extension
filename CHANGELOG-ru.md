@@ -4,6 +4,9 @@
 
 ## 0.3.0-dev (Версия в разработке)
 
+- Настройки: отдельный экран **MCP** (карточки enable/status/tools + JSON); **поиск** по разделам
+- Безопасность: UI политики подтверждений, auto-approve / continue-on-deny, capability toggles; Always + `suggestPattern`
+- LLM: учёт `Retry-After` при 429/5xx; статус повтора в composer
 - Slash-режимы: `/debug` `/design` `/plan` `/ask` `/agent`; также `/export` `/init`
 - Режим **Plan**: фильтр tools только на чтение (без мутаций, пока не вернётесь в Agent)
 - Permissions v2: `approvalPolicy` (allow / ask / review / deny), Always + подсказка паттерна, session allowlist, `autoApprove`, `continueLoopOnDeny`, capability toggles
@@ -13,10 +16,14 @@
 - Цикл агента: параллельные read-only tool calls; обрезка вывода tools (`toolOutputMaxChars`)
 - Настройки: `systemPrompt`, `smallModel`; локальный usage ledger
 - Ctrl+L - добавить выделение редактора в чат
-- MCP (stdio MVP): настройка `mcpServers` (JSON на странице «Чат и агент»); tools `list_mcp_tools`, `call_mcp_tool`
+- MCP (stdio MVP): отдельный экран настроек `mcpServers`; tools `list_mcp_tools`, `call_mcp_tool`
 - Субагенты: tool `task` (`explore` только чтение / `general`); лимит вложенности `subagentDepth`
 - Shell: сохранение cwd между `run_command`; `background=true` + tool `await_shell`
 - Упоминания: `@git`, `@branch_diff`, `@rules`, `@link` (+ автодополнение в Composer)
+- Wave 3: `edit_notebook`, `lsp`, `semantic_search`/`search_docs`; `plan_enter`/`plan_exit`/`switch_mode` + multitask; `.gen/plans` + `.gen/agents`/`generate_agent`
+- Wave 3: custom slash `.gen/commands`, `/compact` `/new` `/undo` `/sessions` `/models`; `!command`; hooks `.gen/hooks.json`
+- Wave 3: multi-session + fork; MCP cwd/timeout; formatAfterEdit + diagnostics nudge; provider presets + remote embeddings
+- Wave 4: Usage page; doom loop / external dir / `/redo`; `@code` `@Docs` `@agent` + image attachments; personas / scout / auto-title
 
 ## 0.2.0 (3 сентября 2026)
 

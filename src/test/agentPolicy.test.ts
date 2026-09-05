@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { applySearchReplace, PatchError } from '../agent/patch.js';
-import { assertAllowedPath, isDeniedRelativePath, pathIsInside, resolveAgainstFolders } from '../agent/policy.js';
+import { assertAllowedPath, isDeniedRelativePath, isOutsideWorkspaceInput, pathIsInside, resolveAgainstFolders } from '../agent/policy.js';
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit.js';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy.js';
 import { formatMiniDiff, computeMiniDiff, pathFromToolArguments, revertHunkInText } from '../agent/diff.js';
@@ -11,20 +11,28 @@ import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../
 import { redactSecrets } from '../agent/secrets.js';
 import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types.js';
 import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits.js';
-import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS } from '../config/types.js';
+import { matchesSensitivePath } from '../agent/permissionPolicy.js';
+import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../config/types.js';
 
 suite('path sandbox', () => {
 	const root = path.resolve('/tmp/ws');
 
 	test('относительный путь остаётся в workspace', () => {
-		const { fsPath, folder } = resolveAgainstFolders('src/a.ts', [root]);
+		const { fsPath, folder, outside } = resolveAgainstFolders('src/a.ts', [root]);
 		assert.strictEqual(folder, root);
+		assert.strictEqual(outside, false);
 		assert.ok(pathIsInside(fsPath, root));
 		assert.strictEqual(assertAllowedPath(fsPath, folder), 'src/a.ts');
 	});
 
 	test('выход через .. запрещён', () => {
 		assert.throws(() => resolveAgainstFolders('../secret', [root]));
+	});
+
+	test('allowOutside разрешает путь вне workspace', () => {
+		const resolved = resolveAgainstFolders('../secret', [root], { allowOutside: true });
+		assert.strictEqual(resolved.outside, true);
+		assert.ok(!pathIsInside(resolved.fsPath, root));
 	});
 
 	test('пустой список ничего не запрещает', () => {
@@ -40,6 +48,17 @@ suite('path sandbox', () => {
 		assert.ok(isDeniedRelativePath('certs/server.pem', EXAMPLE_DENIED_PATHS));
 		assert.ok(isDeniedRelativePath('.git/config', EXAMPLE_DENIED_PATHS));
 		assert.ok(!isDeniedRelativePath('src/index.ts', EXAMPLE_DENIED_PATHS));
+	});
+
+	test('sensitivePathPatterns ловит .env*', () => {
+		assert.ok(matchesSensitivePath('.env', DEFAULT_SENSITIVE_PATH_PATTERNS));
+		assert.ok(matchesSensitivePath('app/.env.local', DEFAULT_SENSITIVE_PATH_PATTERNS));
+		assert.ok(!matchesSensitivePath('src/index.ts', DEFAULT_SENSITIVE_PATH_PATTERNS));
+	});
+
+	test('isOutsideWorkspaceInput', () => {
+		assert.ok(!isOutsideWorkspaceInput('src/a.ts', [root]));
+		assert.ok(isOutsideWorkspaceInput('../secret', [root]));
 	});
 });
 
