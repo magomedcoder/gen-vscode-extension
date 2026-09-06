@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type 
 import type { ChatMode, MentionSuggestion } from '../../features/chat/protocol';
 import { activeSlashQuery, filterSlashCommands } from '../../features/chat/slashCommands';
 import type { SlashCommand } from '../../features/chat/slashCommands';
-import { mentionIconForSuggestion } from '../fileIcons';
 import type { GenSettings } from '../../core/config/types';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
@@ -607,7 +606,6 @@ export function Composer({
 									}}
 								>
 									<span className="mention-menu__main">
-										<span className="file-icon" aria-hidden="true">{mentionIconForSuggestion(item.kind, item.label, item.insert)}</span>
 										<span className="mention-menu__label">{item.label}</span>
 									</span>
 									{item.detail ? <span className="mention-menu__detail">{item.detail}</span> : null}

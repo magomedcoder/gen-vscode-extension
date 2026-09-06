@@ -425,7 +425,7 @@ export class SessionStore {
 		const now = Date.now();
 		const session: StoredChatSession = {
 			id: newId(),
-			title: (title?.trim() || `Fork: ${source.title}`).slice(0, 120),
+			title: (title?.trim() || source.title).slice(0, 120),
 			messages: slimMessages(copied),
 			createdAt: now,
 			updatedAt: now,

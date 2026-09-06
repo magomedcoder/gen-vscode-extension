@@ -507,7 +507,12 @@ export class ChatSession {
 		}
 
 		this.persist();
-		const forked = this.sessions.forkFromMessage(this.sessions.getCurrentSessionId(), messageId);
+		const sourceId = this.sessions.getCurrentSessionId();
+		const source = this.sessions.getSession(sourceId);
+		const title = source
+			? vscode.l10n.t('chat.session.forkTitle', source.title)
+			: undefined;
+		const forked = this.sessions.forkFromMessage(sourceId, messageId, title);
 		if (!forked) {
 			void vscode.window.showWarningMessage(vscode.l10n.t('chat.session.forkFailed'));
 			return;

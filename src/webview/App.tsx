@@ -65,18 +65,6 @@ function writeThinkingDisplay(mode: ThinkingDisplay): void {
 	} catch {}
 }
 
-function nextThinkingDisplay(current: ThinkingDisplay): ThinkingDisplay {
-	if (current === 'off') {
-		return 'collapsed';
-	}
-
-	if (current === 'collapsed') {
-		return 'expanded';
-	}
-
-	return 'off';
-}
-
 export function App() {
 	const {
 		screen,
@@ -119,22 +107,16 @@ export function App() {
 	} = useGenBridge();
 
 	const [toolDetailsExpanded, setToolDetailsExpanded] = useState(readToolDetailsExpanded);
-	const toggleToolDetails = useCallback(() => {
-		setToolDetailsExpanded((prev) => {
-			const next = !prev;
-			writeToolDetailsExpanded(next);
-			return next;
-		});
+	const setToolDetailsExpandedPersist = useCallback((expanded: boolean) => {
+		writeToolDetailsExpanded(expanded);
+		setToolDetailsExpanded(expanded);
 	}, []);
 
 	const [thinkingDisplay, setThinkingDisplay] = useState<ThinkingDisplay>(() =>
 		readThinkingDisplay(normalizeThinkingDisplay(settings.thinkingDisplay)));
-	const cycleThinkingDisplay = useCallback(() => {
-		setThinkingDisplay((prev) => {
-			const next = nextThinkingDisplay(prev);
-			writeThinkingDisplay(next);
-			return next;
-		});
+	const setThinkingDisplayPersist = useCallback((mode: ThinkingDisplay) => {
+		writeThinkingDisplay(mode);
+		setThinkingDisplay(mode);
 	}, []);
 
 	// Подгрузить модели для компактного picker в шапке чата
@@ -202,9 +184,9 @@ export function App() {
 				sessionId={chat.sessionId}
 				sessions={chat.sessions}
 				toolDetailsExpanded={toolDetailsExpanded}
-				onToggleToolDetails={toggleToolDetails}
+				onSetToolDetailsExpanded={setToolDetailsExpandedPersist}
 				thinkingDisplay={thinkingDisplay}
-				onCycleThinkingDisplay={cycleThinkingDisplay}
+				onSetThinkingDisplay={setThinkingDisplayPersist}
 				models={models}
 				model={chat.model}
 				modelsLoading={modelsLoading}

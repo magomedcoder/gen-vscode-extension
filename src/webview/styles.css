@@ -158,16 +158,6 @@ body {
 	white-space: nowrap;
 }
 
-.file-icon {
-	display: inline-block;
-	flex-shrink: 0;
-	margin-right: 0.35em;
-	font-style: normal;
-	line-height: 1;
-	opacity: 0.9;
-	vertical-align: -0.05em;
-}
-
 .tool-card__path--link {
 	display: inline;
 	padding: 0;
@@ -451,10 +441,78 @@ body {
 	gap: 6px;
 }
 
-.header__tool-details {
+.header-opts {
+	position: relative;
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 180px;
+}
+
+.header-opts__summary {
+	display: inline-flex !important;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	list-style: none;
+	cursor: pointer;
 	font-size: 11px;
 	padding: 2px 8px;
 	white-space: nowrap;
+}
+
+.header-opts__summary::-webkit-details-marker {
+	display: none;
+}
+
+.header-opts__summary-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.header-opts__chevron {
+	opacity: 0.7;
+	flex-shrink: 0;
+	font-size: 10px;
+}
+
+.header-opts__panel {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 220px;
+	padding: 10px;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background, #1e1e1e));
+	box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+}
+
+.header-opts__row {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.header-opts__label {
+	font-size: 10px;
+	opacity: 0.75;
+}
+
+.header-opts__select {
+	width: 100%;
+	font-size: 11px;
+	padding: 3px 4px;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
+	border-radius: 4px;
+	background: var(--vscode-input-background, transparent);
+	color: var(--vscode-input-foreground, inherit);
+	font-family: inherit;
 }
 
 .thinking-block {
@@ -541,46 +599,38 @@ body {
 	font-family: inherit;
 }
 
+.session-bar__rename {
+	min-width: 0;
+	max-width: 160px;
+	width: 140px;
+	font-size: 11px;
+	padding: 2px 6px;
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-widget-border));
+	border-radius: 4px;
+	background: var(--vscode-input-background, transparent);
+	color: var(--vscode-input-foreground, inherit);
+	font-family: inherit;
+	outline: none;
+}
+
 .session-bar__select:has(option:checked.session-bar__option--busy),
 .session-bar__select[data-busy='true'] {
 	border-color: var(--vscode-charts-orange, #ce9178);
 }
 
-.header-model {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	min-width: 0;
-	max-width: 160px;
-}
-
-.header-model__label {
-	font-size: 10px;
-	opacity: 0.75;
-	flex-shrink: 0;
-}
-
-.header-model__select {
-	min-width: 0;
-	max-width: 130px;
-	font-size: 11px;
-	padding: 2px 4px;
-	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.4));
-	border-radius: 4px;
-	background: var(--vscode-input-background, transparent);
-	color: var(--vscode-input-foreground, inherit);
-	font-family: inherit;
-}
-
-.header-model__select:disabled {
-	opacity: 0.6;
-}
-
 .session-bar__btn {
+	display: inline-flex !important;
+	align-items: center;
+	justify-content: center;
 	padding: 2px 6px !important;
 	min-width: 24px;
+	font-size: 10px;
+	line-height: 1;
+}
+
+.session-bar__btn .codicon {
 	font-size: 12px;
-	line-height: 1.2;
+	line-height: 1;
 }
 
 .usage-table {
@@ -1384,10 +1434,6 @@ body {
 	cursor: pointer;
 }
 
-.mention-menu__item .file-icon {
-	margin-right: 0;
-}
-
 .mention-menu__main {
 	display: inline-flex;
 	align-items: baseline;
@@ -2117,11 +2163,21 @@ body.vscode-light .usage-table td,
 body.vscode-high-contrast .usage-table td,
 body.vscode-light .session-bar__select,
 body.vscode-high-contrast .session-bar__select,
-body.vscode-light .header-model__select,
-body.vscode-high-contrast .header-model__select,
+body.vscode-light .session-bar__rename,
+body.vscode-high-contrast .session-bar__rename,
+body.vscode-light .header-opts__select,
+body.vscode-high-contrast .header-opts__select,
+body.vscode-light .header-opts__panel,
+body.vscode-high-contrast .header-opts__panel,
 body.vscode-light .mcp-card,
 body.vscode-high-contrast .mcp-card {
 	border-color: var(--chat-border);
+}
+
+body.vscode-light .header-opts__panel,
+body.vscode-high-contrast .header-opts__panel {
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
+	box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.12));
 }
 
 body.vscode-light .composer__box,

@@ -238,9 +238,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'renameSession':
 				this.session.renameSession(msg.id, msg.title);
 				return;
-			case 'deleteSession':
-				this.session.deleteSession(msg.id);
+			case 'deleteSession': {
+				const deleteLabel = vscode.l10n.t('chat.session.delete');
+				const choice = await vscode.window.showWarningMessage(
+					vscode.l10n.t('chat.session.deleteConfirm'),
+					{ modal: true },
+					deleteLabel,
+				);
+				if (choice === deleteLabel) {
+					this.session.deleteSession(msg.id);
+				}
 				return;
+			}
 			case 'forkSession':
 				this.session.forkFromMessage(msg.messageId);
 				return;

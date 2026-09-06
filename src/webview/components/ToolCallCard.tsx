@@ -1,18 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DiffHunkPayload, ToolCallUi } from '../../features/chat/protocol';
-import { fileIconForPath } from '../fileIcons';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
-
-// Write-инструменты: путь для иконки можно взять из имени файла в path
-const WRITE_TOOL_NAMES = new Set([
-	'write_file',
-	'apply_patch',
-	'apply_workspace_edit',
-	'delete_file',
-	'create_dir',
-	'edit_notebook',
-]);
 
 const RESULT_PREVIEW = 500;
 
@@ -203,11 +192,6 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 	const hasExit = call.exitCode !== undefined;
 	const modeDefaultOpen = detailsMode === 'full' && (call.status !== 'ok' || pendingCount > 0);
 	const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
-	// Путь для иконки: call.path; у write-тулов - по первому сегменту имени файла
-	const pathForIcon = call.path
-		? (WRITE_TOOL_NAMES.has(call.name) ? call.path.split(',')[0]!.trim() : call.path)
-		: undefined;
-	const pathIcon = pathForIcon ? fileIconForPath(pathForIcon, call.name === 'create_dir' ? 'dir' : undefined) : undefined;
 
 	useEffect(() => {
 		setUserOpen(undefined);
@@ -241,7 +225,6 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 								vscodeApi.postMessage({ type: 'openPath', path: call.path! });
 							}}
 						>
-							{pathIcon ? <span className="file-icon" aria-hidden="true">{pathIcon}</span> : null}
 							{call.path}
 						</button>
 					) : null}
