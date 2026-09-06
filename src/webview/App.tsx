@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { ThinkingDisplay } from '../config/types';
+import type { ThinkingDisplay } from '../core/config/types';
 import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
 import { ConfirmCard } from './components/ConfirmCard';

@@ -1,4 +1,4 @@
-import type { LlmModelOption } from '../../../llm/types';
+import type { LlmModelOption } from '../../../core/llm/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { FieldText } from './SettingsFields';

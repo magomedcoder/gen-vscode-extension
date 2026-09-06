@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { resolveIndexEngineMode, isOnnxGpuAvailable } from '../index/engineStatus.js';
+import { resolveIndexEngineMode, isOnnxGpuAvailable } from '../features/index/engineStatus.js';
 
 suite('index engine status', () => {
 	test('без embeddingsBaseUrl - CPU trigram', () => {

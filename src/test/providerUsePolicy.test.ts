@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { extractProviderHost, matchesProviderUsePattern, providerUseRefusalMessage } from '../llm/providerUsePolicy.js';
-import { DEFAULT_SETTINGS } from '../config/types.js';
+import { extractProviderHost, matchesProviderUsePattern, providerUseRefusalMessage } from '../core/llm/providerUsePolicy.js';
+import { DEFAULT_SETTINGS } from '../core/config/types.js';
 
 suite('providerUsePolicy', () => {
 	test('extractProviderHost: URL и host без схемы', () => {

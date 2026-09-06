@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ExternalHookKind } from '../../../chat/protocol';
+import type { ExternalHookKind } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
 import { SettingsSection } from './SettingsSection';
 

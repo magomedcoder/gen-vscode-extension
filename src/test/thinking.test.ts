@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { extractThinkingDelta, splitAssistantPayload } from '../llm/thinking.js';
+import { extractThinkingDelta, splitAssistantPayload } from '../core/llm/thinking.js';
 
 suite('llm thinking parse', () => {
 	test('reasoning_content из delta', () => {

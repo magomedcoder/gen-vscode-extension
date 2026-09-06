@@ -1,18 +1,18 @@
 import * as assert from 'assert';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { applySearchReplace, PatchError } from '../agent/patch.js';
-import { assertAllowedPath, isDeniedRelativePath, isOutsideWorkspaceInput, pathIsInside, resolveAgainstFolders, rewriteWorkspaceAlias } from '../agent/policy.js';
-import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit.js';
-import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy.js';
-import { formatMiniDiff, computeMiniDiff, pathFromToolArguments, revertHunkInText } from '../agent/diff.js';
-import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../agent/plan.js';
-import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../agent/planFile.js';
-import { redactSecrets } from '../agent/secrets.js';
-import { parseToolArguments, sanitizeToolArgumentsForApi } from '../agent/types.js';
-import { AgentWriteTracker, denyWriteOverUserEdits } from '../agent/userEdits.js';
-import { matchesSensitivePath } from '../agent/permissionPolicy.js';
-import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../config/types.js';
+import { applySearchReplace, PatchError } from '../features/agent/patch.js';
+import { assertAllowedPath, isDeniedRelativePath, isOutsideWorkspaceInput, pathIsInside, resolveAgainstFolders, rewriteWorkspaceAlias } from '../features/agent/policy.js';
+import { parseWorkspaceEdits } from '../features/agent/tools/fs/applyWorkspaceEdit.js';
+import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../features/agent/commandPolicy.js';
+import { formatMiniDiff, computeMiniDiff, pathFromToolArguments, revertHunkInText } from '../features/agent/diff.js';
+import { formatPlan, formatStickyPlanForPrompt, mutationPathsFromArgs, parsePlanArgs, StickyPlan } from '../features/agent/plan.js';
+import { applyPlanFileText, parsePlanMarkdown, serializePlanMarkdown } from '../features/agent/planFile.js';
+import { redactSecrets } from '../features/agent/secrets.js';
+import { parseToolArguments, sanitizeToolArgumentsForApi } from '../features/agent/types.js';
+import { AgentWriteTracker, denyWriteOverUserEdits } from '../features/agent/userEdits.js';
+import { matchesSensitivePath } from '../features/agent/permissionPolicy.js';
+import { EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../core/config/types.js';
 
 suite('path sandbox', () => {
 	const root = path.resolve('/tmp/ws');

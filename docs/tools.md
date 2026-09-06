@@ -8,6 +8,24 @@
 
 Confirmation follows **Settings -> Security**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) and `autoApprove` (asks -> allow; denies stay). Capability toggles can disable terminal / file / web entirely.
 
+## Layout (`src/features/agent/tools/`)
+
+Builtin tools are registered via a **registry** and grouped by category folders. Shared helpers (`confirm.ts`, `postEdit.ts`, `webSearchBackends.ts`) stay at the top of `tools/`.
+
+| Folder    | Tools (names)                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `fs/`     | `list_dir`, `read_file`, `write_file`, `apply_patch`, `apply_workspace_edit`, `edit_notebook`, `delete_file`, `create_dir` |
+| `search/` | `search_files`, `glob`, `grep`, `file_search`, `codebase_search`, `semantic_search`, `search_docs`                         |
+| `shell/`  | `run_command`, `await_shell`, `run_tests` (+ `task` implementation)                                                        |
+| `ide/`    | `get_active_editor`, `get_open_editors`, `open_file`, `close_file`, `reveal_line`, `git_status`, `get_diagnostics`, `lsp`  |
+| `mcp/`    | `list_mcp_tools`, `call_mcp_tool`, `execute`                                                                               |
+| `plan/`   | `propose_plan`, `update_plan`, `write_plan`, `list_plans`, `plan_enter`, `plan_exit`, `switch_mode`                        |
+| `meta/`   | `get_workspace_info`, todos / `ask_question` / `skill` / plugins / `task` / `generate_agent` / web / logs                  |
+
+**Adding a tool:** one file under the category + `registerTool(...)` in that category’s `index.ts` + a row in this doc. Do not change `AgentSession` / `executeAgentTool`.
+
+**Local `.gen/tools`:** markdown tools are also registered dynamically into the same registry on each primary agent turn (`refreshDynamicTools`). Execute returns the file body only - **no JS**. Name collisions with builtins are skipped or prefixed `local_`.
+
 Confirmations are a **card in Gen chat** (Apply / Skip / Stop or Apply / Reject). The chat panel is focused automatically; there is no separate tab.
 
 | Tool                   | Action                                                                   | Confirm                                                             |

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ThinkingDisplay } from '../../config/types';
+import type { ThinkingDisplay } from '../../core/config/types';
 import { t } from '../i18n';
 
 interface ThinkingBlockProps {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PendingQuestion } from '../../chat/protocol';
+import type { PendingQuestion } from '../../features/chat/protocol';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 

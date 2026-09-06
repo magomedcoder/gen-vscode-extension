@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
-import type { ChatProjectStatus } from '../../chat/protocol';
+import type { ChatProjectStatus } from '../../features/chat/protocol';
 
 interface ProjectSetupBannerProps {
 	project?: ChatProjectStatus;

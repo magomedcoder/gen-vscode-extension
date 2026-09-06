@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ModelUsage } from '../../../stores/usageStore';
+import type { ModelUsage } from '../../../core/stores/usageStore';
 import { t } from '../../i18n';
 import { vscodeApi } from '../../vscodeApi';
 import type { SettingsPageProps } from './pages';

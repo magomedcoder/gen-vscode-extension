@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { extractCommentedCode } from '../parse/extractCommentedCode.js';
-import { resolveCommentStyleId, stripComments, validateUnchangedCode } from '../parse/validateUnchangedCode.js';
+import { extractCommentedCode } from '../features/comments/extractCommentedCode.js';
+import { resolveCommentStyleId, stripComments, validateUnchangedCode } from '../features/comments/validateUnchangedCode.js';
 
 suite('extractCommentedCode', () => {
 	test('извлекает содержимое markdown-блока', () => {

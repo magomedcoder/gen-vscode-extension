@@ -8,6 +8,24 @@
 
 Подтверждение - **Settings -> Безопасность**: `approvalPolicy` (`allow` / `ask` / `review` / `deny`) и `autoApprove` (ask -> allow; deny остаётся). Capability-флаги могут полностью отключить terminal / file / web.
 
+## Раскладка (`src/features/agent/tools/`)
+
+Builtin tools регистрируются через **registry** и лежат в папках категорий. Shared helpers (`confirm.ts`, `postEdit.ts`, `webSearchBackends.ts`) - наверху `tools/`.
+
+| Папка     | Tools (имена)                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `fs/`     | `list_dir`, `read_file`, `write_file`, `apply_patch`, `apply_workspace_edit`, `edit_notebook`, `delete_file`, `create_dir` |
+| `search/` | `search_files`, `glob`, `grep`, `file_search`, `codebase_search`, `semantic_search`, `search_docs`                         |
+| `shell/`  | `run_command`, `await_shell`, `run_tests` (+ реализация `task`)                                                            |
+| `ide/`    | `get_active_editor`, `get_open_editors`, `open_file`, `close_file`, `reveal_line`, `git_status`, `get_diagnostics`, `lsp`  |
+| `mcp/`    | `list_mcp_tools`, `call_mcp_tool`, `execute`                                                                               |
+| `plan/`   | `propose_plan`, `update_plan`, `write_plan`, `list_plans`, `plan_enter`, `plan_exit`, `switch_mode`                        |
+| `meta/`   | `get_workspace_info`, todos / `ask_question` / `skill` / plugins / `task` / `generate_agent` / web / logs                  |
+
+**Новый tool:** файл в категории + `registerTool(...)` в `index.ts` категории + строка в этом doc. `AgentSession` / `executeAgentTool` не трогать.
+
+**Локальные `.gen/tools`:** markdown tools динамически попадают в тот же registry на каждом primary agent turn (`refreshDynamicTools`). Execute только возвращает тело файла - **без JS**. Коллизии с builtin пропускаются или с префиксом `local_`.
+
 Подтверждения - **карточка в чате Gen** (Применить / Пропустить / Стоп или Применить / Отклонить). Панель чата фокусируется автоматически; отдельной вкладки нет.
 
 | Tool                   | Действие                                                              | Подтверждать                                                                  |

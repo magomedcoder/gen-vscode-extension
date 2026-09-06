@@ -1,4 +1,4 @@
-import type { ConfirmChoice, ConfirmVariant } from '../../chat/protocol';
+import type { ConfirmChoice, ConfirmVariant } from '../../features/chat/protocol';
 import { t } from '../i18n';
 
 export interface ConfirmPanelProps {

@@ -1,5 +1,5 @@
-import type { TokenUsage } from '../../llm/usage';
-import { formatTokenCount } from '../../llm/usage';
+import type { TokenUsage } from '../../core/llm/usage';
+import { formatTokenCount } from '../../core/llm/usage';
 import { t } from '../i18n';
 
 interface TokenMeterProps {

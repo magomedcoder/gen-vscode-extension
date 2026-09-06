@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { includeApplyPatchForModel, isGptFamilyModel } from '../agent/modelRoutedPatch.js';
-import { buildAgentSystemPrompt } from '../agent/prompts.js';
+import { includeApplyPatchForModel, isGptFamilyModel } from '../features/agent/modelRoutedPatch.js';
+import { buildAgentSystemPrompt } from '../features/agent/prompts.js';
 
 suite('modelRoutedPatch', () => {
 	test('isGptFamilyModel: gpt / chatgpt / o-серия', () => {

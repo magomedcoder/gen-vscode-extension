@@ -1,4 +1,4 @@
-import type { ProviderUsePolicy } from '../../../config/types';
+import type { ProviderUsePolicy } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { FieldSelect, FieldToggle } from './SettingsFields';

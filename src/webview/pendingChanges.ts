@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '../chat/protocol';
+import type { ChatUiMessage } from '../features/chat/protocol';
 
 // Файл с pending-хунками (для дерева / Accept|Reject по path)
 export interface PendingFileEntry {

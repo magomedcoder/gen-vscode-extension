@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AdminPolicyInfo, ChatViewState, IndexEngineStatus, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../chat/protocol';
-import type { GenSettings } from '../config/types';
-import { DEFAULT_SETTINGS } from '../config/types';
-import type { LlmModelOption } from '../llm/types';
+import type { AdminPolicyInfo, ChatViewState, IndexEngineStatus, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../features/chat/protocol';
+import type { GenSettings } from '../core/config/types';
+import { DEFAULT_SETTINGS } from '../core/config/types';
+import type { LlmModelOption } from '../core/llm/types';
 import type { AgentsPageData } from './components/settings/AgentsPage';
 import type { ExternalHookFileRow, ExternalHookKind, HooksPageData } from './components/settings/HooksPage';
 import type { RulesSkillsPageData } from './components/settings/RulesSkillsPage';

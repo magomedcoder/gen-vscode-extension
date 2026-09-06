@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode, type SubmitEvent } from 'react';
-import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption } from '../../chat/protocol';
-import type { GenSettings } from '../../config/types';
-import { DEFAULT_SETTINGS } from '../../config/types';
-import type { LlmModelOption } from '../../llm/types';
+import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption } from '../../features/chat/protocol';
+import type { GenSettings } from '../../core/config/types';
+import { DEFAULT_SETTINGS } from '../../core/config/types';
+import type { LlmModelOption } from '../../core/llm/types';
 import { t } from '../i18n';
 import { ChatPage } from './settings/ChatPage';
 import { ConnectionPage } from './settings/ConnectionPage';

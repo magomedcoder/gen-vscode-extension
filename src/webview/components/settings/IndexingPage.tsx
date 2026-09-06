@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { IndexEngineStatus } from '../../../chat/protocol';
+import type { IndexEngineStatus } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { FieldTextarea, FieldToggle } from './SettingsFields';

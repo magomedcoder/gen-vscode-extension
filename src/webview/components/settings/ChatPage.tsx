@@ -1,5 +1,5 @@
-import type { PersonaOption } from '../../../chat/protocol';
-import type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, ThinkingDisplay } from '../../../config/types';
+import type { PersonaOption } from '../../../features/chat/protocol';
+import type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, ThinkingDisplay } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { FieldSelect, FieldText, FieldTextarea, FieldToggle } from './SettingsFields';
@@ -10,7 +10,6 @@ interface ChatPageProps extends SettingsPageProps {
 	onOpenPersonasPage?: () => void;
 }
 
-// Внешний вид чата, уведомления и комментарии
 export function ChatPage({
 	draft,
 	setField,

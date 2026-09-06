@@ -1,9 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as vscode from 'vscode';
-import { interpolateConfigString } from '../config/interpolate';
-import { getSettings } from '../config/settings';
-import { getMcpOAuthDebugInfo, getMcpOAuthTokens } from '../stores/mcpOAuthStore';
-import type { McpOAuthDebugInfo } from '../stores/mcpOAuthStore';
+import { interpolateConfigString } from '../core/config/interpolate';
+import { getSettings } from '../core/config/settings';
+import { getMcpOAuthDebugInfo, getMcpOAuthTokens } from '../core/stores/mcpOAuthStore';
+import type { McpOAuthDebugInfo } from '../core/stores/mcpOAuthStore';
 
 const EXTENSION_ID = 'magomedcoder.gen-agent-vscode';
 

@@ -1,8 +1,8 @@
 import * as assert from 'assert';
-import { activeSlashQuery, filterSlashCommands, parseSlashMode } from '../chat/slashCommands.js';
-import { expandCommandTemplate } from '../project/customCommands.js';
-import { parseBangCommands, splitCommandLine } from '../chat/bangCommand.js';
-import { splitIntoTurns } from '../chat/compact.js';
+import { activeSlashQuery, filterSlashCommands, parseSlashMode } from '../features/chat/slashCommands.js';
+import { expandCommandTemplate } from '../features/project/customCommands.js';
+import { parseBangCommands, splitCommandLine } from '../features/chat/bangCommand.js';
+import { splitIntoTurns } from '../features/chat/compact.js';
 
 suite('slashCommands', () => {
 	test('parseSlashMode: режимы', () => {

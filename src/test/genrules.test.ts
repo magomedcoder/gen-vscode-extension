@@ -1,5 +1,5 @@
 import * as assert from 'node:assert/strict';
-import { formatGenRulesForPrompt, MAX_GENRULES_CHARS, normalizeGenRulesText } from '../project/genrules';
+import { formatGenRulesForPrompt, MAX_GENRULES_CHARS, normalizeGenRulesText } from '../features/project/genrules';
 
 suite('genrules', () => {
 	test('normalizeGenRulesText trims and rejects empty', () => {

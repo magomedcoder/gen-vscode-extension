@@ -1,5 +1,5 @@
 import { vscodeApi } from '../vscodeApi';
-import type { PendingConfirm } from '../../chat/protocol';
+import type { PendingConfirm } from '../../features/chat/protocol';
 import { ConfirmPanel } from './ConfirmPanel';
 
 interface ConfirmCardProps {

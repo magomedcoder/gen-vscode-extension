@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { AgentCustomInfo, AgentPresetInfo } from '../../../chat/protocol';
+import type { AgentCustomInfo, AgentPresetInfo } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
 import { SettingsSection } from './SettingsSection';
 

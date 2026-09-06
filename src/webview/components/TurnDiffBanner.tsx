@@ -1,4 +1,4 @@
-import type { SessionDiffEvent } from '../../chat/protocol';
+import type { SessionDiffEvent } from '../../features/chat/protocol';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 

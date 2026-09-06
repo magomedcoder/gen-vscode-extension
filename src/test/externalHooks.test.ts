@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { mergeGenHooksLists, parseSettingsJsonHooks, parseHooksJsonFile, listExternalHookCandidates } from '../project/externalHooks.js';
+import { mergeGenHooksLists, parseSettingsJsonHooks, parseHooksJsonFile, listExternalHookCandidates } from '../features/project/externalHooks.js';
 
 suite('externalHooks', () => {
 	test('listExternalHookCandidates: user + project пути', () => {

@@ -1,19 +1,11 @@
 import * as assert from 'assert';
-import { DEFAULT_SETTINGS } from '../config/types.js';
-import {
-	clearCachedNCtx,
-	getCachedNCtx,
-	getEffectiveContextBudget,
-	setCachedNCtx,
-} from '../llm/contextBudget.js';
-import {
-	isContextOverflowError,
-	parseContextOverflow,
-} from '../llm/contextOverflow.js';
-import { LlmHttpError } from '../llm/errors.js';
-import { estimateChatMessagesTokens, estimateTextTokens } from '../llm/estimateTokens.js';
-import { shrinkApiMessages } from '../chat/fitContext.js';
-import type { ChatMessage } from '../llm/types.js';
+import { DEFAULT_SETTINGS } from '../core/config/types.js';
+import { clearCachedNCtx, getCachedNCtx, getEffectiveContextBudget, setCachedNCtx } from '../core/llm/contextBudget.js';
+import { isContextOverflowError, parseContextOverflow } from '../core/llm/contextOverflow.js';
+import { LlmHttpError } from '../core/llm/errors.js';
+import { estimateChatMessagesTokens, estimateTextTokens } from '../core/llm/estimateTokens.js';
+import { shrinkApiMessages } from '../features/chat/fitContext.js';
+import type { ChatMessage } from '../core/llm/types.js';
 
 suite('context overflow parse', () => {
 	const nestedEngine = [

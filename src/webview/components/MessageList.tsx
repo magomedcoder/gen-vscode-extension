@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ThinkingDisplay } from '../../config/types';
-import type { ChatUiMessage } from '../../chat/protocol';
+import type { ThinkingDisplay } from '../../core/config/types';
+import type { ChatUiMessage } from '../../features/chat/protocol';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 import { ToolCallCard, type ToolDetailsMode } from './ToolCallCard';

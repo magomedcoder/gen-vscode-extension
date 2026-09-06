@@ -1,0 +1,163 @@
+import * as vscode from 'vscode';
+import { getSettings } from '../../core/config/settings';
+import type { LlmClient } from '../../core/llm/types';
+import type { ChatUiMessage } from './protocol';
+
+const DEFAULT_KEEP_TURNS = 4;
+const MAX_SUMMARY_INPUT = 24_000;
+const TOOL_SLICE_DEFAULT = 400;
+const TOOL_SLICE_PRUNE = 80;
+
+export interface CompactOptions {
+	// Сколько последних ходов оставить (из compactTailTurns)
+	keepTurns?: number;
+	// Агрессивно ужимать tool-контент и args в старых ходах
+	pruneToolResults?: boolean;
+	// Placeholder: зарезервированный headroom токенов (пока не используется)
+	reservedTokens?: number;
+	signal?: AbortSignal;
+}
+
+export interface CompactResult {
+	messages: ChatUiMessage[];
+	summary?: string;
+	compacted: boolean;
+	reason?: string;
+}
+
+function isTurnStart(msg: ChatUiMessage): boolean {
+	return msg.role === 'user';
+}
+
+// Разбить историю на ходы (каждый ход начинается с user)
+export function splitIntoTurns(messages: readonly ChatUiMessage[]): ChatUiMessage[][] {
+	const turns: ChatUiMessage[][] = [];
+	let current: ChatUiMessage[] = [];
+	for (const msg of messages) {
+		if (isTurnStart(msg) && current.length > 0) {
+			turns.push(current);
+			current = [];
+		}
+		current.push(msg);
+	}
+
+	if (current.length > 0) {
+		turns.push(current);
+	}
+
+	return turns;
+}
+
+function serializeTurns(
+	turns: readonly ChatUiMessage[][],
+	opts: {
+		pruneToolResults: boolean
+	},
+): string {
+	const toolSlice = opts.pruneToolResults ? TOOL_SLICE_PRUNE : TOOL_SLICE_DEFAULT;
+	const lines: string[] = [];
+	for (const turn of turns) {
+		for (const msg of turn) {
+			if (msg.role === 'user') {
+				lines.push(`Пользователь: ${msg.content}`);
+			} else if (msg.role === 'assistant') {
+				lines.push(`Ассистент: ${msg.content}`);
+				if (msg.toolCalls?.length) {
+					for (const call of msg.toolCalls) {
+						// При prune не тащим args в summary-prompt
+						const argsPart = opts.pruneToolResults
+							? ''
+							: (call.arguments ? ` args=${call.arguments.slice(0, toolSlice)}` : '');
+						lines.push(`  tool_call ${call.name}${argsPart}`);
+					}
+				}
+			} else if (msg.role === 'error') {
+				lines.push(`Ошибка: ${msg.content}`);
+			} else if (msg.role === 'tool') {
+				lines.push(`Tool ${msg.toolName ?? ''}: ${msg.content.slice(0, toolSlice)}`);
+			}
+		}
+		lines.push('---');
+	}
+
+	const text = lines.join('\n');
+	return text.length > MAX_SUMMARY_INPUT
+		? `${text.slice(0, MAX_SUMMARY_INPUT)}\n\n[truncated]`
+		: text;
+}
+
+function messageId(): string {
+	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Сжать старые ходы в одно summary-сообщение, оставить последние N ходов
+export async function compactChatMessages(
+	messages: readonly ChatUiMessage[],
+	client: LlmClient,
+	opts?: CompactOptions,
+): Promise<CompactResult> {
+	const settings = getSettings();
+	const keepTurns = Math.max(1, opts?.keepTurns ?? settings.compactTailTurns ?? DEFAULT_KEEP_TURNS);
+	const pruneToolResults = opts?.pruneToolResults ?? settings.compactPruneToolResults;
+	const reservedTokens = Math.max(0, opts?.reservedTokens ?? settings.compactReservedTokens);
+
+	const turns = splitIntoTurns(messages);
+	if (turns.length <= keepTurns) {
+		return {
+			messages: [...messages],
+			compacted: false,
+			reason: vscode.l10n.t('chat.compact.nothingToDo', keepTurns),
+		};
+	}
+
+	const older = turns.slice(0, -keepTurns);
+	const recent = turns.slice(-keepTurns);
+	const model = settings.smallModel.trim() || undefined;
+	const prompt = [
+		'Суммируй предыдущую переписку чата для coding-агента.',
+		'Сохрани: цель задачи, принятые решения, ключевые пути файлов, незавершённые шаги.',
+		'Пиши кратко, на языке пользователя, без воды.',
+		...(reservedTokens > 0
+			? [`Уложи summary примерно в ${reservedTokens} токенов (короче при необходимости).`]
+			: []),
+		'',
+		serializeTurns(older, { pruneToolResults }),
+	].join('\n');
+
+	const result = await client.complete({
+		messages: [
+			{
+				role: 'system',
+				content: 'Ты сжимаешь историю чата. Ответь только текстом summary.',
+			},
+			{
+				role: 'user',
+				content: prompt,
+			},
+		],
+		model,
+		signal: opts?.signal,
+		toolChoice: 'none',
+	});
+
+	const summary = result.content.trim();
+	if (!summary) {
+		return {
+			messages: [...messages],
+			compacted: false,
+			reason: vscode.l10n.t('chat.compact.emptySummary'),
+		};
+	}
+
+	const summaryMsg: ChatUiMessage = {
+		id: messageId(),
+		role: 'assistant',
+		content: vscode.l10n.t('chat.compact.summaryPrefix', summary),
+	};
+
+	return {
+		messages: [summaryMsg, ...recent.flat()],
+		summary,
+		compacted: true,
+	};
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ActivityEntry } from '../../../stores/activityStore';
+import type { ActivityEntry } from '../../../core/stores/activityStore';
 import { t } from '../../i18n';
 import { vscodeApi } from '../../vscodeApi';
 import type { SettingsPageProps } from './pages';

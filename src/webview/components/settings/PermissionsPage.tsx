@@ -1,5 +1,5 @@
-import type { ApprovalActionType, ApprovalMode } from '../../../config/approvalTypes';
-import { EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../../../config/types';
+import type { ApprovalActionType, ApprovalMode } from '../../../core/config/approvalTypes';
+import { EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { FieldTextarea } from './SettingsFields';

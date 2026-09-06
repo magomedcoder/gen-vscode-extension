@@ -2,20 +2,10 @@ import * as assert from 'assert';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-	deepMerge,
-	parseFileConfig,
-	pickNonDefaultSettings } from '../config/layers.js';
-import {
-	applyAdminPolicy,
-	matchAdminPattern,
-	parseAdminPolicy,
-	reloadAdminPolicy,
-	resetAdminPolicyForTests,
-	resolveAdminPolicyCandidates,
-} from '../config/adminPolicy.js';
-import { DEFAULT_SETTINGS } from '../config/types.js';
-import { getGenUserConfigDir, getGenUserConfigPath } from '../config/userPaths.js';
+import { deepMerge, parseFileConfig, pickNonDefaultSettings } from '../core/config/layers.js';
+import { applyAdminPolicy, matchAdminPattern, parseAdminPolicy, reloadAdminPolicy, resetAdminPolicyForTests, resolveAdminPolicyCandidates } from '../core/config/adminPolicy.js';
+import { DEFAULT_SETTINGS } from '../core/config/types.js';
+import { getGenUserConfigDir, getGenUserConfigPath } from '../core/config/userPaths.js';
 
 suite('config layers', () => {
 	test('deepMerge: объекты рекурсивно, массивы заменой', () => {

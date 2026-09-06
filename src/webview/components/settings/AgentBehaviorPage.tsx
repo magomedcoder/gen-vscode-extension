@@ -1,11 +1,10 @@
-import type { PlanShellPolicy, RevealOnEdit, ShareMode } from '../../../config/types';
+import type { PlanShellPolicy, RevealOnEdit, ShareMode } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { parseNumberInput } from './parseNumber';
 import { FieldNumber, FieldSelect, FieldText, FieldTextarea, FieldToggle } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
-// Поведение агента, tools, plan, worktrees, compaction
 export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 	return (
 		<>

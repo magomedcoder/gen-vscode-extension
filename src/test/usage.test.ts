@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { addUsage, formatTokenCount, parseUsage, sumUsage } from '../llm/usage.js';
+import { addUsage, formatTokenCount, parseUsage, sumUsage } from '../core/llm/usage.js';
 
 suite('token usage', () => {
 	test('читает api usage', () => {

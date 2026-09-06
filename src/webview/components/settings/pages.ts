@@ -1,4 +1,4 @@
-import type { GenSettings } from '../../../config/types';
+import type { GenSettings } from '../../../core/config/types';
 
 export type SettingsPageId = | 'connection' | 'chat' | 'agent' | 'security' | 'project' | 'mcp' | 'journal';
 

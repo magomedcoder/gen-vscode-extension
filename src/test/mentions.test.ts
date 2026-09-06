@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { parseMentions, stripMentions } from '../chat/mentions.js';
-import { packContext, type ContextHit } from '../index/contextEngine.js';
+import { parseMentions, stripMentions } from '../features/chat/mentions.js';
+import { packContext, type ContextHit } from '../features/index/contextEngine.js';
 
 suite('parseMentions', () => {
 	test('разбирает @file @folder @codebase', () => {

@@ -54,20 +54,20 @@ The agent loads body via `plugin` (by name) or `read_file` using the catalog pat
 
 ## Config layers
 
-- User JSON + project `.gen/config.json` merge into effective `GenSettings` (`src/config/layers.ts`).
-- Optional **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) locks a security subset - highest precedence (`src/config/adminPolicy.ts`).
+- User JSON + project `.gen/config.json` merge into effective `GenSettings` (`src/core/config/layers.ts`).
+- Optional **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) locks a security subset - highest precedence (`src/core/config/adminPolicy.ts`).
 - Precedence: defaults user UI (non-default) project **admin policy**. Remote `.well-known` / full MDM not implemented.
 - Details: [settings.md](settings.md).
 
 ## Opt-in `.gen/` and scaffold
 
 - Opening a folder does **not** create `.gen/`. Opt-in: chat banner (enable + index) or `/init`.
-- `enableProject` / `ensureGenScaffold` (`src/project/config.ts`): `config.json` plus dirs `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; never overwrite).
+- `enableProject` / `ensureGenScaffold` (`src/features/project/config.ts`): `config.json` plus dirs `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; never overwrite).
 - Details: [codebase-index.md](codebase-index.md).
 
 ## Codebase index
 
-- Background indexing into `.gen/index/manifest.json` (`src/index/`).
+- Background indexing into `.gen/index/manifest.json` (`src/features/index/`).
 - Incremental by file hash; `.gen/` is not indexed.
 - Tool `codebase_search` - trigram search over chunks.
 - Context Engine (`contextEngine.ts`): ranks index hits and open editors; used by `@codebase` and mention context packing.

@@ -1,4 +1,4 @@
-import type { FromWebviewMessage } from '../chat/protocol';
+import type { FromWebviewMessage } from '../features/chat/protocol';
 
 interface VsCodeApi {
 	postMessage(message: FromWebviewMessage): void;

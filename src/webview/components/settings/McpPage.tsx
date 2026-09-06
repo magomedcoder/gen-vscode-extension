@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { McpServerStatus } from '../../../chat/protocol';
-import type { GenSettings } from '../../../config/types';
+import type { McpServerStatus } from '../../../features/chat/protocol';
+import type { GenSettings } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
 import { SettingsSection } from './SettingsSection';

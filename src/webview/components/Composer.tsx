@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type SubmitEvent } from 'react';
-import type { ChatMode, MentionSuggestion } from '../../chat/protocol';
-import { activeSlashQuery, filterSlashCommands } from '../../chat/slashCommands';
-import type { SlashCommand } from '../../chat/slashCommands';
+import type { ChatMode, MentionSuggestion } from '../../features/chat/protocol';
+import { activeSlashQuery, filterSlashCommands } from '../../features/chat/slashCommands';
+import type { SlashCommand } from '../../features/chat/slashCommands';
 import { mentionIconForSuggestion } from '../fileIcons';
-import type { GenSettings } from '../../config/types';
+import type { GenSettings } from '../../core/config/types';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 

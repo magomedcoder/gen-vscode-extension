@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { interpolateConfigString } from '../config/interpolate.js';
+import { interpolateConfigString } from '../core/config/interpolate.js';
 
 suite('interpolateConfigString', () => {
 	const prevEnv = { ...process.env };

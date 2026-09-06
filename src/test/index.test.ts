@@ -1,8 +1,8 @@
 import * as assert from 'assert';
-import { chunkFileContent } from '../index/chunk.js';
-import { contentHash } from '../index/hash.js';
-import { buildTrigramIndex, searchTrigrams, tokenize } from '../index/trigram.js';
-import type { IndexManifest } from '../index/types.js';
+import { chunkFileContent } from '../features/index/chunk.js';
+import { contentHash } from '../features/index/hash.js';
+import { buildTrigramIndex, searchTrigrams, tokenize } from '../features/index/trigram.js';
+import type { IndexManifest } from '../features/index/types.js';
 
 suite('contentHash', () => {
 	test('стабильный sha256', () => {

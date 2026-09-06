@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import type { ThinkingDisplay } from '../../config/types';
-import type { SessionSummary } from '../../chat/sessionStore';
-import type { TokenUsage } from '../../llm/usage';
+import type { ThinkingDisplay } from '../../core/config/types';
+import type { SessionSummary } from '../../features/chat/sessionStore';
+import type { TokenUsage } from '../../core/llm/usage';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 import { TokenMeter } from './TokenMeter';

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DiffHunkPayload, ToolCallUi } from '../../chat/protocol';
+import type { DiffHunkPayload, ToolCallUi } from '../../features/chat/protocol';
 import { fileIconForPath } from '../fileIcons';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';

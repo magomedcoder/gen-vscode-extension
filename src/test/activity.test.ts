@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { activityKindFromTool, summarizeToolActivity } from '../stores/activityStore.js';
+import { activityKindFromTool, summarizeToolActivity } from '../core/stores/activityStore.js';
 
 suite('activity ledger', () => {
 	test('классифицирует kind по имени tool', () => {

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { buildCommentMessages } from '../prompt/commentPrompt.js';
-import { pickFewShot } from '../prompt/commentFewShot.js';
+import { buildCommentMessages } from '../features/comments/commentPrompt.js';
+import { pickFewShot } from '../features/comments/commentFewShot.js';
 
 suite('pickFewShot', () => {
 	test('typescript использует js-style пример', () => {

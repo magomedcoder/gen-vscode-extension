@@ -1,11 +1,7 @@
 import * as assert from 'assert';
-import {
-	CODE_MODE_MAX_STEPS,
-	parseCodeModeSteps,
-	parseMcpToolRef,
-} from '../agent/tools/execute.js';
-import { toolActionType } from '../agent/permissionPolicy.js';
-import { activityKindFromTool, summarizeToolActivity } from '../stores/activityStore.js';
+import { CODE_MODE_MAX_STEPS, parseCodeModeSteps, parseMcpToolRef } from '../features/agent/tools/mcp/execute.js';
+import { toolActionType } from '../features/agent/permissionPolicy.js';
+import { activityKindFromTool, summarizeToolActivity } from '../core/stores/activityStore.js';
 
 suite('execute / code-mode', () => {
 	test('parseMcpToolRef: server__tool', () => {

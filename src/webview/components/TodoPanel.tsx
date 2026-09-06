@@ -1,4 +1,4 @@
-import type { ChatTodoItem } from '../../chat/protocol';
+import type { ChatTodoItem } from '../../features/chat/protocol';
 import { t } from '../i18n';
 
 interface TodoPanelProps {

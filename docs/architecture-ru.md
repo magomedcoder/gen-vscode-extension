@@ -54,20 +54,20 @@ Comment command
 
 ## Слои конфига
 
-- User JSON + project `.gen/config.json` мержатся в effective `GenSettings` (`src/config/layers.ts`).
-- Опциональная **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) блокирует security-subset - наивысший приоритет (`src/config/adminPolicy.ts`).
+- User JSON + project `.gen/config.json` мержатся в effective `GenSettings` (`src/core/config/layers.ts`).
+- Опциональная **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) блокирует security-subset - наивысший приоритет (`src/core/config/adminPolicy.ts`).
 - Приоритет: defaults user UI (non-default) project **admin policy**. Remote `.well-known` / полный MDM - не реализован.
 - Подробнее: [settings-ru.md](settings-ru.md).
 
 ## Opt-in `.gen/` и scaffold
 
 - При открытии папки `.gen/` **не** создаётся. Opt-in: кнопка в чате (enable + индекс) или `/init`.
-- `enableProject` / `ensureGenScaffold` (`src/project/config.ts`): `config.json` + каталоги `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; без перезаписи).
+- `enableProject` / `ensureGenScaffold` (`src/features/project/config.ts`): `config.json` + каталоги `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; без перезаписи).
 - Подробнее: [codebase-index-ru.md](codebase-index-ru.md).
 
 ## Индекс кодовой базы
 
-- Фоновая индексация в `.gen/index/manifest.json` (`src/index/`).
+- Фоновая индексация в `.gen/index/manifest.json` (`src/features/index/`).
 - Инкремент по hash файла; `.gen/` не индексируется.
 - Tool `codebase_search` - триграммный поиск по chunks.
 - Context Engine (`contextEngine.ts`): ранжирует hits индекса и открытых редакторов; используется в `@codebase` и при сборке контекста упоминаний.
