@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type 
 import type { ChatMode, MentionSuggestion } from '../../chat/protocol';
 import { activeSlashQuery, filterSlashCommands } from '../../chat/slashCommands';
 import type { SlashCommand } from '../../chat/slashCommands';
+import { mentionIconForSuggestion } from '../fileIcons';
+import type { GenSettings } from '../../config/types';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 
@@ -11,6 +13,14 @@ interface ComposerProps {
 	queuedCount: number;
 	mode: ChatMode;
 	customSlashCommands?: SlashCommand[];
+	// Id текущей сессии - смена сбрасывает локальный draft с хоста
+	sessionId?: string;
+	// Черновик с хоста (per-session)
+	composerDraft?: string;
+	// Chips (insert-строки) с хоста
+	composerChips?: string[];
+	// Лимиты resize картинок (из settings)
+	imageResize?: Pick<GenSettings, 'attachmentImageAutoResize' | 'attachmentImageMaxWidth' | 'attachmentImageMaxHeight'>;
 }
 
 interface ContextChip {
@@ -34,7 +44,7 @@ function activeMentionQuery(text: string, cursor: number): { start: number; quer
 	}
 
 	const fragment = before.slice(at + 1);
-	if (/\s/.test(fragment) && !/^(file|folder|codebase|git|link|docs|agent)\s+\S*$/i.test(fragment)) {
+	if (/\s/.test(fragment) && !/^(file|folder|codebase|git|link|docs|agent|past|alias|ref)\s+\S*$/i.test(fragment)) {
 		return undefined;
 	}
 
@@ -48,12 +58,102 @@ interface PendingImage {
 	base64: string;
 }
 
+// Уменьшить картинку через createImageBitmap + canvas (без новых deps).
+// Если ImageBitmap недоступен - вернуть исходный data URL как есть.
+async function encodeImageFile(
+	file: File,
+	opts: {
+		autoResize: boolean;
+		maxWidth: number;
+		maxHeight: number;
+	},
+): Promise<{ base64: string; mimeType: string } | undefined> {
+	const mimeType = file.type || 'image/png';
+	const readAsDataUrl = (): Promise<string> =>
+		new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(String(reader.result ?? ''));
+			reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+			reader.readAsDataURL(file);
+		});
+
+	const fromDataUrl = (dataUrl: string): { base64: string; mimeType: string } | undefined => {
+		const comma = dataUrl.indexOf(',');
+		const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+		if (!base64) {
+			return undefined;
+		}
+
+		return { base64, mimeType };
+	};
+
+	if (!opts.autoResize || typeof createImageBitmap !== 'function') {
+		return fromDataUrl(await readAsDataUrl());
+	}
+
+	try {
+		const bitmap = await createImageBitmap(file);
+		const scale = Math.min(1, opts.maxWidth / bitmap.width, opts.maxHeight / bitmap.height);
+		if (scale >= 1) {
+			bitmap.close();
+			return fromDataUrl(await readAsDataUrl());
+		}
+
+		const width = Math.max(1, Math.round(bitmap.width * scale));
+		const height = Math.max(1, Math.round(bitmap.height * scale));
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) {
+			bitmap.close();
+			return fromDataUrl(await readAsDataUrl());
+		}
+
+		ctx.drawImage(bitmap, 0, 0, width, height);
+		bitmap.close();
+		const outMime = mimeType.includes('jpeg') || mimeType.includes('jpg')
+			? 'image/jpeg'
+			: mimeType.includes('webp')
+				? 'image/webp'
+				: 'image/png';
+		const dataUrl = outMime === 'image/jpeg'
+			? canvas.toDataURL(outMime, 0.92)
+			: canvas.toDataURL(outMime);
+		const parsed = fromDataUrl(dataUrl);
+		return parsed ? { 
+			...parsed, 
+			mimeType: outMime 
+		} : undefined;
+	} catch {
+		return fromDataUrl(await readAsDataUrl());
+	}
+}
+
 function chipFromSuggestion(item: MentionSuggestion): ContextChip {
 	return {
 		id: item.insert.trim(),
 		kind: item.kind,
 		label: item.label,
 		insert: item.insert.trim(),
+	};
+}
+
+const MENTION_KINDS = new Set<MentionSuggestion['kind']>(['file', 'folder', 'codebase', 'code', 'git', 'branch_diff', 'rules', 'link', 'docs', 'agent', 'terminals', 'past', 'alias', 'ref']);
+
+// Восстановить chip из сохранённой insert-строки (@file path ...)
+function chipFromInsert(insert: string): ContextChip {
+	const trimmed = insert.trim();
+	const m = /^@(\w+)/i.exec(trimmed);
+	const rawKind = (m?.[1] ?? 'file').toLowerCase().replace(/-/g, '_') as MentionSuggestion['kind'];
+	const kind = MENTION_KINDS.has(rawKind) ? rawKind : 'file';
+	const arg = trimmed.replace(/^@\w+/i, '').replace(/^[:\s]+/, '').trim();
+	const label = arg.split(/[/\\]/).filter(Boolean).pop() || trimmed;
+	return {
+		id: trimmed,
+		kind,
+		label,
+		insert: trimmed,
 	};
 }
 
@@ -64,9 +164,73 @@ function slashDetail(cmd: SlashCommand): string {
 	return cmd.detailKey ? t(cmd.detailKey) : '';
 }
 
-export function Composer({ busy, busyDetail, queuedCount, mode, customSlashCommands = [] }: ComposerProps) {
-	const [draft, setDraft] = useState('');
-	const [chips, setChips] = useState<ContextChip[]>([]);
+// Нормализация вставленного пути: кавычки, file://, слеши
+function normalizePastedPath(raw: string): string {
+	let path = raw.trim();
+	if ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'"))) {
+		path = path.slice(1, -1).trim();
+	}
+
+	if (/^file:\/\//i.test(path)) {
+		try {
+			path = decodeURIComponent(path.replace(/^file:\/\//i, ''));
+			// file:///C:/... на Windows
+			if (/^\/[A-Za-z]:\//.test(path)) {
+				path = path.slice(1);
+			}
+		} catch {
+			path = path.replace(/^file:\/\//i, '');
+		}
+	}
+
+	return path.replace(/\\/g, '/');
+}
+
+// Эвристика: одна строка без переносов, похожа на путь к файлу (расширение и/или разделители пути). Ctrl+Shift+V обходит это
+function looksLikeFilePath(text: string): string | undefined {
+	if (!text || /[\r\n]/.test(text)) {
+		return undefined;
+	}
+
+	const path = normalizePastedPath(text);
+	if (!path || /\s/.test(path)) {
+		return undefined;
+	}
+
+	// Не превращать URL / mailto в @file
+	if (/^(https?:|mailto:|data:)/i.test(path)) {
+		return undefined;
+	}
+
+	const hasSep = /[/\\]/.test(path) || /^[A-Za-z]:\//.test(path) || path.startsWith('~/') || path.startsWith('./') || path.startsWith('../');
+	const hasExt = /\.[A-Za-z0-9]{1,12}$/.test(path);
+	// Допустимые символы пути (без пробелов для MVP - mention arg = [^\s@]+)
+	if (!/^[\w./:@~+-]+$/.test(path) && !/^[A-Za-z]:\/[\w./@~+-]*$/.test(path)) {
+		return undefined;
+	}
+
+	if (hasExt || hasSep) {
+		return path;
+	}
+
+	return undefined;
+}
+
+export function Composer({
+	busy,
+	busyDetail,
+	queuedCount,
+	mode,
+	customSlashCommands = [],
+	sessionId,
+	composerDraft,
+	composerChips,
+	imageResize,
+}: ComposerProps) {
+	const [draft, setDraft] = useState(() => composerDraft ?? '');
+	const [chips, setChips] = useState<ContextChip[]>(() =>
+		(composerChips ?? []).map(chipFromInsert),
+	);
 	const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
 	const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
 	const [slashSuggestions, setSlashSuggestions] = useState<SlashCommand[]>([]);
@@ -74,6 +238,24 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 	const [suggestIndex, setSuggestIndex] = useState(0);
 	const requestId = useRef(0);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	// Ctrl/Meta+Shift+V - вставка без конвертации пути в pill
+	const plainPasteRef = useRef(false);
+	const draftTimerRef = useRef<number | undefined>(undefined);
+	const draftRef = useRef(draft);
+	const chipsRef = useRef(chips);
+	const sessionIdRef = useRef(sessionId);
+	draftRef.current = draft;
+	chipsRef.current = chips;
+	sessionIdRef.current = sessionId;
+
+	const postDraft = (text: string, nextChips: ContextChip[], sid: string | undefined) => {
+		vscodeApi.postMessage({
+			type: 'setComposerDraft',
+			text,
+			chips: nextChips.map((c) => c.insert),
+			sessionId: sid,
+		});
+	};
 
 	const setMode = (next: ChatMode) => {
 		if (next === mode || busy) {
@@ -85,6 +267,29 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 			mode: next,
 		});
 	};
+
+	// Debounce persist; на unmount - flush, чтобы switch не терял последние символы
+	useEffect(() => {
+		if (draftTimerRef.current !== undefined) {
+			window.clearTimeout(draftTimerRef.current);
+		}
+		draftTimerRef.current = window.setTimeout(() => {
+			draftTimerRef.current = undefined;
+			postDraft(draft, chips, sessionId);
+		}, 300);
+		return () => {
+			if (draftTimerRef.current !== undefined) {
+				window.clearTimeout(draftTimerRef.current);
+				draftTimerRef.current = undefined;
+			}
+		};
+	}, [draft, chips, sessionId]);
+
+	useEffect(() => {
+		return () => {
+			postDraft(draftRef.current, chipsRef.current, sessionIdRef.current);
+		};
+	}, []);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
@@ -183,12 +388,13 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 			return;
 		}
 
-		const reader = new FileReader();
-		reader.onload = () => {
-			const result = String(reader.result ?? '');
-			const comma = result.indexOf(',');
-			const base64 = comma >= 0 ? result.slice(comma + 1) : result;
-			if (!base64) {
+		void (async () => {
+			const encoded = await encodeImageFile(file, {
+				autoResize: imageResize?.attachmentImageAutoResize !== false,
+				maxWidth: imageResize?.attachmentImageMaxWidth ?? 2048,
+				maxHeight: imageResize?.attachmentImageMaxHeight ?? 2048,
+			});
+			if (!encoded) {
 				return;
 			}
 
@@ -198,12 +404,23 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 				{
 					id,
 					name: file.name || 'image.png',
-					mimeType: file.type || 'image/png',
-					base64,
+					mimeType: encoded.mimeType,
+					base64: encoded.base64,
 				},
 			]);
+		})();
+	};
+
+	const addFilePathChip = (path: string) => {
+		// Формат как в mentionSuggest: `@file ${relative}`
+		const insert = `@file ${path}`;
+		const chip: ContextChip = {
+			id: insert,
+			kind: 'file',
+			label: path,
+			insert,
 		};
-		reader.readAsDataURL(file);
+		setChips((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
 	};
 
 	const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -225,7 +442,23 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 
 		if (handled) {
 			event.preventDefault();
+			return;
 		}
+
+		// Ctrl/Meta+Shift+V - обычная вставка текста без конвертации в pill
+		if (plainPasteRef.current) {
+			plainPasteRef.current = false;
+			return;
+		}
+
+		const text = event.clipboardData?.getData('text/plain') ?? '';
+		const path = looksLikeFilePath(text);
+		if (!path) {
+			return;
+		}
+
+		event.preventDefault();
+		addFilePathChip(path);
 	};
 
 	const onDrop = (event: DragEvent<HTMLTextAreaElement>) => {
@@ -259,6 +492,13 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 			mimeType: p.mimeType,
 			base64: p.base64,
 		}));
+		// Сразу очистить локально и сбросить pending debounce (host clear в send)
+		if (draftTimerRef.current !== undefined) {
+			window.clearTimeout(draftTimerRef.current);
+			draftTimerRef.current = undefined;
+		}
+		draftRef.current = '';
+		chipsRef.current = [];
 		setDraft('');
 		setChips([]);
 		setPendingImages([]);
@@ -279,6 +519,14 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 	const menuLen = suggestKind === 'slash' ? slashSuggestions.length : suggestions.length;
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (event.key === 'v' && event.shiftKey && (event.ctrlKey || event.metaKey)) {
+			plainPasteRef.current = true;
+			// Сброс после paste (paste идёт после keydown в том же жесте)
+			window.setTimeout(() => {
+				plainPasteRef.current = false;
+			}, 0);
+		}
+
 		if (menuOpen) {
 			if (event.key === 'ArrowDown') {
 				event.preventDefault();
@@ -358,7 +606,10 @@ export function Composer({ busy, busyDetail, queuedCount, mode, customSlashComma
 										applyMentionSuggestion(item);
 									}}
 								>
-									<span className="mention-menu__label">{item.label}</span>
+									<span className="mention-menu__main">
+										<span className="file-icon" aria-hidden="true">{mentionIconForSuggestion(item.kind, item.label, item.insert)}</span>
+										<span className="mention-menu__label">{item.label}</span>
+									</span>
 									{item.detail ? <span className="mention-menu__detail">{item.detail}</span> : null}
 								</button>
 							</li>

@@ -4,26 +4,36 @@
 
 ## 0.3.0-dev (Development version)
 
-- Settings: dedicated **MCP** page (cards: enable/disable, status, tools list + JSON advanced); settings **search**
-- Security: approval policy UI, auto-approve / continue-on-deny, capability toggles; Always confirm + `suggestPattern` session allowlist
-- LLM: honor `Retry-After` on 429/5xx; show retry status in composer while busy
-- Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init`
-- **Plan** mode: read-only tool filter (no mutating edits/commands until you switch back)
-- Permissions v2 foundation: `approvalPolicy` (allow / ask / review / deny), Always + suggested pattern, session allowlist, `autoApprove`, `continueLoopOnDeny`, capability toggles
-- Confirm card: **Always** button + pattern hint
-- Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `skill`
-- Project rules & skills: `AGENTS.md` / `.genrules`; skills discovery + `skill` tool; `/init` creates/updates `AGENTS.md`
-- Agent loop: parallel read-only tool calls; tool output truncation (`toolOutputMaxChars`)
-- Settings: `systemPrompt`, `smallModel`; usage ledger store
-- Ctrl+L - add editor selection to chat
-- MCP (stdio MVP): settings `mcpServers` (dedicated MCP page); tools `list_mcp_tools`, `call_mcp_tool`
-- Subagents: tool `task` (`explore` read-only / `general`); nesting limit `subagentDepth`
-- Shell: cwd persist across `run_command`; `background=true` + tool `await_shell`
-- Mentions: `@git`, `@branch_diff`, `@rules`, `@link` (+ Composer autocomplete)
-- Wave 3: `edit_notebook`, `lsp`, `semantic_search`/`search_docs`; `plan_enter`/`plan_exit`/`switch_mode` + multitask; `.gen/plans` + `.gen/agents`/`generate_agent`
-- Wave 3: custom slash `.gen/commands`, `/compact` `/new` `/undo` `/sessions` `/models`; `!command`; hooks `.gen/hooks.json`
-- Wave 3: multi-session + fork; MCP cwd/timeout; formatAfterEdit + diagnostics nudge; provider presets + remote embeddings
-- Wave 4: Usage page; doom loop / external dir / `/redo`; `@code` `@Docs` `@agent` + image attachments; personas / scout / auto-title
+- **Context overflow:** parse `exceed_context_size_error` (incl. nested llama.cpp JSON); preflight estimate + shrink; auto-compact before turn; limited retry; `contextOverflowPolicy` on Request settings; clear user-facing errors instead of raw HTTP 400
+- Permissions v2: approval policy UI (`allow` / `ask` / `review` / `deny`), Always + suggested pattern, session allowlist, auto-approve, continue-on-deny, capability toggles (legacy `agentAuthLevel` auto/ask/open migrated into policy / autoApprove)
+- Confirm card: **Always** button + pattern hint; provider allow/deny patterns (`providerUsePolicy`)
+- Managed admin policy: lock security keys via `GEN_ADMIN_POLICY` / `/etc/gen/policy.json` (Settings shows a read-only banner)
+- Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
+- **Plan** mode: read-only edits; shell ask-or-deny (`planShellPolicy`); Plan↔Agent handoff banner and reminders
+- Multitask mode + `plan_enter` / `plan_exit` / `switch_mode`; WritePlan artifacts under `.gen/plans/`
+- MCP stdio client: dedicated Settings page (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, per-server cwd/timeout/headers
+- MCP OAuth MVP: paste-token SecretStorage, Auth / Logout / Debug (full OIDC later)
+- Experimental code-mode: opt-in `execute` tool runs JSON steps as MCP calls only (no host JS eval)
+- Skills & rules: `AGENTS.md` / `.genrules`, skills discovery + `skill` tool, `/init`; Settings Rules/Skills page
+- Personas: Chat dropdown + Settings Personas page (`.gen/personas/`); Agents page to clone builtin presets into `.gen/agents/`
+- Local plugins/tools discovery under `.gen/tools` and `.gen/plugins` (catalog + `list_plugins` / `plugin`; no npm/JS runtime yet)
+- Project scaffold: Enable / `/init` creates `.gen/{agents,commands,plugins,skills,tools,references,plans}`
+- Config layers: user `~/.config/gen/config.json` + project `.gen/config.json`; JSON schemas + VS Code validation
+- Hooks: Settings page for `.gen/hooks.json`; events `beforeSubmit` / `beforeShell` / `session.diff` / `session.compacting` / `shell.env` / `file.watcher`; import external hook files
+- Subagents: `task` (`explore` / `general`), nesting limit, optional git worktrees + start command after create
+- Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `edit_notebook`, `lsp`, `semantic_search` / `search_docs`
+- Web search backends: DuckDuckGo, Exa, Parallel, or custom HTTP; model-routed patch (GPT keeps `apply_patch`)
+- Shell: cwd persist, background `run_command` + `await_shell` (`notify_on_output`), per-tool Stop + timeout countdown, cwd/exit/`line N` on cards
+- Mentions: `@git` `@branch_diff` `@rules` `@link` `@code` `@Docs` `@agent` `@terminals` `@past` `@alias`/`@ref`; paste path `@file`; `!command`; Ctrl+L selection
+- Chat UX: multi-session + fork, concurrent tab runs, per-session drafts, AskQuestion / Todo panel, thinking toggle, in-chat model picker, context ring, notify sound
+- Review: pending-changes bar with file tree + per-file Accept/Reject; CodeLens Keep/Undo on hunks; git-sync auto-Keep; edit message + revertFiles
+- Indexing: toggles + engine status (CPU trigram / remote embeddings); optional OTEL spans for LLM calls
+- Connection: local presets for llama.cpp (probe + list models)
+- Settings UI: split screens (Chat / Agent / Indexing / Permissions); grouped nav (Main / More); all sections always visible; local model preset block removed; clearer field toggles
+- Usage page: token ledger by model (totals/sort); Quota (OAuth) placeholder
+- Settings search; deep-links to VS Code Settings/Keybindings; sidebar or bottom panel (`chatViewLocation`); light/HC polish
+- LLM: honor `Retry-After` on 429/5xx with visible retry status; parallel read-only tool batches; tool output truncation
+- Images/attachments: paste/drag + vision; `read_file` images; auto-resize limits; export/import sessions; lossless archive after compact
 
 ## 0.2.0 (3 September 2026)
 

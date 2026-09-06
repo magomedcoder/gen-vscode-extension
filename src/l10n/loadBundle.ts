@@ -42,7 +42,3 @@ export function loadWebviewL10n(extensionUri: vscode.Uri): WebviewL10nPack {
 		},
 	};
 }
-
-export function tHost(key: string, ...args: Array<string | number>): string {
-	return vscode.l10n.t(key, ...args);
-}

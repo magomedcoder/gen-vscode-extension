@@ -108,6 +108,20 @@ export function findContainingFolder(fsPath: string, folderFsPaths: string[]): s
 	return best;
 }
 
+// Портативный алиас /workspace * относительный путь от первой папки workspace (и Windows \workspace\)
+export function rewriteWorkspaceAlias(input: string): string {
+	const posix = input.replace(/\\/g, '/');
+	if (posix === '/workspace') {
+		return '.';
+	}
+	if (posix.startsWith('/workspace/')) {
+		const rest = posix.slice('/workspace/'.length);
+		return rest || '.';
+	}
+
+	return input;
+}
+
 export function resolveAgainstFolders(
 	input: string,
 	folderFsPaths: string[],
@@ -117,7 +131,7 @@ export function resolveAgainstFolders(
 		throw new PathPolicyError(vscode.l10n.t('policy.noWorkspace'));
 	}
 
-	const trimmed = input.trim() || '.';
+	const trimmed = rewriteWorkspaceAlias(input.trim() || '.');
 	const folders = folderFsPaths.map((f) => path.resolve(f));
 	const allowOutside = opts?.allowOutside === true;
 

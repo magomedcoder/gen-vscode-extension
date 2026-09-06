@@ -1,0 +1,66 @@
+{
+	"$schema": "https://json-schema.org/draft-07/schema#",
+	"$id": "https://raw.githubusercontent.com/magomedcoder/gen-agent-vscode/main/schemas/gen-policy.schema.json",
+	"title": "Gen Agent admin policy",
+	"description": "Managed / admin policy (MDM-style MVP). Loaded from GEN_ADMIN_POLICY, /etc/gen/policy.json (Unix), or %ProgramData%/gen/policy.json (Windows). Keys present here lock and force effective GenSettings; project/UI cannot override them.",
+	"type": "object",
+	"properties": {
+		"$schema": {
+			"type": "string",
+			"description": "JSON Schema URL or path (metadata)."
+		},
+		"version": {
+			"type": "integer",
+			"description": "Policy document version (metadata)."
+		},
+		"description": {
+			"type": "string",
+			"description": "Human-readable note (metadata)."
+		},
+		"approvalPolicy": {
+			"type": "object",
+			"description": "Forced approval policy (shell / edits / delete / mcp / web / outside / task / skill)."
+		},
+		"autoApprove": { "type": "boolean" },
+		"continueLoopOnDeny": { "type": "boolean" },
+		"enableTerminal": { "type": "boolean" },
+		"enableFileReading": { "type": "boolean" },
+		"enableWorkspaceContext": { "type": "boolean" },
+		"webSearchEnabled": { "type": "boolean" },
+		"webFetchEnabled": { "type": "boolean" },
+		"allowExternalDirectory": { "type": "boolean" },
+		"otelEnabled": { "type": "boolean" },
+		"otelEndpoint": { "type": "string" },
+		"mcpServers": {
+			"type": "array",
+			"description": "Force MCP server list (replaces user/project mcpServers).",
+			"items": {
+				"type": "object",
+				"required": ["name", "command"],
+				"properties": {
+					"name": { "type": "string" },
+					"command": { "type": "string" },
+					"args": { "type": "array", "items": { "type": "string" } },
+					"enabled": { "type": "boolean" }
+				},
+				"additionalProperties": true
+			}
+		},
+		"mcpServersAllowlist": {
+			"type": "array",
+			"items": { "type": "string" },
+			"description": "After merge, keep only MCP servers whose name matches one of these patterns (* wildcards)."
+		},
+		"providerUsePolicy": {
+			"type": "string",
+			"enum": ["allow", "deny"],
+			"description": "Force provider.use mode (allowlist / denylist)."
+		},
+		"providerUsePatterns": {
+			"type": "array",
+			"items": { "type": "string" },
+			"description": "Force provider.use patterns (host or model id globs)."
+		}
+	},
+	"additionalProperties": false
+}

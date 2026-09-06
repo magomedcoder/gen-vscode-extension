@@ -3,6 +3,7 @@ import { getSettings } from '../../config/settings';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 import { confirmAlwaysOrSkip } from './confirm';
+import { runWebSearch } from './webSearchBackends';
 
 function scorePath(rel: string, query: string): number {
 	const q = query.toLowerCase();
@@ -89,7 +90,7 @@ export const fileSearchTool: ToolDefinition = {
 
 export const webSearchTool: ToolDefinition = {
 	name: 'web_search',
-	description: 'Поиск в вебе через DuckDuckGo Instant Answer / HTML (без API-ключа). Для точной страницы используй fetch_page.',
+	description: 'Поиск в вебе (DuckDuckGo / Exa / Parallel / HTTP JSON). Для точной страницы используй fetch_page.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -101,7 +102,8 @@ export const webSearchTool: ToolDefinition = {
 	},
 	async execute(args, ctx: ToolContext): Promise<ToolResult> {
 		throwIfAborted(ctx.signal);
-		if (getSettings().webSearchEnabled === false) {
+		const settings = getSettings();
+		if (settings.webSearchEnabled === false) {
 			return {
 				ok: false,
 				denied: true,
@@ -123,38 +125,28 @@ export const webSearchTool: ToolDefinition = {
 		}
 
 		const cap = Math.min(Math.max(1, asOptionalInt(args, 'max_results') ?? 5), 8);
-		const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-		const res = await fetch(url, {
-			signal: ctx.signal,
-			headers: { 
-				'User-Agent': 'GenAgentVSCode/0.2' 
-			},
-		});
-		if (!res.ok) {
+		try {
+			const results = await runWebSearch(
+				settings.webSearchBackend,
+				query,
+				cap,
+				ctx.signal,
+				settings,
+			);
+			return {
+				ok: true,
+				content: JSON.stringify({ 
+					query,
+					backend: settings.webSearchBackend, 
+					results
+				}, null, 2),
+			};
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
 			return {
 				ok: false,
-				content: `web_search: HTTP ${res.status}`
+				content: msg.startsWith('web_search:') ? msg : `web_search: ${msg}`,
 			};
 		}
-
-		const html = await res.text();
-		const results: Array<{ title: string; url: string }> = [];
-		const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-		let m: RegExpExecArray | null;
-		while ((m = re.exec(html)) && results.length < cap) {
-			const href = m[1]!;
-			const title = m[2]!.replace(/<[^>]+>/g, '').trim();
-			if (href && title) {
-				results.push({
-					title,
-					url: href
-				});
-			}
-		}
-
-		return {
-			ok: true,
-			content: JSON.stringify({ query, results }, null, 2),
-		};
 	},
 };

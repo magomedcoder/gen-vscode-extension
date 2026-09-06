@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 import { deniedDirectoryExcludeGlob } from '../agent/policy';
 import type { MentionKind } from './mentions';
+import { getSessionPeek } from './sessionStore';
+import { loadReferenceDefs } from '../project/references';
 
 export interface MentionSuggestion {
 	kind: MentionKind;
@@ -54,6 +56,18 @@ function kindTemplates(): Array<{
 			detail: vscode.l10n.t('chat.mention.detail.agent'),
 		},
 		{
+			kind: 'alias',
+			label: '@alias',
+			insert: '@alias ',
+			detail: vscode.l10n.t('chat.mention.detail.alias'),
+		},
+		{
+			kind: 'ref',
+			label: '@ref',
+			insert: '@ref:',
+			detail: vscode.l10n.t('chat.mention.detail.ref'),
+		},
+		{
 			kind: 'git',
 			label: '@git',
 			insert: '@git ',
@@ -77,10 +91,71 @@ function kindTemplates(): Array<{
 			insert: '@link ',
 			detail: vscode.l10n.t('chat.mention.detail.link'),
 		},
+		{
+			kind: 'terminals',
+			label: '@terminals',
+			insert: '@terminals',
+			detail: vscode.l10n.t('chat.mention.detail.terminals'),
+		},
+		{
+			kind: 'past',
+			label: '@past',
+			insert: '@past ',
+			detail: vscode.l10n.t('chat.mention.detail.past'),
+		},
 	];
 }
 
-const KIND_NAMES: MentionKind[] = ['file', 'folder', 'codebase', 'code', 'docs', 'agent', 'git', 'branch_diff', 'rules', 'link'];
+const KIND_NAMES: MentionKind[] = [
+	'file', 'folder', 'codebase', 'code', 'docs', 'agent', 'alias', 'ref',
+	'git', 'branch_diff', 'rules', 'link', 'terminals', 'past',
+];
+
+async function suggestReferenceAliases(prefix: string): Promise<MentionSuggestion[]> {
+	const isRef = prefix.startsWith('ref');
+	const kind: MentionKind = isRef ? 'ref' : 'alias';
+	const nameQuery = prefix.replace(/^(alias|ref)\s+/, '')
+		.replace(/^(alias|ref):/, '')
+		.trim();
+	const defs = await loadReferenceDefs();
+	const out: MentionSuggestion[] = [];
+
+	if (!nameQuery) {
+		out.push({
+			kind,
+			label: isRef ? '@ref' : '@alias',
+			insert: isRef ? '@ref:' : '@alias ',
+			detail: vscode.l10n.t(isRef ? 'chat.mention.detail.ref' : 'chat.mention.detail.alias'),
+		});
+	}
+
+	for (const def of defs) {
+		if (nameQuery && !def.alias.toLowerCase().includes(nameQuery.toLowerCase())) {
+			continue;
+		}
+		const detail = def.description
+			?? (def.git ? `git ${def.git}` : def.path)
+			?? vscode.l10n.t('chat.mention.kind.alias');
+		out.push({
+			kind: 'alias',
+			label: `@alias ${def.alias}`,
+			insert: `@alias ${def.alias} `,
+			detail,
+		});
+		if (out.length >= 12) {
+			break;
+		}
+	}
+
+	return out.length
+		? out
+		: [{
+			kind,
+			label: isRef ? '@ref' : '@alias',
+			insert: isRef ? '@ref:' : '@alias ',
+			detail: vscode.l10n.t(isRef ? 'chat.mention.detail.ref' : 'chat.mention.detail.alias'),
+		}];
+}
 
 export async function suggestMentions(query: string): Promise<MentionSuggestion[]> {
 	const q = query.trim().toLowerCase();
@@ -88,10 +163,11 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 
 	if (!prefix || KIND_NAMES.some((k) => k.startsWith(prefix) || prefix.startsWith(k))) {
 		const kindHits = kindTemplates().filter((k) => k.kind.startsWith(prefix) || prefix.length === 0 || prefix.startsWith(k.kind));
-		if (!prefix.includes(' ') && !/[./]/.test(prefix) || kindHits.some((k) => k.kind === 'branch_diff' || k.kind === 'rules' || k.kind === 'code')) {
+		if (!prefix.includes(' ') && !/[./]/.test(prefix) || kindHits.some((k) => k.kind === 'branch_diff' || k.kind === 'rules' || k.kind === 'code' || k.kind === 'terminals' || k.kind === 'past' || k.kind === 'alias' || k.kind === 'ref')) {
 			if (!prefix.includes('/') && !prefix.includes('.')) {
 				const hits = kindTemplates().filter((k) => !prefix || k.kind.startsWith(prefix) || k.kind.includes(prefix) || (prefix === 'doc' && k.kind === 'docs'));
-				if (hits.length && !prefix.includes(' ')) {
+				// @past / @alias / @ref - сразу список значений, не только шаблон kind
+				if (hits.length && !prefix.includes(' ') && prefix !== 'past' && prefix !== 'alias' && prefix !== 'ref') {
 					return hits.map((k) => ({
 						kind: k.kind,
 						label: k.label,
@@ -110,6 +186,61 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 			insert: '@git HEAD ',
 			detail: vscode.l10n.t('chat.mention.detail.gitShow'),
 		}];
+	}
+
+	if (prefix.startsWith('past')) {
+		const store = getSessionPeek();
+		const nameQuery = prefix.replace(/^past\s+/, '').replace(/^past:/, '').trim();
+		const sessions = store?.listSessions() ?? [];
+		const currentId = store?.getCurrentSessionId();
+		const out: MentionSuggestion[] = [];
+
+		if (!nameQuery) {
+			out.push({
+				kind: 'past',
+				label: '@past',
+				insert: '@past',
+				detail: vscode.l10n.t('chat.mention.detail.past'),
+			});
+		}
+
+		for (const s of sessions) {
+			if (s.id === currentId) {
+				continue;
+			}
+
+			if (nameQuery) {
+				const n = nameQuery.toLowerCase();
+				if (!s.title.toLowerCase().includes(n) && !s.id.toLowerCase().includes(n)) {
+					continue;
+				}
+			}
+			
+			const needsQuotes = /\s/.test(s.title) || /@/.test(s.title);
+			const arg = needsQuotes ? `\`${s.title}\`` : s.title;
+			out.push({
+				kind: 'past',
+				label: `@past ${s.title}`,
+				insert: `@past ${arg} `,
+				detail: vscode.l10n.t('chat.mention.kind.past'),
+			});
+			if (out.length >= 12) {
+				break;
+			}
+		}
+
+		return out.length
+			? out
+			: [{
+				kind: 'past',
+				label: '@past',
+				insert: '@past',
+				detail: vscode.l10n.t('chat.mention.detail.past'),
+			}];
+	}
+
+	if (prefix.startsWith('alias') || prefix.startsWith('ref')) {
+		return suggestReferenceAliases(prefix);
 	}
 
 	if (prefix.startsWith('agent')) {
@@ -191,13 +322,29 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 			}];
 	}
 
+	// Прямое совпадение имени alias (например @sdk), если не kind
+	if (prefix && !prefix.includes(' ') && !/[./]/.test(prefix)) {
+		const defs = await loadReferenceDefs();
+		const aliasHits = defs.filter((d) => d.alias.toLowerCase().startsWith(prefix) || d.alias.toLowerCase().includes(prefix));
+		if (aliasHits.length) {
+			return aliasHits.slice(0, 12).map((def) => ({
+				kind: 'alias' as const,
+				label: `@alias ${def.alias}`,
+				insert: `@alias ${def.alias} `,
+				detail: def.description
+					?? (def.git ? `git ${def.git}` : def.path)
+					?? vscode.l10n.t('chat.mention.kind.alias'),
+			}));
+		}
+	}
+
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	if (!folder) {
 		return [];
 	}
 
-	const pathQuery = prefix.replace(/^(file|folder|codebase|git|link|docs|agent)\s+/, '')
-		.replace(/^(file|folder|codebase|git|link|docs|agent):/, '')
+	const pathQuery = prefix.replace(/^(file|folder|codebase|git|link|docs|agent|alias|ref)\s+/, '')
+		.replace(/^(file|folder|codebase|git|link|docs|agent|alias|ref):/, '')
 		.trim();
 
 	const kind: 'file' | 'folder' = prefix.startsWith('folder') ? 'folder' : 'file';

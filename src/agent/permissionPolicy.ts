@@ -8,7 +8,7 @@ const WRITE_TOOLS = new Set(['write_file', 'apply_patch', 'apply_workspace_edit'
 const DELETE_TOOLS = new Set(['delete_file']);
 const SHELL_TOOLS = new Set(['run_command', 'run_tests', 'await_shell']);
 const WEB_TOOLS = new Set(['fetch_page', 'web_search', 'open_browser']);
-const MCP_TOOLS = new Set(['call_mcp_tool', 'fetch_mcp_resource', 'list_mcp_resources', 'list_mcp_tools']);
+const MCP_TOOLS = new Set(['call_mcp_tool', 'execute', 'fetch_mcp_resource', 'list_mcp_resources', 'list_mcp_tools']);
 const TASK_TOOLS = new Set(['task']);
 const SKILL_TOOLS = new Set(['skill']);
 

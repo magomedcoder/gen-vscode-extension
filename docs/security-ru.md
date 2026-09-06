@@ -67,8 +67,8 @@ docs/private/
 - `git push` / `commit` / `reset` / ...
 - eval-флаги с кодом (`node -e`, `python -c`); `gcc -c file.c` и `git -c key=value` - можно
 
-`run_tests` / `run_command` требуют подтверждения в режиме **Спросить**; в **Без спроса** - без диалога.
+`run_tests` / `run_command` подчиняются `approvalPolicy.shell` (и `autoApprove`) в **Settings -> Безопасность**.
 
-## Уровни доступа агента
+## Права
 
-См. [chat-ru.md](chat-ru.md#уровень-доступа-агента).
+См. [chat-ru.md](chat-ru.md#права-безопасность).

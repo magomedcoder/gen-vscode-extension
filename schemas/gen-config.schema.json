@@ -1,0 +1,303 @@
+{
+	"$schema": "https://json-schema.org/draft-07/schema#",
+	"$id": "https://raw.githubusercontent.com/magomedcoder/gen-agent-vscode/main/schemas/gen-config.schema.json",
+	"title": "Gen Agent config",
+	"description": "User (`~/.config/gen/config.json`) or project (`.gen/config.json`) layer. Only keys listed in FILE_LAYER_KEYS plus hooks/hooksPath/meta are applied. Strings may use `${env:VAR}` / `{env:VAR}` and `{file:path}` interpolation where supported (e.g. MCP spawn).",
+	"type": "object",
+	"properties": {
+		"$schema": {
+			"type": "string",
+			"description": "JSON Schema URL or path (metadata; not mapped into settings)."
+		},
+		"version": {
+			"type": "integer",
+			"description": "Project config version (metadata)."
+		},
+		"createdAt": {
+			"type": "string",
+			"description": "ISO timestamp when project Gen was initialized (metadata)."
+		},
+		"hooksPath": {
+			"type": "string",
+			"description": "Path to hooks.json (workspace-relative or absolute)."
+		},
+		"hooks": {
+			"$ref": "gen-hooks.schema.json#/$defs/hooksObject",
+			"description": "Inline hooks; non-empty lists override the hooks file."
+		},
+		"systemPrompt": { "type": "string" },
+		"commentSystemPrompt": { "type": "string" },
+		"mcpServers": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["name", "command", "enabled"],
+				"properties": {
+					"name": { 
+						"type": "string", 
+						"minLength": 1 
+					},
+					"transport": { 
+						"type": "string",
+						 "const": "stdio" 
+						},
+					"command": { "type": "string", "minLength": 1 },
+					"args": {
+						"type": "array",
+						"items": { "type": "string" }
+					},
+					"env": {
+						"type": "object",
+						"additionalProperties": { "type": "string" }
+					},
+					"headers": {
+						"type": "object",
+						"additionalProperties": { "type": "string" },
+						"description": "stdio * GEN_MCP_HEADER_*; future HTTP transport as headers."
+					},
+					"cwd": { "type": "string" },
+					"timeoutMs": { "type": "integer", "minimum": 0 },
+					"enabled": { "type": "boolean" },
+					"oauth": {
+						"type": "boolean",
+						"description": "If true, enable MCP OAuth MVP (paste token / optional authorize URL). Default false."
+					},
+					"mcpOAuthAuthorizeUrl": {
+						"type": "string",
+						"description": "Optional http(s) authorize URL opened on Auth (full OIDC WIP)."
+					}
+				},
+				"additionalProperties": true
+			}
+		},
+		"codeModeEnabled": {
+			"type": "boolean",
+			"description": "Experimental: enable execute/code-mode (JSON steps * MCP tools only; no host JS eval). Default false."
+		},
+		"primaryTools": {
+			"type": "array",
+			"items": { "type": "string" },
+			"description": "Allowlist for primary agent tools; empty = all."
+		},
+		"modelRoutedPatch": {
+			"type": "boolean",
+			"description": "If true (default), GPT-family models get apply_patch; others get write/edit only. false keeps apply_patch for all models."
+		},
+		"watcherIgnore": {
+			"type": "array",
+			"items": { "type": "string" },
+			"description": "Glob/gitignore patterns the FS watcher skips."
+		},
+		"webSearchEnabled": { "type": "boolean" },
+		"webSearchBackend": {
+			"type": "string",
+			"enum": ["duckduckgo", "exa", "parallel", "http"],
+			"description": "web_search backend. duckduckgo (default, no key); exa/parallel need webSearchApiKey (x-api-key); http uses webSearchHttpUrl + optional key header."
+		},
+		"webSearchHttpUrl": { "type": "string" },
+		"webSearchHttpHeader": { "type": "string" },
+		"webSearchApiKey": { "type": "string" },
+		"webFetchEnabled": { "type": "boolean" },
+		"skillsPaths": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"skillsUrls": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"instructionUrls": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"personaId": { "type": "string" },
+		"usernameDisplay": { "type": "string" },
+		"deniedPaths": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"deniedCommands": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"sensitivePathPatterns": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"secretPatterns": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"providerUsePolicy": {
+			"type": "string",
+			"enum": ["allow", "deny"],
+			"description": "provider.use: allow = allowlist of patterns; deny = denylist. Empty patterns allow all."
+		},
+		"providerUsePatterns": {
+			"type": "array",
+			"items": { "type": "string" },
+			"description": "Glob patterns matched against baseUrl hostname or model id."
+		},
+		"allowExternalDirectory": { "type": "boolean" },
+		"enableTerminal": { "type": "boolean" },
+		"enableFileReading": { "type": "boolean" },
+		"enableWorkspaceContext": { "type": "boolean" },
+		"alwaysOnWorkspaceContext": { "type": "boolean" },
+		"indexingEnabled": { "type": "boolean" },
+		"indexNewFolders": { "type": "boolean" },
+		"indexForGrep": { "type": "boolean" },
+		"formatAfterEdit": { "type": "boolean" },
+		"agentMaxIterations": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 40
+		},
+		"autoApprove": { "type": "boolean" },
+		"continueLoopOnDeny": { "type": "boolean" },
+		"approvalPolicy": {
+			"type": "object",
+			"properties": {
+				"shell": { "$ref": "#/$defs/approvalRule" },
+				"edits": { "$ref": "#/$defs/approvalRule" },
+				"delete": { "$ref": "#/$defs/approvalRule" },
+				"mcp": { "$ref": "#/$defs/approvalRule" },
+				"web": { "$ref": "#/$defs/approvalRule" },
+				"outside": { "$ref": "#/$defs/approvalRule" },
+				"task": { "$ref": "#/$defs/approvalRule" },
+				"skill": { "$ref": "#/$defs/approvalRule" }
+			},
+			"additionalProperties": false
+		},
+		"baseUrl": { "type": "string" },
+		"smallModel": { "type": "string" },
+		"temperature": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 2
+		},
+		"maxTokens": {
+			"type": "integer",
+			"minimum": 64
+		},
+		"maxContextTokens": {
+			"type": "integer",
+			"minimum": 1,
+			"description": "Estimated context window (tokens); synced with engine n_ctx on overflow"
+		},
+		"contextOverflowPolicy": {
+			"type": "string",
+			"enum": ["auto_compact_retry", "ask", "fail_fast"],
+			"description": "On context overflow: auto shrink/retry, ask user, or fail immediately"
+		},
+		"requestTimeoutMs": {
+			"type": "integer",
+			"minimum": 1000
+		},
+		"defaultToolTimeoutMs": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"maxToolTimeoutMs": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"maxInputChars": {
+			"type": "integer",
+			"minimum": 500
+		},
+		"planWriteToFile": { "type": "boolean" },
+		"planShellPolicy": {
+			"type": "string",
+			"enum": ["ask", "deny"],
+			"description": "Shell in Plan mode: ask (always confirm) or deny (hide shell tools). Edits stay blocked."
+		},
+		"snapshotEnabled": { "type": "boolean" },
+		"subagentDepth": {
+			"type": "integer",
+			"minimum": 1,
+			"maximum": 4
+		},
+		"worktreesEnabled": { "type": "boolean" },
+		"worktreeStartCommand": { "type": "string" },
+		"maxTabCount": {
+			"type": "integer",
+			"minimum": 1,
+			"maximum": 40,
+			"description": "Max open chat sessions/tabs"
+		},
+		"maxConcurrentRuns": {
+			"type": "integer",
+			"minimum": 1,
+			"maximum": 10,
+			"description": "Max concurrent agent runs across tabs"
+		},
+		"toolOutputMaxChars": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"gitSyncAutoKeep": { "type": "boolean" },
+		"embeddingsBaseUrl": { "type": "string" },
+		"embeddingsModel": { "type": "string" },
+		"compactTailTurns": {
+			"type": "integer",
+			"minimum": 1,
+			"maximum": 40
+		},
+		"compactPruneToolResults": { "type": "boolean" },
+		"compactReservedTokens": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"chatMode": {
+			"type": "string",
+			"enum": ["ask", "agent", "debug", "design", "plan", "multitask"]
+		},
+		"shareMode": {
+			"type": "string",
+			"enum": ["manual", "auto", "disabled"]
+		},
+		"revealOnEdit": {
+			"type": "string",
+			"enum": ["never", "preview", "focus"]
+		},
+		"notifyOnComplete": { "type": "boolean" },
+		"notifySoundOnComplete": { "type": "boolean" },
+		"loggingEnabled": { "type": "boolean" },
+		"otelEnabled": { "type": "boolean" },
+		"otelEndpoint": { "type": "string" },
+		"visionEnabled": { "type": "boolean" },
+		"chatTextSize": {
+			"type": "string",
+			"enum": ["compact", "default", "large"]
+		},
+		"thinkingDisplay": {
+			"type": "string",
+			"enum": ["off", "collapsed", "expanded"]
+		},
+		"chatViewLocation": {
+			"type": "string",
+			"enum": ["panel", "sidebar", "both"]
+		}
+	},
+	"additionalProperties": true,
+	"$defs": {
+		"approvalRule": {
+			"type": "object",
+			"properties": {
+				"mode": {
+					"type": "string",
+					"enum": ["allow", "ask", "review", "deny"]
+				},
+				"allowlist": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"denylist": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		}
+	}
+}

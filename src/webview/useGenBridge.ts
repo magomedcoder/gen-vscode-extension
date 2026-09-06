@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatViewState, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../chat/protocol';
+import type { AdminPolicyInfo, ChatViewState, IndexEngineStatus, McpServerStatus, PanelScreen, PersonaOption, ToWebviewMessage } from '../chat/protocol';
 import type { GenSettings } from '../config/types';
 import { DEFAULT_SETTINGS } from '../config/types';
 import type { LlmModelOption } from '../llm/types';
+import type { AgentsPageData } from './components/settings/AgentsPage';
+import type { ExternalHookFileRow, ExternalHookKind, HooksPageData } from './components/settings/HooksPage';
+import type { RulesSkillsPageData } from './components/settings/RulesSkillsPage';
 import { t } from './i18n';
 import { vscodeApi } from './vscodeApi';
 
@@ -17,17 +20,53 @@ function readInitialScreen(): PanelScreen {
 	return document.body.dataset.screen === 'settings' ? 'settings' : 'chat';
 }
 
+// Короткий тихий sine-beep через Web Audio API
+function playNotifyBeep(): void {
+	try {
+		const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+		if (!AudioCtx) {
+			return;
+		}
+
+		const ctx = new AudioCtx();
+		const osc = ctx.createOscillator();
+		const gain = ctx.createGain();
+		osc.type = 'sine';
+		osc.frequency.value = 660;
+		osc.connect(gain);
+		gain.connect(ctx.destination);
+		const t0 = ctx.currentTime;
+		gain.gain.setValueAtTime(0.0001, t0);
+		gain.gain.exponentialRampToValueAtTime(0.06, t0 + 0.02);
+		gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+		osc.start(t0);
+		osc.stop(t0 + 0.25);
+		osc.onended = () => {
+			void ctx.close();
+		};
+		void ctx.resume();
+	} catch {}
+}
+
 export function useGenBridge() {
 	const [screen] = useState<PanelScreen>(readInitialScreen);
 	const [chat, setChat] = useState<ChatViewState>(EMPTY_CHAT);
 	const [settings, setSettings] = useState<GenSettings>(DEFAULT_SETTINGS);
 	const [personas, setPersonas] = useState<PersonaOption[]>([]);
+	const [adminPolicy, setAdminPolicy] = useState<AdminPolicyInfo | undefined>();
 	const [apiKeySet, setApiKeySet] = useState(false);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
 	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
 	const [modelsLoading, setModelsLoading] = useState(false);
 	const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
+	const [indexStatus, setIndexStatus] = useState<IndexEngineStatus | undefined>();
+	const [hooks, setHooks] = useState<HooksPageData | undefined>();
+	const [hooksStatus, setHooksStatus] = useState<string | undefined>();
+	const [externalHooks, setExternalHooks] = useState<ExternalHookFileRow[]>([]);
+	const [agents, setAgents] = useState<AgentsPageData | undefined>();
+	const [agentsStatus, setAgentsStatus] = useState<string | undefined>();
+	const [rulesSkills, setRulesSkills] = useState<RulesSkillsPageData | undefined>();
 	const modelsRequestId = useRef(0);
 
 	useEffect(() => {
@@ -47,6 +86,7 @@ export function useGenBridge() {
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
+					setAdminPolicy(data.adminPolicy);
 					return;
 				case 'settingsSaved':
 					setSettings(data.settings);
@@ -54,6 +94,7 @@ export function useGenBridge() {
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
+					setAdminPolicy(data.adminPolicy);
 					setSettingsStatus(t('settings.status.saved'));
 					return;
 				case 'settingsError':
@@ -92,6 +133,76 @@ export function useGenBridge() {
 					return;
 				case 'mcpStatus':
 					setMcpServers(data.servers);
+					return;
+				case 'indexStatus':
+					setIndexStatus(data.status);
+					return;
+				case 'hooksData':
+					setHooks({
+						beforeSubmit: data.beforeSubmit,
+						beforeShell: data.beforeShell,
+						sessionDiff: data.sessionDiff,
+						sessionCompacting: data.sessionCompacting,
+						shellEnv: data.shellEnv ?? [],
+						fileWatcher: data.fileWatcher ?? [],
+						path: data.path,
+						error: data.error,
+					});
+					return;
+				case 'hooksSaved':
+					if (data.ok) {
+						setHooksStatus(t('settings.hooks.saved'));
+					} else {
+						setHooksStatus(data.error || t('settings.hooks.saveFailed'));
+					}
+					return;
+				case 'externalHooksData':
+					setExternalHooks(data.files);
+					return;
+				case 'externalHooksImported':
+					if (data.ok) {
+						const skipped = data.skippedEvents.length > 0
+							? ` ${t('settings.hooks.external.skipped', data.skippedEvents.join(', '))}`
+							: '';
+						setHooksStatus(
+							`${t(
+								'settings.hooks.external.imported',
+								data.mappedCommandCount,
+								data.mode,
+							)}${skipped}`,
+						);
+					} else {
+						setHooksStatus(data.error || t('settings.hooks.external.importFailed'));
+					}
+					return;
+				case 'agentsData':
+					setAgents({
+						presets: data.presets,
+						custom: data.custom,
+						error: data.error,
+					});
+					return;
+				case 'agentsCloned':
+					if (data.error) {
+						setAgentsStatus(data.error);
+					} else if (data.created) {
+						setAgentsStatus(t('settings.agents.cloned', data.relativePath));
+					} else {
+						setAgentsStatus(t('settings.agents.updated', data.relativePath));
+					}
+					return;
+				case 'rulesSkillsData':
+					setRulesSkills({
+						rules: data.rules,
+						skills: data.skills,
+						plugins: data.plugins ?? [],
+					});
+					return;
+				case 'personasData':
+					setPersonas(data.personas);
+					return;
+				case 'playNotifySound':
+					playNotifyBeep();
 					return;
 			}
 		};
@@ -139,20 +250,127 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'refreshMcp' });
 	}, []);
 
+	const mcpOAuthAuth = useCallback((serverName: string) => {
+		vscodeApi.postMessage({ type: 'mcpOAuthAuth', serverName });
+	}, []);
+
+	const mcpOAuthLogout = useCallback((serverName: string) => {
+		vscodeApi.postMessage({ type: 'mcpOAuthLogout', serverName });
+	}, []);
+
+	const mcpOAuthDebug = useCallback((serverName: string) => {
+		vscodeApi.postMessage({ type: 'mcpOAuthDebug', serverName });
+	}, []);
+
+	const loadIndexStatus = useCallback(() => {
+		vscodeApi.postMessage({ type: 'loadIndexStatus' });
+	}, []);
+
+	const loadHooks = useCallback(() => {
+		setHooksStatus(undefined);
+		vscodeApi.postMessage({ type: 'loadHooks' });
+	}, []);
+
+	const saveHooks = useCallback((payload: {
+		beforeSubmit: string[];
+		beforeShell: string[];
+		sessionDiff: string[];
+		sessionCompacting: string[];
+		shellEnv: string[];
+		fileWatcher: string[];
+	}) => {
+		setHooksStatus(t('settings.hooks.saving'));
+		vscodeApi.postMessage({
+			type: 'saveHooks',
+			beforeSubmit: payload.beforeSubmit,
+			beforeShell: payload.beforeShell,
+			sessionDiff: payload.sessionDiff,
+			sessionCompacting: payload.sessionCompacting,
+			shellEnv: payload.shellEnv,
+			fileWatcher: payload.fileWatcher,
+		});
+	}, []);
+
+	const openHooksFile = useCallback(() => {
+		vscodeApi.postMessage({ type: 'openHooksFile' });
+	}, []);
+
+	const loadExternalHooks = useCallback(() => {
+		vscodeApi.postMessage({ type: 'loadExternalHooks' });
+	}, []);
+
+	const openExternalHookFile = useCallback((path: string) => {
+		vscodeApi.postMessage({ type: 'openExternalHookFile', path });
+	}, []);
+
+	const importExternalHooks = useCallback((
+		path: string,
+		mode: 'merge' | 'replace',
+		kind: ExternalHookKind,
+	) => {
+		setHooksStatus(t('settings.hooks.external.importing'));
+		vscodeApi.postMessage({ type: 'importExternalHooks', path, mode, kind });
+	}, []);
+
+	const loadAgents = useCallback(() => {
+		setAgentsStatus(undefined);
+		vscodeApi.postMessage({ type: 'loadAgents' });
+	}, []);
+
+	const cloneAgentPreset = useCallback((id: string) => {
+		setAgentsStatus(t('settings.agents.cloning'));
+		vscodeApi.postMessage({ type: 'cloneAgentPreset', id });
+	}, []);
+
+	const loadRulesSkills = useCallback(() => {
+		vscodeApi.postMessage({ type: 'loadRulesSkills' });
+	}, []);
+
+	const loadPersonas = useCallback(() => {
+		vscodeApi.postMessage({ type: 'loadPersonas' });
+	}, []);
+
+	const openProjectPath = useCallback((path: string) => {
+		vscodeApi.postMessage({ type: 'openProjectPath', path });
+	}, []);
+
 	return {
 		screen,
 		chat,
 		settings,
 		personas,
+		adminPolicy,
 		apiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
 		modelsLoading,
 		mcpServers,
+		indexStatus,
+		hooks,
+		hooksStatus,
+		externalHooks,
+		agents,
+		agentsStatus,
+		rulesSkills,
 		saveSettings,
 		loadModels,
 		openLogsFolder,
 		refreshMcp,
+		mcpOAuthAuth,
+		mcpOAuthLogout,
+		mcpOAuthDebug,
+		loadIndexStatus,
+		loadHooks,
+		saveHooks,
+		openHooksFile,
+		loadExternalHooks,
+		openExternalHookFile,
+		importExternalHooks,
+		loadAgents,
+		cloneAgentPreset,
+		loadRulesSkills,
+		loadPersonas,
+		openProjectPath,
 	};
 }

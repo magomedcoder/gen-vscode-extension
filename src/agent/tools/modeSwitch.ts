@@ -10,14 +10,17 @@ export interface ModeSwitchContext extends ToolContext {
 
 const VALID_MODES: readonly ChatMode[] = ['ask', 'agent', 'debug', 'design', 'plan', 'multitask'];
 
-const PLAN_ENTER_REMINDER = [
+// Напоминание модели при входе в Plan (tool / slash / UI)
+export const PLAN_ENTER_REMINDER = [
 	'Режим Plan включён.',
 	'Используй только чтение/поиск (read_file, glob, grep, codebase_search и т.п.) и propose_plan / write_plan.',
-	'Не вызывай write_file, apply_patch, delete_file, run_command.',
+	'Правки файлов (write_file, apply_patch, delete_file) запрещены.',
+	'Shell (run_command / run_tests): только с подтверждением пользователя, если planShellPolicy=ask; иначе недоступен - перейди в Agent (/agent или plan_exit).',
 	'Когда план готов - propose_plan; после подтверждения пользователя перейди в agent через plan_exit или /agent.',
 ].join(' ');
 
-const PLAN_EXIT_REMINDER = 'Режим Agent включён. Можно править файлы и запускать команды в рамках политики подтверждений. Следуй активному плану в `.gen/plan.md`, если он есть.';
+// Напоминание модели при выходе Plan * Agent
+export const PLAN_EXIT_REMINDER = 'Режим Agent включён. Можно править файлы и запускать команды в рамках политики подтверждений. Следуй активному плану в `.gen/plan.md`, если он есть.';
 
 function asChatMode(raw: string): ChatMode | undefined {
 	const v = raw.trim().toLowerCase() as ChatMode;
@@ -46,15 +49,16 @@ export const planEnterTool: ToolDefinition = {
 		throwIfAborted(ctx.signal);
 		const err = await applyMode(ctx, 'plan');
 		if (err) {
-			return { 
-				ok: false, 
-				content: err 
+			return {
+				ok: false,
+				content: err,
 			};
 		}
 
-		return { 
-			ok: true, 
-			content: PLAN_ENTER_REMINDER 
+		// Полное напоминание добавляет ChatSession.setMode
+		return {
+			ok: true,
+			content: 'Режим Plan включён.',
 		};
 	},
 };
@@ -71,15 +75,16 @@ export const planExitTool: ToolDefinition = {
 		throwIfAborted(ctx.signal);
 		const err = await applyMode(ctx, 'agent');
 		if (err) {
-			return { 
-				ok: false, 
-				content: err 
+			return {
+				ok: false,
+				content: err,
 			};
 		}
 
-		return { 
-			ok: true, 
-			content: PLAN_EXIT_REMINDER 
+		// Полное напоминание добавляет ChatSession.setMode
+		return {
+			ok: true,
+			content: 'Режим Agent включён.',
 		};
 	},
 };
@@ -110,23 +115,24 @@ export const switchModeTool: ToolDefinition = {
 
 		const err = await applyMode(ctx, mode);
 		if (err) {
-			return { 
-				ok: false, 
-				content: err 
+			return {
+				ok: false,
+				content: err,
 			};
 		}
 
 		if (mode === 'plan') {
-			return { 
-				ok: true, 
-				content: PLAN_ENTER_REMINDER 
+			// Полное напоминание - ChatSession.setMode
+			return {
+				ok: true,
+				content: 'Режим Plan включён.',
 			};
 		}
 
 		if (mode === 'agent') {
-			return { 
-				ok: true, 
-				content: PLAN_EXIT_REMINDER 
+			return {
+				ok: true,
+				content: 'Режим Agent включён.',
 			};
 		}
 

@@ -44,7 +44,13 @@ export class ShellSession {
 		}
 	}
 
-	startBackground(command: string, args: string[], cwd: string, signal?: AbortSignal): BackgroundJob {
+	startBackground(
+		command: string,
+		args: string[],
+		cwd: string,
+		signal?: AbortSignal,
+		envExtra?: Record<string, string>,
+	): BackgroundJob {
 		assertAllowedCommand(command, args);
 		const id = `job_${this.nextId++}`;
 		const commandLine = formatCommandLine(command, args);
@@ -60,10 +66,11 @@ export class ShellSession {
 
 		const proc = spawn(command, args, {
 			cwd,
-			env: { 
-				...process.env, 
-				FORCE_COLOR: '0', 
-				NO_COLOR: '1' 
+			env: {
+				...process.env,
+				FORCE_COLOR: '0',
+				NO_COLOR: '1',
+				...(envExtra ?? {}),
 			},
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});

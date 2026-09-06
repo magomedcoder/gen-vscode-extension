@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DiffHunkPayload, ToolCallUi } from '../../chat/protocol';
+import { fileIconForPath } from '../fileIcons';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
+
+// Write-инструменты: путь для иконки можно взять из имени файла в path
+const WRITE_TOOL_NAMES = new Set([
+	'write_file',
+	'apply_patch',
+	'apply_workspace_edit',
+	'delete_file',
+	'create_dir',
+	'edit_notebook',
+]);
 
 const RESULT_PREVIEW = 500;
 
@@ -19,6 +30,40 @@ function statusLabel(status: ToolCallUi['status']): string {
 	}
 
 	return t('chat.tool.status.error');
+}
+
+function formatRemaining(ms: number): string {
+	const sec = Math.max(0, Math.ceil(ms / 1000));
+	const m = Math.floor(sec / 60);
+	const s = sec % 60;
+	if (m > 0) {
+		return `${m}:${String(s).padStart(2, '0')}`;
+	}
+
+	return `${s}s`;
+}
+
+// Схлопывает подряд идущие одинаковые строки в `строка *N`
+export function collapseRepeatedLines(text: string): string {
+	if (!text) {
+		return text;
+	}
+
+	const lines = text.split('\n');
+	const out: string[] = [];
+	let i = 0;
+	while (i < lines.length) {
+		const line = lines[i]!;
+		let count = 1;
+		while (i + count < lines.length && lines[i + count] === line) {
+			count += 1;
+		}
+
+		out.push(count > 1 ? `${line} *${count}` : line);
+		i += count;
+	}
+
+	return out.join('\n');
 }
 
 function DiffLinePreview({ preview }: { preview: string }) {
@@ -50,7 +95,19 @@ function HunkReview({ callId, hunk }: { callId: string; hunk: DiffHunkPayload })
 		<div className={`hunk hunk--${hunk.status}`}>
 			<div className="hunk__header">
 				<span className="hunk__meta">
-					{hunk.path ? <span className="hunk__path">{hunk.path}</span> : null}
+					{hunk.path ? (
+						<button
+							type="button"
+							className="hunk__path hunk__path--link"
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								vscodeApi.postMessage({ type: 'openPath', path: hunk.path! });
+							}}
+						>
+							{hunk.path}
+						</button>
+					) : null}
 					<span className="hunk__lines">@{hunk.newStart}</span>
 					{hunk.status !== 'pending' ? <span className="hunk__status">{hunkStatusLabel(hunk.status)}</span> : null}
 				</span>
@@ -88,23 +145,116 @@ function HunkReview({ callId, hunk }: { callId: string; hunk: DiffHunkPayload })
 	);
 }
 
-export function ToolCallCard({ call }: { call: ToolCallUi }) {
+function PendingToolMeta({ call }: { call: ToolCallUi }) {
+	const timeoutMs = call.timeoutMs;
+	const startedAt = call.startedAt ?? Date.now();
+	const [now, setNow] = useState(() => Date.now());
+
+	useEffect(() => {
+		if (call.status !== 'pending' || !timeoutMs) {
+			return;
+		}
+
+		const id = window.setInterval(() => setNow(Date.now()), 250);
+		return () => window.clearInterval(id);
+	}, [call.status, timeoutMs]);
+
+	const remaining = timeoutMs ? timeoutMs - (now - startedAt) : undefined;
+
+	return (
+		<span className="tool-card__pending-meta">
+			{remaining !== undefined ? (
+				<span className="tool-card__countdown" title={t('chat.tool.timeout')}>
+					{formatRemaining(remaining)}
+				</span>
+			) : null}
+			<button
+				type="button"
+				className="tool-card__stop"
+				onClick={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					vscodeApi.postMessage({ type: 'cancelToolCall', id: call.id });
+				}}
+			>
+				{t('chat.tool.stop')}
+			</button>
+		</span>
+	);
+}
+
+export type ToolDetailsMode = 'full' | 'compact';
+
+interface ToolCallCardProps {
+	call: ToolCallUi;
+	// Global details preference: compact hides args/result/diff until the card is opened
+	detailsMode?: ToolDetailsMode;
+}
+
+export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) {
 	const [expanded, setExpanded] = useState(false);
 	const result = call.result ?? '';
-	const truncated = !expanded && result.length > RESULT_PREVIEW;
-	const shown = truncated ? `${result.slice(0, RESULT_PREVIEW)}\n...` : result;
+	const collapsed = collapseRepeatedLines(result);
+	const truncated = !expanded && collapsed.length > RESULT_PREVIEW;
+	const shown = truncated ? `${collapsed.slice(0, RESULT_PREVIEW)}\n...` : collapsed;
 	const hunks = call.hunks ?? [];
 	const pendingCount = hunks.filter((h) => h.status === 'pending').length;
 	const showHunks = hunks.length > 0;
+	const hasExit = call.exitCode !== undefined;
+	const modeDefaultOpen = detailsMode === 'full' && (call.status !== 'ok' || pendingCount > 0);
+	const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
+	// Путь для иконки: call.path; у write-тулов - по первому сегменту имени файла
+	const pathForIcon = call.path
+		? (WRITE_TOOL_NAMES.has(call.name) ? call.path.split(',')[0]!.trim() : call.path)
+		: undefined;
+	const pathIcon = pathForIcon ? fileIconForPath(pathForIcon, call.name === 'create_dir' ? 'dir' : undefined) : undefined;
+
+	useEffect(() => {
+		setUserOpen(undefined);
+	}, [detailsMode]);
+
+	const open = userOpen ?? modeDefaultOpen;
 
 	return (
-		<details className={`tool-card tool-card--${call.status}`} open={call.status !== 'ok' || pendingCount > 0}>
+		<details
+			className={`tool-card tool-card--${call.status}${detailsMode === 'compact' ? ' tool-card--compact' : ''}`}
+			open={open}
+			onToggle={(event) => {
+				const next = (event.currentTarget as HTMLDetailsElement).open;
+				if (next === open) {
+					return;
+				}
+
+				setUserOpen(next);
+			}}
+		>
 			<summary>
 				<span className="tool-card__title">
 					<span className="tool-card__name">{call.name}</span>
-					{call.path ? <span className="tool-card__path">{call.path}</span> : null}
+					{call.path ? (
+						<button
+							type="button"
+							className="tool-card__path tool-card__path--link"
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								vscodeApi.postMessage({ type: 'openPath', path: call.path! });
+							}}
+						>
+							{pathIcon ? <span className="file-icon" aria-hidden="true">{pathIcon}</span> : null}
+							{call.path}
+						</button>
+					) : null}
+					{call.cwd ? (
+						<span className="tool-card__cwd" title={`${t('chat.tool.cwd')}: ${call.cwd}`}>
+							{t('chat.tool.cwd')}: {call.cwd}
+						</span>
+					) : null}
 				</span>
-				<span className="tool-card__status">{statusLabel(call.status)}</span>
+				<span className="tool-card__status-row">
+					{call.status === 'pending' ? <PendingToolMeta call={call} /> : null}
+					<span className="tool-card__status">{statusLabel(call.status)}</span>
+				</span>
 			</summary>
 			{showHunks ? (
 				<div className="hunk-list">
@@ -143,7 +293,7 @@ export function ToolCallCard({ call }: { call: ToolCallUi }) {
 			) : null}
 			{call.arguments && !call.diff && !showHunks ? (<pre className="tool-card__block"><code>{call.arguments}</code></pre>) : null}
 			{result ? (<pre className="tool-card__block tool-card__block--result"><code>{shown}</code></pre>) : null}
-			{result.length > RESULT_PREVIEW ? (
+			{collapsed.length > RESULT_PREVIEW ? (
 				<button
 					className="tool-card__more"
 					type="button"
@@ -154,6 +304,15 @@ export function ToolCallCard({ call }: { call: ToolCallUi }) {
 				>
 					{expanded ? t('chat.tool.collapse') : t('chat.tool.expand')}
 				</button>
+			) : null}
+			{hasExit ? (
+				<div className="tool-card__footer">
+					<span
+						className={`tool-card__exit ${call.exitCode === 0 ? 'tool-card__exit--ok' : 'tool-card__exit--fail'}`}
+					>
+						{t('chat.tool.exit', call.exitCode!)}
+					</span>
+				</div>
 			) : null}
 		</details>
 	);

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { getAgentAuthLevel, shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
+import { getSettings } from '../../config/settings';
+import { shouldConfirmDeletes, shouldConfirmWrites } from '../auth';
 import { previewText } from '../policy';
 import { throwIfAborted } from '../workspacePath';
 import type { ConfirmChoice, ToolContext, ToolResult } from '../types';
@@ -17,7 +18,12 @@ export async function confirmOrSkip(
 	opts?: { suggestion?: string; allowAlways?: boolean },
 ): Promise<ToolResult | undefined> {
 	throwIfAborted(ctx.signal);
-	if ((ctx as ToolContext & { skipConfirm?: boolean }).skipConfirm || getAgentAuthLevel() === 'open') {
+	const ext = ctx as ToolContext & { 
+		skipConfirm?: boolean
+		forceConfirm?: boolean
+	};
+	// forceConfirm (Plan shell ask) перекрывает autoApprove / skipConfirm
+	if (!ext.forceConfirm && (ext.skipConfirm || getSettings().autoApprove)) {
 		return undefined;
 	}
 	if (!ctx.confirm) {
@@ -75,7 +81,8 @@ export async function confirmOrSkip(
 }
 
 export async function confirmAlwaysOrSkip(ctx: ToolContext, title: string, detail?: string): Promise<ToolResult | undefined> {
-	if (getAgentAuthLevel() === 'open') {
+	const forceConfirm = (ctx as ToolContext & { forceConfirm?: boolean }).forceConfirm;
+	if (!forceConfirm && getSettings().autoApprove) {
 		return undefined;
 	}
 

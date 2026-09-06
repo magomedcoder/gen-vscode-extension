@@ -2,8 +2,31 @@ import type { ApprovalPolicy } from './approvalTypes';
 import { DEFAULT_APPROVAL_POLICY } from './approvalTypes';
 
 export type ChatMode = 'ask' | 'agent' | 'debug' | 'design' | 'plan' | 'multitask';
-export type AgentAuthLevel = 'auto' | 'ask' | 'open';
 export type CommentStyle = 'inline' | 'block';
+export type ChatTextSize = 'compact' | 'default' | 'large';
+// Как показывать reasoning/thinking в чате
+export type ThinkingDisplay = 'off' | 'collapsed' | 'expanded';
+// Где показывать чат: нижняя панель / activity bar / оба
+export type ChatViewLocation = 'panel' | 'sidebar' | 'both';
+// Политика при переполнении контекста (local engines / long chats)
+export type ContextOverflowPolicy = 'auto_compact_retry' | 'ask' | 'fail_fast';
+// Режим share активного редактора
+export type ShareMode = 'manual' | 'auto' | 'disabled';
+// Как открывать файл после правки агента: never / preview (без фокуса) / focus
+export type RevealOnEdit = 'never' | 'preview' | 'focus';
+// Бэкенд web_search: DuckDuckGo HTML, Exa/Parallel presets или произвольный HTTP JSON API
+export type WebSearchBackend = 'duckduckgo' | 'exa' | 'parallel' | 'http';
+/**
+ * Shell в режиме Plan: `ask` - run_command/run_tests с обязательным confirm;
+ * `deny` - shell tools скрыты (как раньше). Правки в Plan всегда запрещены.
+ */
+export type PlanShellPolicy = 'deny' | 'ask';
+/**
+ * Политика `provider.use`:
+ * - `allow` - allowlist (пустой список = всё разрешено; иначе нужен match)
+ * - `deny` - denylist (match * отказ)
+ */
+export type ProviderUsePolicy = 'allow' | 'deny';
 
 // Режимы с tool-calling (не «просто чат»)
 export function isAgentLikeMode(mode: ChatMode): boolean {
@@ -31,10 +54,6 @@ export interface GenSettings {
 	 */
 	agentMaxIterations: number;
 	/**
-	 * Чтение - только просмотр; Спросить - подтверждать правки; Без спроса - без диалогов, всё в лог.
-	 */
-	agentAuthLevel: AgentAuthLevel;
-	/**
 	 * Политика подтверждений по типам действий (shell / edits / delete / mcp / ...)
 	 */
 	approvalPolicy: ApprovalPolicy;
@@ -52,12 +71,48 @@ export interface GenSettings {
 	enableWorkspaceContext: boolean;
 	/**
 	 * Always-on: короткая сводка (git status -sb, недавние файлы) в каждый turn.
+	 * Отдельно от shareMode (активный редактор / выделение).
 	 */
 	alwaysOnWorkspaceContext: boolean;
+	/**
+	 * Режим share активного редактора: manual | auto | disabled.
+	 * default - manual
+	 */
+	shareMode: ShareMode;
+	/**
+	 * Имена tools только для primary-агента (пустой список = все доступные).
+	 * Субагенты этот фильтр не применяют.
+	 */
+	primaryTools: string[];
+	/**
+	 * Model-routed patch: GPT-семейство получает `apply_patch`; остальные - только write/edit.
+	 * false - всегда отдавать `apply_patch` (как раньше).
+	 * default - true
+	 */
+	modelRoutedPatch: boolean;
+	/**
+	 * Отображаемое имя пользователя в контексте агента (`User: ...`).
+	 * Пусто - не подмешивать.
+	 */
+	usernameDisplay: string;
+	/**
+	 * Glob/gitignore-паттерны: FS-watcher не переиндексирует совпавшие пути.
+	 * default - []
+	 */
+	watcherIgnore: string[];
+	/**
+	 * После правки агента: не открывать / preview без фокуса / focus (как раньше).
+	 * default - never
+	 */
+	revealOnEdit: RevealOnEdit;
 	/**
 	 * Показать vscode notification, когда ход агента завершён.
 	 */
 	notifyOnComplete: boolean;
+	/**
+	 * Короткий beep в chat webview при завершении хода (если notifyOnComplete).
+	 */
+	notifySoundOnComplete: boolean;
 	/**
 	 * Разрешить чтение файлов tools
 	 */
@@ -70,6 +125,25 @@ export interface GenSettings {
 	 * Разрешить web_search
 	 */
 	webSearchEnabled: boolean;
+	/**
+	 * Бэкенд web_search: duckduckgo (по умолчанию) | exa | parallel | http
+	 */
+	webSearchBackend: WebSearchBackend;
+	/**
+	 * URL HTTP-бэкенда: шаблон с `{query}` или база, к которой дописывается `?q=`
+	 * (только для `http`; Exa/Parallel используют фиксированные endpoints)
+	 */
+	webSearchHttpUrl: string;
+	/**
+	 * Имя заголовка для API-ключа HTTP-бэкенда (например Authorization).
+	 * Для exa/parallel игнорируется - всегда `x-api-key`.
+	 */
+	webSearchHttpHeader: string;
+	/**
+	 * API-ключ для exa / parallel / http (MVP: plain settings + interpolate; для production - SecretStorage).
+	 * Поддерживает `${env:NAME}` / `{file:path}`.
+	 */
+	webSearchApiKey: string;
 	/**
 	 * Разрешить fetch_page / @link
 	 */
@@ -98,10 +172,16 @@ export interface GenSettings {
 	 */
 	maxTokens: number;
 	/**
-	 * Оценка размера контекстного окна (для context ring в шапке чата).
+	 * Оценка окна контекста (токены) для UI / budget; сверка с n_ctx сервера при overflow.
 	 * default - 128000
 	 */
 	maxContextTokens: number;
+	/**
+	 * Что делать при exceed_context_size / preflight overflow:
+	 * auto_compact_retry - ужать/повторить; ask - понятная ошибка; fail_fast - сразу ошибка.
+	 * default - auto_compact_retry
+	 */
+	contextOverflowPolicy: ContextOverflowPolicy;
 	/**
 	 * Таймаут HTTP-запроса в миллисекундах
 	 *
@@ -110,6 +190,16 @@ export interface GenSettings {
 	 * default - 120000
 	 */
 	requestTimeoutMs: number;
+	/**
+	 * Таймаут tool/shell по умолчанию (мс), если в args нет timeout_ms.
+	 * default - 60000
+	 */
+	defaultToolTimeoutMs: number;
+	/**
+	 * Верхняя граница таймаута tool/shell (мс).
+	 * default - 300000
+	 */
+	maxToolTimeoutMs: number;
 	/**
 	 * Максимальное количество символов на входе
 	 *
@@ -160,6 +250,16 @@ export interface GenSettings {
 	 */
 	secretPatterns: string[];
 	/**
+	 * Политика использования провайдера: allowlist / denylist по паттернам.
+	 * default - allow
+	 */
+	providerUsePolicy: ProviderUsePolicy;
+	/**
+	 * Glob-паттерны (`*`) для host из baseUrl или model id.
+	 * Пусто + allow = всё разрешено; пусто + deny = ничего не запрещено.
+	 */
+	providerUsePatterns: string[];
+	/**
 	 * Имя HTTP-заголовка с ключом.
 	 * Пусто - Authorization.
 	 */
@@ -175,16 +275,43 @@ export interface GenSettings {
 	 */
 	planWriteToFile: boolean;
 	/**
+	 * Shell в Plan: `ask` (default) - команды только с confirm; `deny` - shell недоступен.
+	 * Не влияет на Debug/Design/Multitask; правки в Plan всегда запрещены.
+	 */
+	planShellPolicy: PlanShellPolicy;
+	/**
+	 * Снимки файлов для /undo (checkpoint + undo stack).
+	 * Выключено - remember no-op, стек undo не пополняется.
+	 */
+	snapshotEnabled: boolean;
+	/**
 	 * Писать логи в Output и в файлы.
 	 * По умолчанию выключено.
 	 */
 	loggingEnabled: boolean;
 	/**
+	 * Opt-in OpenTelemetry spans вокруг LLM complete().
+	 * По умолчанию выключено.
+	 */
+	otelEnabled: boolean;
+	/**
+	 * OTLP HTTP URL (JSON). Пусто - без экспорта: spans в Output «Gen LLM».
+	 * Не передавать API-ключи в URL.
+	 */
+	otelEndpoint: string;
+	/**
 	 * Максимум символов в ответе одного tool (обрезка хвоста).
 	 */
 	toolOutputMaxChars: number;
 	/**
-	 * MCP-серверы (stdio): имя, команда, args, env, cwd, timeoutMs, enabled.
+	 * Experimental code-mode: tool `execute` (JSON-шаги * MCP tools).
+	 * По умолчанию выключено. Не исполняет произвольный JS на хосте.
+	 */
+	codeModeEnabled: boolean;
+	/**
+	 * MCP-серверы (stdio): имя, команда, args, env, headers, cwd, timeoutMs, enabled, oauth, mcpOAuthAuthorizeUrl.
+	 * headers: для stdio * GEN_MCP_HEADER_*; будущий HTTP-транспорт - как HTTP-заголовки.
+	 * oauth: по умолчанию false / omit; MVP - paste-token + optional authorize URL (полный OIDC WIP).
 	 */
 	mcpServers: Array<{
 		name: string;
@@ -192,17 +319,37 @@ export interface GenSettings {
 		command: string;
 		args?: string[];
 		env?: Record<string, string>;
+		// Опциональные заголовки (stdio: GEN_MCP_HEADER_*; HTTP: как headers)
+		headers?: Record<string, string>;
 		// Рабочая директория процесса MCP
 		cwd?: string;
 		// Таймаут JSON-RPC запроса в мс
 		timeoutMs?: number;
 		enabled: boolean;
+		/**
+		 * Запросить OAuth. По умолчанию false / omit.
+		 * При true UI показывает Auth / Logout / Debug (paste-token MVP).
+		 */
+		oauth?: boolean;
+		// Placeholder URL для Auth (openExternal). Полный OIDC flow - WIP
+		mcpOAuthAuthorizeUrl?: string;
 	}>;
 	/**
 	 * Лимит вложенности tool `task` (субагенты).
 	 * min - 1, max - 4, default - 2
 	 */
 	subagentDepth: number;
+	/**
+	 * Git worktrees для субагентов (`task`): по умолчанию создавать worktree под `.gen/worktrees/`.
+	 * Переопределяется аргументом `use_worktree` у tool `task`.
+	 * default - false
+	 */
+	worktreesEnabled: boolean;
+	/**
+	 * Команда (shell `-c`), один раз после `git worktree add` в cwd worktree.
+	 * Пусто - не запускать. Пример: `npm install` / `yarn`.
+	 */
+	worktreeStartCommand: string;
 	/**
 	 * Доп. каталоги skills (относительно workspace или абсолютные).
 	 * Базовые: `.gen/skills`, `.agents/skills`.
@@ -226,9 +373,25 @@ export interface GenSettings {
 	 */
 	formatAfterEdit: boolean;
 	/**
-	 * Включить semantic_search / embeddings.
+	 * Git-sync auto-Keep: если pending-файл clean в git (нет изменений по path) - принять pending-хунки.
+	 * По умолчанию выключено.
+	 */
+	gitSyncAutoKeep: boolean;
+	/**
+	 * Включить semantic_search / embeddings / автоиндексацию.
 	 */
 	indexingEnabled: boolean;
+	/**
+	 * Автоиндексировать новые workspace folders при открытии.
+	 * default - true
+	 */
+	indexNewFolders: boolean;
+	/**
+	 * Разрешить codebase_search / semantic_search по индексу.
+	 * grep / search_files / glob работают независимо.
+	 * default - true
+	 */
+	indexForGrep: boolean;
 	/**
 	 * Base URL для OpenAI-compatible POST /embeddings (пусто - как baseUrl).
 	 */
@@ -237,6 +400,21 @@ export interface GenSettings {
 	 * Модель эмбеддингов.
 	 */
 	embeddingsModel: string;
+	/**
+	 * Сколько последних ходов оставлять при /compact.
+	 * min - 1, max - 40, default - 4
+	 */
+	compactTailTurns: number;
+	/**
+	 * При compact агрессивно ужимать tool-результаты и args в старых ходах.
+	 * default - true
+	 */
+	compactPruneToolResults: boolean;
+	/**
+	 * Зарезервированный headroom токенов при compact (placeholder для будущей логики).
+	 * default - 0
+	 */
+	compactReservedTokens: number;
 	/**
 	 * Передавать картинки в chat completions как image_url (OpenAI-compatible multimodal).
 	 * По умолчанию выключено: в сообщение попадает только `[image path]`.
@@ -247,6 +425,47 @@ export interface GenSettings {
 	 * default - 400000
 	 */
 	attachmentImageMaxBase64: number;
+	/**
+	 * Макс. ширина картинки перед отправкой (webview resize при ImageBitmap).
+	 * default - 2048
+	 */
+	attachmentImageMaxWidth: number;
+	/**
+	 * Макс. высота картинки перед отправкой (webview resize при ImageBitmap).
+	 * default - 2048
+	 */
+	attachmentImageMaxHeight: number;
+	/**
+	 * Уменьшать картинки в Composer (createImageBitmap + canvas), если превышают max W/H.
+	 * Host по-прежнему режет по attachmentImageMaxBase64.
+	 * default - true
+	 */
+	attachmentImageAutoResize: boolean;
+	/**
+	 * Размер текста в чате (сообщения и composer).
+	 * default - 'default'
+	 */
+	chatTextSize: ChatTextSize;
+	/**
+	 * Показ reasoning/thinking в чате: скрыть / свёрнуто / развёрнуто.
+	 * default - 'collapsed'
+	 */
+	thinkingDisplay: ThinkingDisplay;
+	/**
+	 * Где показывать Gen chat: нижняя панель / боковая панель (activity bar) / оба.
+	 * default - 'both'
+	 */
+	chatViewLocation: ChatViewLocation;
+	/**
+	 * Максимум открытых чат-сессий (вкладок).
+	 * min - 1, max - 40, default - 10
+	 */
+	maxTabCount: number;
+	/**
+	 * Максимум одновременных agent/ask runs по всем вкладкам.
+	 * min - 1, max - 10, default - 3
+	 */
+	maxConcurrentRuns: number;
 }
 
 // Примеры для кнопки в Security settings - не подставляются в deniedPaths автоматически
@@ -270,22 +489,35 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	smallModel: '',
 	chatMode: 'ask',
 	agentMaxIterations: 40,
-	agentAuthLevel: 'ask',
 	approvalPolicy: structuredClone(DEFAULT_APPROVAL_POLICY),
 	autoApprove: false,
 	continueLoopOnDeny: true,
 	enableWorkspaceContext: true,
 	alwaysOnWorkspaceContext: false,
+	shareMode: 'manual',
+	primaryTools: [],
+	modelRoutedPatch: true,
+	usernameDisplay: '',
+	watcherIgnore: [],
+	revealOnEdit: 'never',
 	notifyOnComplete: false,
+	notifySoundOnComplete: false,
 	enableFileReading: true,
 	enableTerminal: true,
 	webSearchEnabled: true,
+	webSearchBackend: 'duckduckgo',
+	webSearchHttpUrl: '',
+	webSearchHttpHeader: 'Authorization',
+	webSearchApiKey: '',
 	webFetchEnabled: true,
 	systemPrompt: '',
 	temperature: 0.2,
 	maxTokens: 8192,
 	maxContextTokens: 128_000,
+	contextOverflowPolicy: 'auto_compact_retry',
 	requestTimeoutMs: 120_000,
+	defaultToolTimeoutMs: 60_000,
+	maxToolTimeoutMs: 300_000,
 	maxInputChars: 8000,
 	commentStyle: 'inline',
 	previewBeforeApply: true,
@@ -295,21 +527,44 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	allowExternalDirectory: false,
 	deniedCommands: [...EXAMPLE_DENIED_COMMANDS],
 	secretPatterns: [],
+	providerUsePolicy: 'allow',
+	providerUsePatterns: [],
 	authHeader: 'Authorization',
 	authScheme: 'Bearer',
 	planWriteToFile: true,
+	planShellPolicy: 'ask',
+	snapshotEnabled: true,
 	loggingEnabled: false,
+	otelEnabled: false,
+	otelEndpoint: '',
 	toolOutputMaxChars: 12_000,
+	codeModeEnabled: false,
 	mcpServers: [],
 	subagentDepth: 2,
+	worktreesEnabled: false,
+	worktreeStartCommand: '',
 	skillsPaths: [],
 	skillsUrls: [],
 	instructionUrls: [],
 	personaId: '',
 	formatAfterEdit: false,
+	gitSyncAutoKeep: false,
 	indexingEnabled: true,
+	indexNewFolders: true,
+	indexForGrep: true,
 	embeddingsBaseUrl: '',
 	embeddingsModel: 'text-embedding-3-small',
+	compactTailTurns: 4,
+	compactPruneToolResults: true,
+	compactReservedTokens: 0,
 	visionEnabled: false,
 	attachmentImageMaxBase64: 400_000,
+	attachmentImageMaxWidth: 2048,
+	attachmentImageMaxHeight: 2048,
+	attachmentImageAutoResize: true,
+	chatTextSize: 'default',
+	thinkingDisplay: 'collapsed',
+	chatViewLocation: 'both',
+	maxTabCount: 10,
+	maxConcurrentRuns: 3,
 };

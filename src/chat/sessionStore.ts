@@ -3,8 +3,10 @@ import type { ChatUiMessage } from './protocol';
 
 const SESSIONS_KEY = 'gen.chat.sessions';
 const CURRENT_ID_KEY = 'gen.chat.currentSessionId';
-// Старый ключ односессионного хранилища - мигрируем в multi-session
-const LEGACY_MESSAGES_KEY = 'gen.chat.messages';
+// Черновики Composer: sessionId * текст
+const DRAFTS_KEY = 'gen.chat.drafts';
+// Chips Composer: sessionId * insert-строки
+const DRAFT_CHIPS_KEY = 'gen.chat.draftChips';
 
 const MAX_SESSIONS = 40;
 const MAX_STORED_MESSAGES = 80;
@@ -23,6 +25,8 @@ export interface SessionSummary {
 	createdAt: number;
 	updatedAt: number;
 	messageCount: number;
+	// Сейчас идёт agent/ask turn в этой вкладке (UI-индикатор)
+	busy?: boolean;
 }
 
 function newId(): string {
@@ -89,10 +93,24 @@ function defaultTitle(): string {
 	return DEFAULT_SESSION_TITLE;
 }
 
+// Живой SessionStore для @past (mentions без ExtensionContext)
+let sessionPeek: SessionStore | undefined;
+
+export function setSessionPeek(store: SessionStore | undefined): void {
+	sessionPeek = store;
+}
+
+export function getSessionPeek(): SessionStore | undefined {
+	return sessionPeek;
+}
+
 // Persist нескольких чат-сессий в workspaceState (или переданный Memento).
 export class SessionStore {
 	private sessions: StoredChatSession[] = [];
 	private currentId = '';
+	/** Черновики Composer в памяти + workspaceState. */
+	private drafts: Record<string, string> = {};
+	private draftChips: Record<string, string[]> = {};
 
 	constructor(private readonly memento: Memento) {
 		this.load();
@@ -101,6 +119,8 @@ export class SessionStore {
 	private load(): void {
 		const raw = this.memento.get<StoredChatSession[]>(SESSIONS_KEY);
 		const current = this.memento.get<string>(CURRENT_ID_KEY, '');
+		this.drafts = this.loadDraftsMap();
+		this.draftChips = this.loadDraftChipsMap();
 
 		if (Array.isArray(raw) && raw.length > 0) {
 			this.sessions = raw.filter((s) => s && typeof s === 'object' && typeof s.id === 'string')
@@ -115,22 +135,59 @@ export class SessionStore {
 			return;
 		}
 
-		// Миграция со старого односессионного ключа
-		const legacy = this.memento.get<ChatUiMessage[]>(LEGACY_MESSAGES_KEY, []);
 		const now = Date.now();
-		const migrated: StoredChatSession = {
+		const empty: StoredChatSession = {
 			id: newId(),
-			title: legacy.length > 0 ? titleFromMessages(legacy) : defaultTitle(),
-			messages: Array.isArray(legacy) ? legacy : [],
+			title: defaultTitle(),
+			messages: [],
 			createdAt: now,
 			updatedAt: now,
 		};
-		this.sessions = [migrated];
-		this.currentId = migrated.id;
+		this.sessions = [empty];
+		this.currentId = empty.id;
 		void this.persistAll();
-		if (legacy.length > 0) {
-			void this.memento.update(LEGACY_MESSAGES_KEY, undefined);
+	}
+
+	private loadDraftsMap(): Record<string, string> {
+		const raw = this.memento.get<Record<string, string>>(DRAFTS_KEY);
+		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+			return {};
 		}
+
+		const out: Record<string, string> = {};
+		for (const [id, text] of Object.entries(raw)) {
+			if (typeof text === 'string' && text.length > 0) {
+				out[id] = text;
+			}
+		}
+
+		return out;
+	}
+
+	private loadDraftChipsMap(): Record<string, string[]> {
+		const raw = this.memento.get<Record<string, string[]>>(DRAFT_CHIPS_KEY);
+		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+			return {};
+		}
+
+		const out: Record<string, string[]> = {};
+		for (const [id, chips] of Object.entries(raw)) {
+			if (!Array.isArray(chips)) {
+				continue;
+			}
+
+			const cleaned = chips.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim());
+			if (cleaned.length > 0) {
+				out[id] = cleaned;
+			}
+		}
+
+		return out;
+	}
+
+	private persistDrafts(): void {
+		void this.memento.update(DRAFTS_KEY, this.drafts);
+		void this.memento.update(DRAFT_CHIPS_KEY, this.draftChips);
 	}
 
 	private persistAll(): Thenable<void> {
@@ -159,6 +216,86 @@ export class SessionStore {
 
 	getCurrentSessionId(): string {
 		return this.currentId;
+	}
+
+	// Черновик Composer для сессии (пустая строка если нет)
+	getDraft(sessionId?: string): string {
+		const id = sessionId ?? this.currentId;
+		return this.drafts[id] ?? '';
+	}
+
+	// Chips Composer (insert-строки) для сессии
+	getDraftChips(sessionId?: string): string[] {
+		const id = sessionId ?? this.currentId;
+		return this.draftChips[id] ? [...this.draftChips[id]!] : [];
+	}
+
+	// Сохранить черновик текущей (или указанной) сессии. Без emit - только persist
+	setDraft(text: string, chips?: string[], sessionId?: string): void {
+		const id = sessionId ?? this.currentId;
+		if (!id) {
+			return;
+		}
+
+		// Игнор черновика для неизвестной/удалённой сессии
+		if (!this.getSession(id) && id !== this.currentId) {
+			return;
+		}
+
+		const trimmed = text;
+		let changed = false;
+		if (trimmed.length === 0) {
+			if (id in this.drafts) {
+				delete this.drafts[id];
+				changed = true;
+			}
+		} else if (this.drafts[id] !== trimmed) {
+			this.drafts[id] = trimmed;
+			changed = true;
+		}
+
+		if (chips !== undefined) {
+			const nextChips = chips.filter((c) => typeof c === 'string' && c.trim().length > 0)
+				.map((c) => c.trim());
+			const prevChips = this.draftChips[id] ?? [];
+			const chipsSame = prevChips.length === nextChips.length && prevChips.every((c, i) => c === nextChips[i]);
+			if (nextChips.length === 0) {
+				if (id in this.draftChips) {
+					delete this.draftChips[id];
+					changed = true;
+				}
+			} else if (!chipsSame) {
+				this.draftChips[id] = nextChips;
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			this.persistDrafts();
+		}
+	}
+
+	// Очистить черновик сессии
+	clearDraft(sessionId?: string): void {
+		const id = sessionId ?? this.currentId;
+		if (!id) {
+			return;
+		}
+
+		let changed = false;
+		if (id in this.drafts) {
+			delete this.drafts[id];
+			changed = true;
+		}
+
+		if (id in this.draftChips) {
+			delete this.draftChips[id];
+			changed = true;
+		}
+
+		if (changed) {
+			this.persistDrafts();
+		}
 	}
 
 	getSession(id: string): StoredChatSession | undefined {
@@ -254,6 +391,7 @@ export class SessionStore {
 				updatedAt: Date.now(),
 			};
 			this.currentId = only.id;
+			this.clearDraft(id);
 			void this.persistAll();
 			return true;
 		}
@@ -267,6 +405,7 @@ export class SessionStore {
 		if (this.currentId === id) {
 			this.currentId = this.sessions[0]!.id;
 		}
+		this.clearDraft(id);
 		void this.persistAll();
 		return true;
 	}

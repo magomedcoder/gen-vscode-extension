@@ -2,8 +2,9 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
+import { getAgentRoot } from './agentRoot';
 import { isIgnoredByGitIgnore } from './gitIgnore';
-import { assertAllowedPath, findContainingFolder, PathPolicyError, pathIsInside, resolveAgainstFolders } from './policy';
+import { assertAllowedPath, findContainingFolder, PathPolicyError, pathIsInside, resolveAgainstFolders, rewriteWorkspaceAlias } from './policy';
 
 export interface ResolvedWorkspacePath {
 	uri: vscode.Uri;
@@ -80,7 +81,33 @@ async function followToWorkspace(fsPath: string, folders: string[]): Promise<str
 export async function resolveWorkspacePath(input: string): Promise<ResolvedWorkspacePath> {
 	const folders = workspaceFolderPaths();
 	const allowOutside = getSettings().allowExternalDirectory;
-	const { fsPath, folder, outside } = resolveAgainstFolders(input, folders, { allowOutside });
+	// Субагент в worktree: относительные пути и /workspace * от agent root
+	const agentRoot = getAgentRoot();
+	let effectiveInput = input;
+	if (agentRoot) {
+		const trimmed = rewriteWorkspaceAlias((input ?? '').trim() || '.');
+		if (!path.isAbsolute(trimmed)) {
+			effectiveInput = path.resolve(agentRoot, trimmed);
+		}
+	}
+
+	// Worktree может лежать рядом с workspace (sibling) - разрешаем пути внутри agentRoot
+	if (agentRoot) {
+		const abs = path.resolve(effectiveInput);
+		if (pathIsInside(abs, agentRoot)) {
+			const uri = vscode.Uri.file(abs);
+			const rel = path.relative(agentRoot, abs);
+			return {
+				uri,
+				fsPath: uri.fsPath,
+				relative: rel.split(path.sep).join('/') || '.',
+				folder: firstWorkspaceFolder(),
+				outside: !findContainingFolder(abs, folders),
+			};
+		}
+	}
+
+	const { fsPath, folder, outside } = resolveAgainstFolders(effectiveInput, folders, { allowOutside });
 
 	// external_directory: вне workspace - без symlink/gitignore sandbox
 	if (outside) {
@@ -104,7 +131,7 @@ export async function resolveWorkspacePath(input: string): Promise<ResolvedWorks
 	const uri = vscode.Uri.file(checked);
 	return {
 		uri,
-		fsPath: uri.fsPath,
+		fsPath: checked,
 		relative,
 		folder: folderContaining(checked),
 	};

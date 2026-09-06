@@ -2,10 +2,15 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getSettings } from '../config/settings';
 
+/**
+ * Контекст активного редактора / выделения для chat prompt.
+ * shareMode: disabled/manual - не авто-inject; auto - при enableWorkspaceContext.
+ * Always-on workspace context (git/recent) - отдельно, см. workspaceContext.ts.
+ */
 export function getEditorChatContext(): string | undefined {
 	const settings = getSettings();
-	// Без enableWorkspaceContext не подмешиваем и контекст активного редактора
-	if (!settings.enableWorkspaceContext) {
+	// Без enableWorkspaceContext или без shareMode=auto - не подмешиваем редактор
+	if (!settings.enableWorkspaceContext || settings.shareMode !== 'auto') {
 		return undefined;
 	}
 

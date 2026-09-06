@@ -38,4 +38,12 @@ suite('gitIgnore matcher', () => {
 		assert.ok(!ignoresRelative(ig, '.'));
 		assert.ok(!ignoresRelative(ig, ''));
 	});
+
+	test('отрицание ! re-include возвращает путь', () => {
+		const ig = createIgnoreMatcher(['*.log', '!important.log', 'dist/**', '!dist/keep.js']);
+		assert.ok(ignoresRelative(ig, 'build.log'));
+		assert.ok(!ignoresRelative(ig, 'important.log'));
+		assert.ok(ignoresRelative(ig, 'dist/other.js'));
+		assert.ok(!ignoresRelative(ig, 'dist/keep.js'));
+	});
 });

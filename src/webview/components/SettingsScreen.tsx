@@ -1,67 +1,139 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from 'react';
-import type { McpServerStatus, PersonaOption } from '../../chat/protocol';
+import { useEffect, useMemo, useState, type ReactNode, type SubmitEvent } from 'react';
+import type { AdminPolicyInfo, IndexEngineStatus, McpServerStatus, PersonaOption } from '../../chat/protocol';
 import type { GenSettings } from '../../config/types';
 import { DEFAULT_SETTINGS } from '../../config/types';
 import type { LlmModelOption } from '../../llm/types';
 import { t } from '../i18n';
-import { ChatAgentPage } from './settings/ChatAgentPage';
-import { CommentsPage } from './settings/CommentsPage';
+import { ChatPage } from './settings/ChatPage';
 import { ConnectionPage } from './settings/ConnectionPage';
+import { HooksPage, type ExternalHookFileRow, type ExternalHookKind, type HooksPageData } from './settings/HooksPage';
+import { IndexingPage } from './settings/IndexingPage';
 import { LoggingPage } from './settings/LoggingPage';
 import { McpPage } from './settings/McpPage';
-import { SETTINGS_PAGE_IDS, SETTINGS_PAGE_KEYWORDS, settingsNavTitleKey } from './settings/pages';
+import { SETTINGS_PAGE_CODICON, SETTINGS_PAGE_IDS, settingsNavTitleKey } from './settings/pages';
 import type { SettingsPageId } from './settings/pages';
+import { PermissionsPage } from './settings/PermissionsPage';
+import { PersonasPage } from './settings/PersonasPage';
 import { RequestPage } from './settings/RequestPage';
+import { RulesSkillsPage, type RulesSkillsPageData } from './settings/RulesSkillsPage';
 import { SecurityPage } from './settings/SecurityPage';
 import { UsagePage } from './settings/UsagePage';
+import { ActivityPage } from './settings/ActivityPage';
+import { AgentBehaviorPage } from './settings/AgentBehaviorPage';
+import { AgentsPage, type AgentsPageData } from './settings/AgentsPage';
 
 interface SettingsScreenProps {
 	settings: GenSettings;
 	personas?: PersonaOption[];
+	// Admin policy: locked keys баннер
+	adminPolicy?: AdminPolicyInfo;
 	status?: string;
 	apiKeySet: boolean;
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
 	mcpServers?: McpServerStatus[];
+	indexStatus?: IndexEngineStatus;
+	hooks?: HooksPageData;
+	hooksStatus?: string;
+	externalHooks?: ExternalHookFileRow[];
+	agents?: AgentsPageData;
+	agentsStatus?: string;
+	rulesSkills?: RulesSkillsPageData;
 	onSave: (settings: GenSettings, api?: { apiKey?: string }) => void;
 	onLoadModels: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
 	onRefreshMcp?: () => void;
+	onMcpOAuthAuth?: (serverName: string) => void;
+	onMcpOAuthLogout?: (serverName: string) => void;
+	onMcpOAuthDebug?: (serverName: string) => void;
+	onLoadIndexStatus?: () => void;
+	onLoadHooks?: () => void;
+	onSaveHooks?: (payload: {
+		beforeSubmit: string[];
+		beforeShell: string[];
+		sessionDiff: string[];
+		sessionCompacting: string[];
+		shellEnv: string[];
+		fileWatcher: string[];
+	}) => void;
+	onOpenHooksFile?: () => void;
+	onLoadExternalHooks?: () => void;
+	onOpenExternalHookFile?: (path: string) => void;
+	onImportExternalHooks?: (path: string, mode: 'merge' | 'replace', kind: ExternalHookKind) => void;
+	onLoadAgents?: () => void;
+	onCloneAgentPreset?: (id: string) => void;
+	onLoadRulesSkills?: () => void;
+	onLoadPersonas?: () => void;
+	onOpenProjectPath?: (path: string) => void;
 }
 
-function pageMatchesQuery(id: SettingsPageId, query: string): boolean {
-	const q = query.trim().toLowerCase();
-	if (!q) {
-		return true;
-	}
-
-	const title = t(settingsNavTitleKey(id)).toLowerCase();
-	if (title.includes(q)) {
-		return true;
-	}
-
-	return SETTINGS_PAGE_KEYWORDS[id].some((kw) => kw.toLowerCase().includes(q) || q.includes(kw.toLowerCase()));
+function renderNavItems(
+	pages: SettingsPageId[],
+	active: SettingsPageId,
+	onSelect: (id: SettingsPageId) => void,
+): ReactNode {
+	return pages.map((id) => (
+		<button
+			key={id}
+			type="button"
+			className={`settings-nav__item${id === active ? ' settings-nav__item--active' : ''}`}
+			onClick={() => onSelect(id)}
+		>
+			<span
+				className={`codicon codicon-${SETTINGS_PAGE_CODICON[id]} settings-nav__icon`}
+				aria-hidden="true"
+			/>
+			<span className="settings-nav__title">{t(settingsNavTitleKey(id))}</span>
+		</button>
+	));
 }
 
 export function SettingsScreen({
 	settings,
 	personas = [],
+	adminPolicy,
 	apiKeySet,
 	status,
 	models,
 	modelsStatus,
 	modelsLoading,
 	mcpServers = [],
+	indexStatus,
+	hooks,
+	hooksStatus,
+	externalHooks,
+	agents,
+	agentsStatus,
+	rulesSkills,
 	onSave,
 	onLoadModels,
 	onOpenLogsFolder,
 	onRefreshMcp,
+	onMcpOAuthAuth,
+	onMcpOAuthLogout,
+	onMcpOAuthDebug,
+	onLoadIndexStatus,
+	onLoadHooks,
+	onSaveHooks,
+	onOpenHooksFile,
+	onLoadExternalHooks,
+	onOpenExternalHookFile,
+	onImportExternalHooks,
+	onLoadAgents,
+	onCloneAgentPreset,
+	onLoadRulesSkills,
+	onLoadPersonas,
+	onOpenProjectPath,
 }: SettingsScreenProps) {
 	const [page, setPage] = useState<SettingsPageId>('connection');
 	const [draft, setDraft] = useState<GenSettings>(settings);
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
-	const [searchQuery, setSearchQuery] = useState('');
+
+	const lockedKeySet = useMemo(
+		() => new Set(adminPolicy?.active ? adminPolicy.lockedKeys : []),
+		[adminPolicy],
+	);
 
 	useEffect(() => {
 		setDraft(settings);
@@ -89,22 +161,11 @@ export function SettingsScreen({
 		});
 	}, [models]);
 
-	const filteredPages = useMemo(
-		() => SETTINGS_PAGE_IDS.filter((id) => pageMatchesQuery(id, searchQuery)),
-		[searchQuery],
-	);
-
-	useEffect(() => {
-		if (filteredPages.length === 0) {
+	const setField = <K extends keyof GenSettings>(key: K, value: GenSettings[K]) => {
+		// Locked admin keys - только чтение
+		if (lockedKeySet.has(key)) {
 			return;
 		}
-
-		if (!filteredPages.includes(page)) {
-			setPage(filteredPages[0]);
-		}
-	}, [filteredPages, page]);
-
-	const setField = <K extends keyof GenSettings>(key: K, value: GenSettings[K]) => {
 		setDraft((prev) => ({ ...prev, [key]: value }));
 	};
 
@@ -116,6 +177,17 @@ export function SettingsScreen({
 			deniedCommands: [...DEFAULT_SETTINGS.deniedCommands],
 			secretPatterns: [...DEFAULT_SETTINGS.secretPatterns],
 		};
+		// Admin-forced значения остаются из effective settings
+		for (const key of lockedKeySet) {
+			if (key === 'mcpServersAllowlist') {
+				continue;
+			}
+
+			if (key in settings) {
+				(next as unknown as Record<string, unknown>)[key] = settings[key as keyof GenSettings];
+			}
+		}
+		
 		setDraft(next);
 		setApiKeyDraft('');
 		onSave(next);
@@ -128,7 +200,8 @@ export function SettingsScreen({
 		});
 	};
 
-	const currentTitle = filteredPages.length > 0 ? t(settingsNavTitleKey(page)) : t('settings.search.empty');
+	const currentTitle = t(settingsNavTitleKey(page));
+	const showAdminBanner = Boolean(adminPolicy?.active && adminPolicy.lockedKeys.length > 0);
 
 	return (
 		<div className="app">
@@ -140,79 +213,129 @@ export function SettingsScreen({
 				<button className="btn btn--secondary" type="button" onClick={onReset}>{t('settings.reset')}</button>
 			</header>
 
+			{showAdminBanner ? (
+				<div className="project-banner project-banner--policy" role="status">
+					<div className="project-banner__text">
+						<strong className="project-banner__title">{t('settings.adminPolicy.title')}</strong>
+						<span className="project-banner__hint">
+							{t('settings.adminPolicy.hint', adminPolicy!.lockedKeys.join(', '))}
+						</span>
+						{adminPolicy?.path ? (
+							<span className="project-banner__hint project-banner__hint--mono">{adminPolicy.path}</span>
+						) : null}
+					</div>
+				</div>
+			) : null}
+
 			<form className="settings-layout" onSubmit={onSubmit}>
 				<nav className="settings-nav" aria-label={t('settings.navAria')}>
-					<input
-						className="settings-nav__search"
-						type="search"
-						value={searchQuery}
-						placeholder={t('settings.search.placeholder')}
-						aria-label={t('settings.search.placeholder')}
-						onChange={(e) => setSearchQuery(e.target.value)}
-					/>
-					{filteredPages.length === 0 ? (
-						<div className="settings-nav__empty" role="status">{t('settings.search.empty')}</div>
-					) : (
-						filteredPages.map((id) => (
-							<button
-								key={id}
-								type="button"
-								className={`settings-nav__item${id === page ? ' settings-nav__item--active' : ''}`}
-								onClick={() => setPage(id)}
-							>
-								<span className="settings-nav__title">{t(settingsNavTitleKey(id))}</span>
-							</button>
-						))
-					)}
+					{renderNavItems(SETTINGS_PAGE_IDS, page, setPage)}
 				</nav>
 
 				<div className="settings-main">
-					{filteredPages.length === 0 ? (
-						<div className="settings settings--empty" role="status">{t('settings.search.empty')}</div>
-					) : (
-						<>
-							<div className="settings">
-								{page === 'connection' ? (
-									<ConnectionPage
-										draft={draft}
-										setField={setField}
-										apiKeySet={apiKeySet}
-										apiKeyDraft={apiKeyDraft}
-										models={models}
-										modelsStatus={modelsStatus}
-										modelsLoading={modelsLoading}
-										onApiKeyDraft={setApiKeyDraft}
-										onLoadModels={onLoadModels}
-									/>
-								) : null}
-								{page === 'chat' ? <ChatAgentPage draft={draft} setField={setField} personas={personas} /> : null}
-								{page === 'mcp' ? (
-									<McpPage
-										draft={draft}
-										setField={setField}
-										mcpServers={mcpServers}
-										onRefreshMcp={onRefreshMcp}
-									/>
-								) : null}
-								{page === 'request' ? <RequestPage draft={draft} setField={setField} /> : null}
-								{page === 'comments' ? <CommentsPage draft={draft} setField={setField} /> : null}
-								{page === 'security' ? <SecurityPage draft={draft} setField={setField} /> : null}
-								{page === 'logging' ? (
-									<LoggingPage
-										draft={draft}
-										setField={setField}
-										onOpenLogsFolder={onOpenLogsFolder}
-									/>
-								) : null}
-								{page === 'usage' ? <UsagePage draft={draft} setField={setField} /> : null}
-							</div>
+					<div className="settings">
+						{page === 'connection' ? (
+							<>
+								<ConnectionPage
+									draft={draft}
+									setField={setField}
+									apiKeySet={apiKeySet}
+									apiKeyDraft={apiKeyDraft}
+									models={models}
+									modelsStatus={modelsStatus}
+									modelsLoading={modelsLoading}
+									onApiKeyDraft={setApiKeyDraft}
+									onLoadModels={onLoadModels}
+								/>
+								<RequestPage draft={draft} setField={setField} />
+							</>
+						) : null}
+						{page === 'chat' ? (
+							<ChatPage
+								draft={draft}
+								setField={setField}
+								personas={personas}
+								onOpenPersonasPage={() => setPage('project')}
+							/>
+						) : null}
+						{page === 'agent' ? (
+							<>
+								<AgentBehaviorPage draft={draft} setField={setField} />
+								<IndexingPage
+									draft={draft}
+									setField={setField}
+									indexStatus={indexStatus}
+									onLoadIndexStatus={onLoadIndexStatus}
+								/>
+							</>
+						) : null}
+						{page === 'security' ? (
+							<>
+								<SecurityPage draft={draft} setField={setField} />
+								<PermissionsPage draft={draft} setField={setField} />
+							</>
+						) : null}
+						{page === 'project' ? (
+							<>
+								<RulesSkillsPage
+									data={rulesSkills}
+									onLoad={onLoadRulesSkills}
+									onOpenPath={onOpenProjectPath}
+								/>
+								<PersonasPage
+									draft={draft}
+									setField={setField}
+									personas={personas}
+									onLoadPersonas={onLoadPersonas}
+									onOpenPath={onOpenProjectPath}
+								/>
+								<AgentsPage
+									agents={agents}
+									agentsStatus={agentsStatus}
+									onLoadAgents={onLoadAgents}
+									onCloneAgentPreset={onCloneAgentPreset}
+								/>
+								<HooksPage
+									hooks={hooks}
+									hooksStatus={hooksStatus}
+									externalHooks={externalHooks}
+									onLoadHooks={onLoadHooks}
+									onSaveHooks={onSaveHooks}
+									onOpenHooksFile={onOpenHooksFile}
+									onLoadExternalHooks={onLoadExternalHooks}
+									onOpenExternalHookFile={onOpenExternalHookFile}
+									onImportExternalHooks={onImportExternalHooks}
+								/>
+							</>
+						) : null}
+						{page === 'mcp' ? (
+							<McpPage
+								draft={draft}
+								setField={setField}
+								mcpServers={mcpServers}
+								onRefreshMcp={onRefreshMcp}
+								onMcpOAuthAuth={onMcpOAuthAuth}
+								onMcpOAuthLogout={onMcpOAuthLogout}
+								onMcpOAuthDebug={onMcpOAuthDebug}
+							/>
+						) : null}
+						{page === 'journal' ? (
+							<>
+								<UsagePage draft={draft} setField={setField} />
+								<ActivityPage draft={draft} setField={setField} />
+								<LoggingPage
+									draft={draft}
+									setField={setField}
+									onOpenLogsFolder={onOpenLogsFolder}
+								/>
+							</>
+						) : null}
+					</div>
 
-							<div className="settings-footer">
-								{status ? <div className="settings__status">{status}</div> : null}
-								<button className="btn" type="submit">{t('settings.save')}</button>
-							</div>
-						</>
-					)}
+					<div className="settings-footer">
+						{status ? <div className="settings__status">{status}</div> : null}
+						<button className="btn" type="submit">{t('settings.save')}</button>
+					</div>
 				</div>
 			</form>
 		</div>

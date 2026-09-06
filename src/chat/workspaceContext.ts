@@ -32,21 +32,30 @@ function runGit(cwd: string, args: string[], timeoutMs = 2500): Promise<string> 
 
 /**
  * Короткий always-on блок workspace (ветка git + недавние файлы).
- * Возвращает undefined, если workspace context выключен, always-on выключен или workspace нет.
+ * Также подмешивает `User: {usernameDisplay}`, если задано.
+ * Возвращает undefined, если workspace context выключен и имени нет, или workspace нет.
  */
 export async function getAlwaysOnWorkspaceContext(): Promise<string | undefined> {
 	const settings = getSettings();
-	// Мастер-флаг: без enableWorkspaceContext - никакого автоконтекста workspace
-	if (!settings.enableWorkspaceContext || !settings.alwaysOnWorkspaceContext) {
+	const username = settings.usernameDisplay.trim();
+	// Мастер-флаг: без enableWorkspaceContext - никакого автоконтекста (кроме имени - тоже под флагом)
+	if (!settings.enableWorkspaceContext) {
 		return undefined;
 	}
 
 	const folder = vscode.workspace.workspaceFolders?.[0];
-	if (!folder) {
+	if (!folder && !username) {
 		return undefined;
 	}
 
 	const lines: string[] = ['[Always-on workspace]'];
+	if (username) {
+		lines.push(`User: ${username}`);
+	}
+
+	if (!settings.alwaysOnWorkspaceContext || !folder) {
+		return username ? lines.join('\n') : undefined;
+	}
 
 	const branch = await runGit(folder.uri.fsPath, ['status', '-sb']);
 	if (branch) {

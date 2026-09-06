@@ -17,7 +17,10 @@ suite('chunkFileContent', () => {
 	test('режет по function', () => {
 		const src = [
 			'function a() {',
-			'  return 1;',
+			'  const x = 1;',
+			'  const y = 2;',
+			'  const z = 3;',
+			'  return x + y + z;',
 			'}',
 			'',
 			'function b() {',

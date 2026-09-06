@@ -19,7 +19,7 @@ function toGlob(pattern: string): string {
 
 export const searchFilesTool: ToolDefinition = {
 	name: 'search_files',
-	description: 'Поиск файлов по glob и/или тексту внутри workspace. Учитывает .gitignore/.genignore и запрещённые пути из настроек.',
+	description: 'Устаревший алиас: предпочитай glob (пути) и grep (содержимое). Поиск файлов по glob и/или тексту внутри workspace.',
 	parameters: {
 		type: 'object',
 		properties: {

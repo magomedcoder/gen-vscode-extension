@@ -39,6 +39,40 @@ suite('parseMentions', () => {
 		assert.strictEqual(mentions[3].kind, 'agent');
 		assert.strictEqual(mentions[3].arg, 'scout');
 	});
+
+	test('разбирает @terminals', () => {
+		const text = 'смотри @terminals что упало';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 1);
+		assert.strictEqual(mentions[0].kind, 'terminals');
+		assert.strictEqual(stripMentions(text, mentions), 'смотри что упало');
+	});
+
+	test('разбирает @past и @past с заголовком', () => {
+		const text = 'сравни @past:abc123 и @past `Fix auth` плюс @past';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 3);
+		assert.strictEqual(mentions[0].kind, 'past');
+		assert.strictEqual(mentions[0].arg, 'abc123');
+		assert.strictEqual(mentions[1].kind, 'past');
+		assert.strictEqual(mentions[1].arg, 'Fix auth');
+		assert.strictEqual(mentions[2].kind, 'past');
+		assert.strictEqual(mentions[2].arg, undefined);
+		assert.strictEqual(stripMentions(text, mentions), 'сравни и плюс');
+	});
+
+	test('разбирает @alias и @ref без поломки других mentions', () => {
+		const text = 'смотри @alias sdk и @ref:upstream плюс @file src/a.ts';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 3);
+		assert.strictEqual(mentions[0].kind, 'alias');
+		assert.strictEqual(mentions[0].arg, 'sdk');
+		assert.strictEqual(mentions[1].kind, 'ref');
+		assert.strictEqual(mentions[1].arg, 'upstream');
+		assert.strictEqual(mentions[2].kind, 'file');
+		assert.strictEqual(mentions[2].arg, 'src/a.ts');
+		assert.strictEqual(stripMentions(text, mentions), 'смотри и плюс');
+	});
 });
 
 suite('packContext', () => {

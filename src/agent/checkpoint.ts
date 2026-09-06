@@ -11,12 +11,22 @@ interface CheckpointEntry {
 
 export class AgentCheckpoint {
 	private readonly entries = new Map<string, CheckpointEntry>();
+	// false - не копить снимки (snapshotEnabled выкл.): remember сразу выходит
+	readonly enabled: boolean;
+
+	constructor(enabled = true) {
+		this.enabled = enabled;
+	}
 
 	get size(): number {
 		return this.entries.size;
 	}
 
 	async remember(uri: vscode.Uri, relative: string, before: string | undefined): Promise<void> {
+		if (!this.enabled) {
+			return;
+		}
+
 		const key = uri.toString();
 		if (this.entries.has(key)) {
 			return;

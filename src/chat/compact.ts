@@ -5,9 +5,16 @@ import type { ChatUiMessage } from './protocol';
 
 const DEFAULT_KEEP_TURNS = 4;
 const MAX_SUMMARY_INPUT = 24_000;
+const TOOL_SLICE_DEFAULT = 400;
+const TOOL_SLICE_PRUNE = 80;
 
 export interface CompactOptions {
+	// Сколько последних ходов оставить (из compactTailTurns)
 	keepTurns?: number;
+	// Агрессивно ужимать tool-контент и args в старых ходах
+	pruneToolResults?: boolean;
+	// Placeholder: зарезервированный headroom токенов (пока не используется)
+	reservedTokens?: number;
 	signal?: AbortSignal;
 }
 
@@ -41,7 +48,13 @@ export function splitIntoTurns(messages: readonly ChatUiMessage[]): ChatUiMessag
 	return turns;
 }
 
-function serializeTurns(turns: readonly ChatUiMessage[][]): string {
+function serializeTurns(
+	turns: readonly ChatUiMessage[][],
+	opts: {
+		pruneToolResults: boolean
+	},
+): string {
+	const toolSlice = opts.pruneToolResults ? TOOL_SLICE_PRUNE : TOOL_SLICE_DEFAULT;
 	const lines: string[] = [];
 	for (const turn of turns) {
 		for (const msg of turn) {
@@ -49,15 +62,24 @@ function serializeTurns(turns: readonly ChatUiMessage[][]): string {
 				lines.push(`Пользователь: ${msg.content}`);
 			} else if (msg.role === 'assistant') {
 				lines.push(`Ассистент: ${msg.content}`);
+				if (msg.toolCalls?.length) {
+					for (const call of msg.toolCalls) {
+						// При prune не тащим args в summary-prompt
+						const argsPart = opts.pruneToolResults
+							? ''
+							: (call.arguments ? ` args=${call.arguments.slice(0, toolSlice)}` : '');
+						lines.push(`  tool_call ${call.name}${argsPart}`);
+					}
+				}
 			} else if (msg.role === 'error') {
 				lines.push(`Ошибка: ${msg.content}`);
 			} else if (msg.role === 'tool') {
-				lines.push(`Tool ${msg.toolName ?? ''}: ${msg.content.slice(0, 400)}`);
+				lines.push(`Tool ${msg.toolName ?? ''}: ${msg.content.slice(0, toolSlice)}`);
 			}
 		}
 		lines.push('---');
 	}
-	
+
 	const text = lines.join('\n');
 	return text.length > MAX_SUMMARY_INPUT
 		? `${text.slice(0, MAX_SUMMARY_INPUT)}\n\n[truncated]`
@@ -74,7 +96,11 @@ export async function compactChatMessages(
 	client: LlmClient,
 	opts?: CompactOptions,
 ): Promise<CompactResult> {
-	const keepTurns = Math.max(1, opts?.keepTurns ?? DEFAULT_KEEP_TURNS);
+	const settings = getSettings();
+	const keepTurns = Math.max(1, opts?.keepTurns ?? settings.compactTailTurns ?? DEFAULT_KEEP_TURNS);
+	const pruneToolResults = opts?.pruneToolResults ?? settings.compactPruneToolResults;
+	const reservedTokens = Math.max(0, opts?.reservedTokens ?? settings.compactReservedTokens);
+
 	const turns = splitIntoTurns(messages);
 	if (turns.length <= keepTurns) {
 		return {
@@ -86,14 +112,16 @@ export async function compactChatMessages(
 
 	const older = turns.slice(0, -keepTurns);
 	const recent = turns.slice(-keepTurns);
-	const settings = getSettings();
 	const model = settings.smallModel.trim() || undefined;
 	const prompt = [
 		'Суммируй предыдущую переписку чата для coding-агента.',
 		'Сохрани: цель задачи, принятые решения, ключевые пути файлов, незавершённые шаги.',
 		'Пиши кратко, на языке пользователя, без воды.',
+		...(reservedTokens > 0
+			? [`Уложи summary примерно в ${reservedTokens} токенов (короче при необходимости).`]
+			: []),
 		'',
-		serializeTurns(older),
+		serializeTurns(older, { pruneToolResults }),
 	].join('\n');
 
 	const result = await client.complete({

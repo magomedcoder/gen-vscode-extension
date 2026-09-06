@@ -33,7 +33,7 @@
 
 ## Настройки
 
-См. раздел **Комментарии** в [settings-ru.md](settings-ru.md): стиль, preview, доп. prompt.
+См. **Чат Комментарии** в [settings-ru.md](settings-ru.md): стиль, preview, доп. prompt.
 
 ## Языки
 

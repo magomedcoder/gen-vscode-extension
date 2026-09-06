@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { Uri } from 'vscode';
+import type { ImageAttachment } from '../chat/attachments';
 import type { LlmToolDefinition } from '../llm/types';
 import type { AgentCheckpoint } from './checkpoint';
 import type { DiffHunkPayload } from './diff';
@@ -32,6 +33,8 @@ export interface ToolResult {
 	path?: string;
 	diff?: string;
 	hunks?: DiffHunkPayload[];
+	// Картинки из tool (например read_file) - уйдут в vision на следующем шаге цикла
+	attachments?: ImageAttachment[];
 }
 
 export interface ToolDefinition {

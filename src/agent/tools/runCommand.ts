@@ -5,7 +5,7 @@ import { runShellCommand } from '../shellExec';
 import { formatCommandLine } from '../commandPolicy';
 import { confirmAlwaysOrSkip } from './confirm';
 import type { ShellSession } from '../shellSession';
-import { runBeforeShellHook } from '../../project/hooks';
+import { runBeforeShellHook, runShellEnvHook } from '../../project/hooks';
 
 function asStringArray(args: Record<string, unknown>, key: string): string[] {
 	const value = args[key];
@@ -85,6 +85,18 @@ export const runCommandTool: ToolDefinition = {
 			};
 		}
 
+		// shell.env: inject/modify env или veto перед spawn
+		const envHook = await runShellEnvHook(commandLine, cwd, ctx.signal);
+		if (envHook.vetoed) {
+			return {
+				ok: false,
+				denied: true,
+				path: relative,
+				content: envHook.stderr?.trim() || vscode.l10n.t('chat.hooks.veto', 'shell.env', commandLine),
+			};
+		}
+		const envExtra = envHook.env ?? {};
+
 		if (background) {
 			if (!shell) {
 				return {
@@ -93,7 +105,7 @@ export const runCommandTool: ToolDefinition = {
 				};
 			}
 
-			const job = shell.startBackground(command, cmdArgs, cwd, ctx.signal);
+			const job = shell.startBackground(command, cmdArgs, cwd, ctx.signal, envExtra);
 			shell.applyCd(command, cmdArgs);
 			return {
 				ok: true,
@@ -113,6 +125,7 @@ export const runCommandTool: ToolDefinition = {
 			cwd,
 			timeoutMs,
 			signal: ctx.signal,
+			env: envExtra,
 		});
 		if (shell && result.ok) {
 			shell.applyCd(command, cmdArgs);

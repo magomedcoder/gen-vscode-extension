@@ -8,22 +8,48 @@ import { AgentCheckpoint } from './checkpoint';
 import { clearIgnoreCache } from './gitIgnore';
 import { formatStickyPlanForPrompt, StickyPlan } from './plan';
 import { buildAgentSystemPrompt } from './prompts';
+import { includeApplyPatchForModel } from './modelRoutedPatch';
 import { getGenRulesManager } from '../project/genrules';
 import { loadProjectRulesAppendix } from '../project/projectRules';
 import { discoverSkills, formatSkillsCatalog } from '../project/skills';
+import { discoverLocalPlugins, formatPluginsCatalog } from '../project/plugins';
 import { formatPersonaAppendix, resolvePersona } from '../project/personas';
 import { recordUsage } from '../stores/usageStore';
+import { activityKindFromTool, recordActivity, summarizeToolActivity } from '../stores/activityStore';
 import { redactSecrets } from './secrets';
 import { executeAgentTool, getAgentLlmTools } from './tools';
 import type { ExtendedToolContext } from './tools';
 import { TodoStore } from './todoStore';
 import { isMutatingTool } from './auth';
 import { resolveSubagent } from './subagents';
+import { withAgentRoot } from './agentRoot';
 import { defaultWorkspaceCwd, ShellSession } from './shellSession';
-import { sanitizeToolArgumentsForApi, type ToolContext } from './types';
+import { sanitizeToolArgumentsForApi, type ToolContext, type ToolResult } from './types';
 import type { AgentWriteTracker } from './userEdits';
 import { confirmOrSkip } from './tools/confirm';
 import { buildUserContentWithImages, type ImageAttachment } from '../chat/attachments';
+import { completeWithContextGuard, shrinkApiMessages } from '../chat/fitContext';
+import { estimateChatMessagesTokens } from '../llm/estimateTokens';
+import { getCachedNCtx, getEffectiveContextBudget, isNearContextBudget } from '../llm/contextBudget';
+
+// Уникальные пути из успешного mutating tool (path или hunks)
+function collectTurnDiffPaths(toolResult: ToolResult, into: Set<string>): void {
+	if (!toolResult.ok) {
+		return;
+	}
+
+	const path = toolResult.path?.trim();
+	if (path) {
+		into.add(path);
+	}
+
+	for (const hunk of toolResult.hunks ?? []) {
+		const hunkPath = hunk.path?.trim();
+		if (hunkPath) {
+			into.add(hunkPath);
+		}
+	}
+}
 
 function messageId(): string {
 	return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -133,6 +159,43 @@ function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
 	return out;
 }
 
+function parseTimeoutMsFromArgs(name: string, rawArgs: string): number | undefined {
+	if (name !== 'run_command') {
+		return undefined;
+	}
+
+	try {
+		const args = JSON.parse(rawArgs) as Record<string, unknown>;
+		const value = args.timeout_ms;
+		if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+			const maxMs = getSettings().maxToolTimeoutMs || 300_000;
+			return Math.min(maxMs, Math.floor(value));
+		}
+	} catch {}
+
+	return undefined;
+}
+
+const SHELL_UI_TOOLS = new Set(['run_command', 'run_tests', 'await_shell']);
+
+// Достаёт cwd/exit из текста shellExec / await_shell (строки `cwd:` и `exit:`)
+function parseShellMetaFromResult(toolName: string, resultText: string): Pick<ToolCallUi, 'cwd' | 'exitCode'> {
+	if (!SHELL_UI_TOOLS.has(toolName)) {
+		return {};
+	}
+
+	const cwdMatch = /^cwd:\s*(.+)$/m.exec(resultText);
+	const exitMatch = /^exit:\s*(\d+)/m.exec(resultText);
+	const cwd = cwdMatch?.[1]?.trim();
+	const exitRaw = exitMatch?.[1];
+	const exitCode = exitRaw !== undefined ? Number(exitRaw) : undefined;
+
+	return {
+		...(cwd ? { cwd } : {}),
+		...(exitCode !== undefined && Number.isFinite(exitCode) ? { exitCode } : {}),
+	};
+}
+
 function toToolCallUi(call: LlmToolCall, status: ToolCallStatus = 'pending'): ToolCallUi {
 	return {
 		id: call.id,
@@ -140,6 +203,8 @@ function toToolCallUi(call: LlmToolCall, status: ToolCallStatus = 'pending'): To
 		arguments: call.function.arguments,
 		path: pathFromToolArguments(call.function.arguments),
 		status,
+		startedAt: Date.now(),
+		timeoutMs: parseTimeoutMsFromArgs(call.function.name, call.function.arguments),
 	};
 }
 
@@ -160,6 +225,12 @@ export class AgentSession {
 		signal: AbortSignal;
 		ui: AgentUiSink;
 		confirm?: ToolContext['confirm'];
+		// Mid-run вопрос (ask_question) - title/prompt/options * ответ строкой
+		askQuestion?: (request: {
+			title: string;
+			prompt: string;
+			options?: string[];
+		}) => Promise<string>;
 		revealFile?: ToolContext['revealFile'];
 		trackMutation?: ToolContext['trackMutation'];
 		plan?: StickyPlan;
@@ -171,6 +242,12 @@ export class AgentSession {
 		sessionAllow?: string[];
 		onAlwaysAllow?: (pattern: string) => void;
 		setChatMode?: (mode: ChatMode) => void | Promise<void>;
+		// Список todos текущего run для UI-панели
+		onTodosChanged?: (todos: Array<{
+			id: string
+			content: string
+			status: string
+		}>) => void;
 		// Колбэк перед паузой HTTP-retry (пробрасывается в LLM client)
 		onRetry?: (info: LlmRetryInfo) => void;
 		// Глубина вложенного субагента (0 = основной агент)
@@ -179,18 +256,40 @@ export class AgentSession {
 		readonlySubagent?: boolean;
 		// Доп. system prompt для субагентов
 		subagentSystem?: string;
+		// Cwd для ShellSession и относительных путей (git worktree)
+		cwd?: string;
 		maxIterationsOverride?: number;
+		// Id чат-сессии для Activity ledger
+		sessionId?: string;
+		// Мягкая пауза при исчерпании лимита итераций (не hard failure)
+		onPaused?: (info: { reason: 'max_steps'; iterations: number }) => void;
+		// Старт tool - зарегистрировать AbortController для cancelToolCall
+		onToolStart?: (toolCallId: string, controller: AbortController) => void;
+		// Завершение tool - снять AbortController
+		onToolEnd?: (toolCallId: string) => void;
+		// Файлы, изменённые за этот run (session diff / UI-баннер)
+		onTurnDiff?: (info: { turnId: string; paths: string[] }) => void;
 	}): Promise<void> {
 		const settings = getSettings();
-		const maxIterations = params.maxIterationsOverride
-			?? settings.agentMaxIterations;
+		const maxIterations = params.maxIterationsOverride ?? settings.agentMaxIterations;
 		const unlimited = !params.maxIterationsOverride && maxIterations === 0;
 		let toolsEnabled = true;
 		const plan = params.plan ?? new StickyPlan();
 		const checkpoint = params.checkpoint ?? new AgentCheckpoint();
 		const writes = params.writes;
-		const todos = new TodoStore();
-		const shell = new ShellSession(defaultWorkspaceCwd());
+		const turnId = messageId();
+		const turnDiffPaths = new Set<string>();
+		const notifyTodos = (items: Array<{ 
+			id: string
+			content: string
+			status: string
+		}>) => {
+			params.onTodosChanged?.(items);
+		};
+		const todos = new TodoStore(notifyTodos);
+		notifyTodos([]);
+		const rootCwd = (params.cwd?.trim() || defaultWorkspaceCwd());
+		const shell = new ShellSession(rootCwd);
 		const depth = params.subagentDepth ?? 0;
 		let agentMode: ChatMode = normalizeAgentMode(params.mode);
 		clearIgnoreCache();
@@ -209,6 +308,7 @@ export class AgentSession {
 			?? getGenRulesManager()?.getPromptAppendix()
 			?? '';
 		const skillsAppendix = depth === 0 ? (formatSkillsCatalog(await discoverSkills()) ?? '') : '';
+		const pluginsAppendix = depth === 0 ? (formatPluginsCatalog(await discoverLocalPlugins()) ?? '') : '';
 		let personaAppendix = '';
 		if (depth === 0 && settings.personaId.trim()) {
 			const persona = await resolvePersona(settings.personaId);
@@ -226,15 +326,17 @@ export class AgentSession {
 			customSystem,
 			buildAgentSystemPrompt({
 				toolsAvailable,
-				authLevel: settings.agentAuthLevel,
 				deniedPaths: settings.deniedPaths,
 				userEditsAppendix,
 				planAppendix,
 				planEditsAppendix,
 				genRulesAppendix,
 				skillsAppendix,
+				pluginsAppendix,
 				planWriteToFile: settings.planWriteToFile,
+				planShellPolicy: settings.planShellPolicy,
 				mode,
+				includeApplyPatch: includeApplyPatchForModel(settings.model, settings.modelRoutedPatch),
 			}),
 		].filter(Boolean).join('\n\n');
 
@@ -253,6 +355,23 @@ export class AgentSession {
 		const toolCtxBase: ExtendedToolContext = {
 			signal: params.signal,
 			confirm: params.confirm,
+			askQuestion: params.askQuestion
+				? async (req) => {
+					const first = req.questions[0];
+					if (!first) {
+						return {};
+					}
+
+					const answer = await params.askQuestion!({
+						title: req.title,
+						prompt: first.prompt,
+						options: first.options,
+					});
+					return { 
+						[first.id]: answer 
+					};
+				}
+				: undefined,
 			revealFile: params.revealFile,
 			trackMutation: params.trackMutation,
 			plan,
@@ -278,46 +397,58 @@ export class AgentSession {
 					content: buildSystem(toolsEnabled, agentMode),
 				};
 			},
-			runSubagent: async ({ type, prompt, signal }) => {
+			runSubagent: async ({ type, prompt, signal, cwd }) => {
 				const def = await resolveSubagent(type);
 				const child = new AgentSession(this.client);
 				const chunks: string[] = [];
-				await child.run({
-					history: [],
-					userText: prompt,
-					signal,
-					confirm: params.confirm,
-					revealFile: params.revealFile,
-					trackMutation: params.trackMutation,
-					// permission.task: субагент не наследует sessionAllow родителя (строже)
-					sessionAllow: undefined,
-					onAlwaysAllow: params.onAlwaysAllow,
-					subagentDepth: depth + 1,
-					readonlySubagent: def?.readonly ?? true,
-					subagentSystem: def?.prompt,
-					maxIterationsOverride: def?.maxIterations ?? 12,
-					mode: 'agent',
-					onRetry: params.onRetry,
-					ui: {
-						append: (message) => {
-							if (message.role === 'assistant' && message.content.trim()) {
-								chunks.push(message.content.trim());
-							}
+				const runChild = async () => {
+					await child.run({
+						history: [],
+						userText: prompt,
+						signal,
+						sessionId: params.sessionId,
+						confirm: params.confirm,
+						askQuestion: params.askQuestion,
+						revealFile: params.revealFile,
+						trackMutation: params.trackMutation,
+						// permission.task: субагент не наследует sessionAllow родителя (строже)
+						sessionAllow: undefined,
+						onAlwaysAllow: params.onAlwaysAllow,
+						subagentDepth: depth + 1,
+						readonlySubagent: def?.readonly ?? true,
+						subagentSystem: def?.prompt,
+						maxIterationsOverride: def?.maxIterations ?? 12,
+						cwd: cwd?.trim() || undefined,
+						mode: 'agent',
+						onRetry: params.onRetry,
+						ui: {
+							append: (message) => {
+								if (message.role === 'assistant' && message.content.trim()) {
+									chunks.push(message.content.trim());
+								}
 
-							if (message.role === 'error') {
-								chunks.push(`[error] ${message.content}`);
-							}
+								if (message.role === 'error') {
+									chunks.push(`[error] ${message.content}`);
+								}
 
-							params.ui.append({
-								...message,
-								content: message.role === 'assistant'
-									? `[subagent:${type}] ${message.content}`
-									: message.content,
-							});
+								params.ui.append({
+									...message,
+									content: message.role === 'assistant'
+										? `[subagent:${type}] ${message.content}`
+										: message.content,
+								});
+							},
+							update: (id, patch) => params.ui.update(id, patch),
 						},
-						update: (id, patch) => params.ui.update(id, patch),
-					},
-				});
+					});
+				};
+				const childCwd = cwd?.trim();
+				if (childCwd) {
+					await withAgentRoot(childCwd, runChild);
+				} else {
+					await runChild();
+				}
+				
 				return chunks.slice(-3).join('\n\n') || '(subagent finished with no text)';
 			},
 		};
@@ -326,6 +457,7 @@ export class AgentSession {
 		let doomKey = '';
 		let doomFails = 0;
 
+		try {
 		for (let iteration = 0; unlimited || iteration < maxIterations; iteration += 1) {
 			if (params.signal.aborted) {
 				throw toAbortError();
@@ -334,28 +466,72 @@ export class AgentSession {
 			const toolOpts = {
 				readonly: params.readonlySubagent === true || isReadonlyMode(agentMode),
 				disableTask: depth > 0,
+				// субагенты не режем primaryTools
+				primary: depth === 0,
+				modelId: settings.model,
 			};
 
 			const assistantId = messageId();
 			let streamed = '';
+			let streamedThinking = '';
 			params.ui.append({
 				id: assistantId,
 				role: 'assistant',
 				content: '',
 			});
 
-			const result = await this.client.complete({
-				messages: apiMessages,
-				signal: params.signal,
-				tools: toolsEnabled ? getAgentLlmTools(agentMode, toolOpts) : undefined,
-				toolChoice: toolsEnabled ? 'auto' : 'none',
-				onDelta: (chunk) => {
-					streamed += chunk;
+			const settingsNow = getSettings();
+			const budget = getEffectiveContextBudget(
+				settingsNow,
+				getCachedNCtx(settingsNow.baseUrl, settingsNow.model),
+			);
+			if (isNearContextBudget(estimateChatMessagesTokens(apiMessages), budget)) {
+				const shrunk = shrinkApiMessages(apiMessages, budget, settingsNow);
+				if (shrunk.changed) {
+					apiMessages.length = 0;
+					apiMessages.push(...shrunk.messages);
+				}
+			}
+
+			const result = await completeWithContextGuard({
+				client: this.client,
+				settings: settingsNow,
+				getMessages: () => apiMessages,
+				setMessages: (next) => {
+					apiMessages.length = 0;
+					apiMessages.push(...next);
+				},
+				complete: (messages) => this.client.complete({
+					messages,
+					signal: params.signal,
+					tools: toolsEnabled ? getAgentLlmTools(agentMode, toolOpts) : undefined,
+					toolChoice: toolsEnabled ? 'auto' : 'none',
+					onDelta: (chunk) => {
+						streamed += chunk;
+						params.ui.update(assistantId, {
+							content: streamed
+						});
+					},
+					onThinkingDelta: (chunk) => {
+						streamedThinking += chunk;
+						params.ui.update(assistantId, {
+							thinking: streamedThinking
+						});
+					},
+					onRetry: params.onRetry,
+				}),
+				onStatus: (detail) => {
+					params.onRetry?.({
+						attempt: 1,
+						maxAttempts: 2,
+						status: 400,
+						delayMs: 0,
+					});
 					params.ui.update(assistantId, {
-						content: streamed
+						content: streamed || detail,
 					});
 				},
-				onRetry: params.onRetry,
+				signal: params.signal,
 			});
 
 			if (result.toolsFallback && toolsEnabled) {
@@ -373,8 +549,10 @@ export class AgentSession {
 
 			const toolCalls = result.toolCalls ?? [];
 			const content = (result.content || streamed).trim();
+			const thinking = (result.thinking || streamedThinking).trim() || undefined;
 			params.ui.update(assistantId, {
 				content,
+				thinking,
 				usage: result.usage,
 			});
 			if (result.usage) {
@@ -464,68 +642,168 @@ export class AgentSession {
 							name: call.function.name,
 							content: redactSecrets(resultText).text,
 							denied: true,
+							cancelled: false,
 						};
 					}
 				}
 
-				const toolResult = await executeAgentTool(call.function.name, call.function.arguments, toolCtxBase);
-				const lengthHint = !toolResult.ok && result.finishReason === 'length'
-					? vscode.l10n.t('agent.responseTruncated')
-					: '';
-				let resultText = truncate(`${toolResult.content}${lengthHint}`);
+				// Per-tool AbortController: отмена одного tool не рвёт весь turn
+				const toolAbort = new AbortController();
+				const onParentAbort = () => toolAbort.abort();
+				params.signal.addEventListener('abort', onParentAbort);
+				if (params.signal.aborted) {
+					toolAbort.abort();
+				}
+				params.onToolStart?.(call.id, toolAbort);
 
-				if (!toolResult.ok && !toolResult.denied) {
-					if (doomKey === failKey) {
-						doomFails += 1;
-					} else {
-						doomKey = failKey;
-						doomFails = 1;
-					}
-
-					if (doomFails >= 3) {
-						toolCtxBase.skipConfirm = false;
-						resultText = truncate(`${resultText}\n\n[doom_loop] Тот же tool+похожие args упал ${doomFails} раз подряд. Не повторяй без изменений - смени подход или попроси подтверждение.`);
-					}
-				} else if (toolResult.ok) {
-					doomKey = '';
-					doomFails = 0;
+				const toolPathHint = pathFromToolArguments(call.function.arguments);
+				const toolKind = activityKindFromTool(call.function.name);
+				const toolSummary = summarizeToolActivity(
+					call.function.name,
+					call.function.arguments,
+					toolPathHint,
+				);
+				// Старт только для заметных действий (shell / mcp / edit) - без шума от read/grep
+				if (toolKind !== 'tool') {
+					recordActivity({
+						kind: toolKind,
+						label: `${toolSummary}...`,
+						path: toolPathHint,
+						sessionId: params.sessionId,
+						toolName: call.function.name,
+						status: 'start',
+					});
 				}
 
-				const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
-
-				liveCalls[i] = {
-					...liveCalls[i]!,
-					status,
-					result: resultText,
-					path: toolResult.path ?? liveCalls[i]!.path,
-					diff: toolResult.diff,
-					hunks: toolResult.hunks,
+				const finishToolUi = (
+					status: ToolCallStatus,
+					resultText: string,
+					extra?: Partial<ToolCallUi>,
+					attachments?: ImageAttachment[],
+				) => {
+					liveCalls[i] = {
+						...liveCalls[i]!,
+						status,
+						result: resultText,
+						...extra,
+					};
+					params.ui.update(assistantId, {
+						toolCalls: liveCalls.map((c) => ({ ...c })),
+					});
+					params.ui.append({
+						id: messageId(),
+						role: 'tool',
+						content: resultText,
+						toolCallId: call.id,
+						toolName: call.function.name,
+						toolArgs: call.function.arguments,
+						toolStatus: status,
+						...(attachments?.length ? { attachments } : {}),
+					});
 				};
-				params.ui.update(assistantId, {
-					toolCalls: liveCalls.map((c) => ({ ...c })),
-				});
 
-				params.ui.append({
-					id: messageId(),
-					role: 'tool',
-					content: resultText,
-					toolCallId: call.id,
-					toolName: call.function.name,
-					toolArgs: call.function.arguments,
-					toolStatus: status,
-				});
+				try {
+					const toolResult = await executeAgentTool(
+						call.function.name,
+						call.function.arguments,
+						{ 
+							...toolCtxBase,
+							signal: toolAbort.signal
+						},
+					);
+					const lengthHint = !toolResult.ok && result.finishReason === 'length'
+						? vscode.l10n.t('agent.responseTruncated')
+						: '';
+					let resultText = truncate(`${toolResult.content}${lengthHint}`);
 
-				return {
-					role: 'tool' as const,
-					tool_call_id: call.id,
-					name: call.function.name,
-					content: redactSecrets(resultText).text,
-					denied: Boolean(toolResult.denied),
-				};
+					if (!toolResult.ok && !toolResult.denied) {
+						if (doomKey === failKey) {
+							doomFails += 1;
+						} else {
+							doomKey = failKey;
+							doomFails = 1;
+						}
+
+						if (doomFails >= 3) {
+							toolCtxBase.skipConfirm = false;
+							resultText = truncate(`${resultText}\n\n[doom_loop] Тот же tool+похожие args упал ${doomFails} раз подряд. Не повторяй без изменений - смени подход или попроси подтверждение.`);
+						}
+					} else if (toolResult.ok) {
+						doomKey = '';
+						doomFails = 0;
+					}
+
+					const status: ToolCallStatus = toolResult.denied ? 'denied' : toolResult.ok ? 'ok' : 'error';
+					const toolAttachments = toolResult.attachments?.length ? toolResult.attachments : undefined;
+					const resultPath = toolResult.path ?? liveCalls[i]!.path;
+					finishToolUi(status, resultText, {
+						path: resultPath,
+						diff: toolResult.diff,
+						hunks: toolResult.hunks,
+						...parseShellMetaFromResult(call.function.name, resultText),
+					}, toolAttachments);
+
+					recordActivity({
+						kind: activityKindFromTool(call.function.name),
+						label: `${summarizeToolActivity(call.function.name, call.function.arguments, resultPath)} * ${status}`,
+						path: resultPath,
+						sessionId: params.sessionId,
+						toolName: call.function.name,
+						status,
+					});
+
+					// Session diff: только успешные mutating-tools
+					if (toolResult.ok && isMutatingTool(call.function.name)) {
+						collectTurnDiffPaths(toolResult, turnDiffPaths);
+					}
+
+					return {
+						role: 'tool' as const,
+						tool_call_id: call.id,
+						name: call.function.name,
+						content: redactSecrets(resultText).text,
+						denied: Boolean(toolResult.denied),
+						cancelled: false,
+						attachments: toolAttachments,
+					};
+				} catch (err) {
+					// Отмена только этого tool - продолжаем цикл агента
+					if (isAbortError(err) && !params.signal.aborted) {
+						const resultText = truncate(vscode.l10n.t('agent.operationCancelled'));
+						finishToolUi('denied', resultText);
+						recordActivity({
+							kind: activityKindFromTool(call.function.name),
+							label: `${toolSummary} * cancelled`,
+							path: toolPathHint,
+							sessionId: params.sessionId,
+							toolName: call.function.name,
+							status: 'denied',
+						});
+						return {
+							role: 'tool' as const,
+							tool_call_id: call.id,
+							name: call.function.name,
+							content: redactSecrets(resultText).text,
+							denied: true,
+							cancelled: true,
+						};
+					}
+					throw err;
+				} finally {
+					params.signal.removeEventListener('abort', onParentAbort);
+					params.onToolEnd?.(call.id);
+				}
 			};
 
 			// Tools только на чтение - параллельно; мутирующие - строго по очереди.
 			const toolApiMessages: ChatMessage[] = [];
+			// Картинки из tools этого turn * synthetic user message перед следующим complete()
+			const pendingToolImages: ImageAttachment[] = [];
+			const collectToolImages = (atts: ImageAttachment[] | undefined) => {
+				if (atts?.length) {
+					pendingToolImages.push(...atts);
+				}
+			};
 			let i = 0;
 			while (i < orderedCalls.length) {
 				if (params.signal.aborted) {
@@ -535,7 +813,9 @@ export class AgentSession {
 				const call = orderedCalls[i]!;
 				if (isMutatingTool(call.function.name) || call.function.name === 'propose_plan' || call.function.name === 'ask_question') {
 					const msg = await runOne(i);
-					if (msg.denied && !settings.continueLoopOnDeny) {
+					collectToolImages(msg.attachments);
+					// cancelled (per-tool kill) - всегда продолжаем цикл
+					if (msg.denied && !msg.cancelled && !settings.continueLoopOnDeny) {
 						apiMessages.push({
 							role: 'tool',
 							tool_call_id: msg.tool_call_id,
@@ -562,13 +842,14 @@ export class AgentSession {
 				const batch = await Promise.all(Array.from({ length: j - i }, (_, k) => runOne(i + k)));
 
 				for (const msg of batch) {
+					collectToolImages(msg.attachments);
 					toolApiMessages.push({
 						role: 'tool',
 						tool_call_id: msg.tool_call_id,
 						name: msg.name,
 						content: msg.content
 					});
-					if (msg.denied && !settings.continueLoopOnDeny) {
+					if (msg.denied && !msg.cancelled && !settings.continueLoopOnDeny) {
 						apiMessages.push(...toolApiMessages);
 						return;
 					}
@@ -576,16 +857,40 @@ export class AgentSession {
 				i = j;
 			}
 			apiMessages.push(...toolApiMessages);
+
+			// OpenAI tool role - text-only; image parts на user message перед следующей итерацией
+			if (pendingToolImages.length > 0) {
+				const visionContent = await buildUserContentWithImages(
+					vscode.l10n.t('agent.toolImagesFollowUp'),
+					pendingToolImages,
+				);
+				apiMessages.push({
+					role: 'user',
+					content: visionContent,
+				});
+			}
 		}
 
 		if (unlimited) {
 			return;
 		}
 
+		// Мягкая пауза: не hard failure - UI предложит Continue / Stop
 		params.ui.append({
 			id: messageId(),
 			role: 'error',
-			content: vscode.l10n.t('agent.iterationLimit', maxIterations),
+			content: vscode.l10n.t('chat.pause.maxSteps', maxIterations),
 		});
+		params.onPaused?.({
+			reason: 'max_steps',
+			iterations: maxIterations
+		});
+		} finally {
+			todos.clear();
+			params.onTurnDiff?.({
+				turnId,
+				paths: [...turnDiffPaths],
+			});
+		}
 	}
 }

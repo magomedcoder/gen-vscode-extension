@@ -1,7 +1,8 @@
+import * as vscode from 'vscode';
 import { getSettings } from '../../config/settings';
+import { semanticSearchWorkspace } from '../../index/embeddings';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { throwIfAborted } from '../workspacePath';
-import { semanticSearchWorkspace } from '../../index/embeddings';
 
 export const semanticSearchTool: ToolDefinition = {
 	name: 'semantic_search',
@@ -26,6 +27,13 @@ export const semanticSearchTool: ToolDefinition = {
 			return { 
 				ok: false, 
 				content: 'semantic_search: индексирование отключено в настройках' 
+			};
+		}
+
+		if (settings.indexForGrep === false) {
+			return {
+				ok: false,
+				content: vscode.l10n.t('tool.indexForGrepOff'),
 			};
 		}
 

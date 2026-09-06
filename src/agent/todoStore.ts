@@ -8,6 +8,8 @@ export interface TodoItem {
 export class TodoStore {
 	private items: TodoItem[] = [];
 
+	constructor(private readonly onChange?: (items: TodoItem[]) => void) {}
+
 	snapshot(): TodoItem[] {
 		return this.items.map((item) => ({ ...item }));
 	}
@@ -18,7 +20,9 @@ export class TodoStore {
 			content: String(item.content || '').trim(),
 			status: item.status,
 		})).filter((item) => item.content);
-		return this.snapshot();
+		const snap = this.snapshot();
+		this.onChange?.(snap);
+		return snap;
 	}
 
 	read(): TodoItem[] {
@@ -27,5 +31,6 @@ export class TodoStore {
 
 	clear(): void {
 		this.items = [];
+		this.onChange?.(this.snapshot());
 	}
 }

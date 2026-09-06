@@ -98,6 +98,7 @@ export async function buildUserContentWithImages(
 
 	let textBody = text;
 	const imageParts: ChatContentPart[] = [];
+	// autoResize делается в webview (Composer + ImageBitmap); host только режет по maxBase64
 	const maxB64 = settings.attachmentImageMaxBase64;
 	const folder = vscode.workspace.workspaceFolders?.[0];
 

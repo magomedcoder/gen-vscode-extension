@@ -4,28 +4,55 @@ import { suggestMentions } from './mentionSuggest';
 import type { ChatProjectStatus, FromWebviewMessage, ToWebviewMessage } from './protocol';
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../llm/client';
-import { onSettingsChanged } from '../config/settings';
+import { isAbortError } from '../llm/errors';
+import { getSettings, hasApiKey, getAdminPolicySnapshot, isAdminPolicyActive, onSettingsChanged, setSessionModel } from '../config/settings';
 import { loadWebviewL10n } from '../l10n/loadBundle';
 import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../ui/confirmDialog';
 import { enableProject, isProjectEnabled } from '../project/config';
 import { getIndexManager } from '../index/IndexManager';
+import { resolveWorkspacePath } from '../agent/workspacePath';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
-	private view?: vscode.WebviewView;
+	// Все активные chat webview (panel + sidebar могут быть одновременно)
+	private readonly views = new Set<vscode.WebviewView>();
+	private readonly client = new HttpLlmClient();
 	private readonly session: ChatSession;
+	private modelsAbort?: AbortController;
 
-	constructor(private readonly context: vscode.ExtensionContext) {
-		this.session = new ChatSession(context, new HttpLlmClient());
+	constructor(
+		private readonly context: vscode.ExtensionContext,
+		// Общая сессия для panel + sidebar (иначе создаём свою)
+		sharedSession?: ChatSession,
+	) {
+		this.session = sharedSession ?? new ChatSession(context, this.client);
+		this.session.setWebviewPoster((message) => this.post(message));
 		this.session.subscribe(() => {
 			void this.postState();
 		});
 		onSettingsChanged(() => {
 			void this.postState();
+			void (async () => {
+				const snap = getAdminPolicySnapshot();
+				this.post({
+					type: 'settings',
+					settings: getSettings(),
+					apiKeySet: await hasApiKey(),
+					adminPolicy: {
+						active: isAdminPolicyActive(),
+						path: snap.path,
+						lockedKeys: [...snap.lockedKeys],
+					},
+				});
+			})();
 		});
 		getIndexManager()?.onDidChange(() => {
 			void this.postState();
 		});
+	}
+
+	getSession(): ChatSession {
+		return this.session;
 	}
 
 	requestConfirm(options: ConfirmDialogOptions) {
@@ -44,12 +71,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
-		this.view = webviewView;
+		this.views.add(webviewView);
 
 		const assetsRoot = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview');
+		const codiconsRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'codicons');
 		webviewView.webview.options = {
 			enableScripts: true,
-			localResourceRoots: [assetsRoot],
+			localResourceRoots: [assetsRoot, codiconsRoot],
 		};
 
 		const l10n = loadWebviewL10n(this.context.extensionUri);
@@ -58,6 +86,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			nonce: createNonce(),
 			scriptUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.js')),
 			styleUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'index.css')),
+			codiconsStyleUri: webviewView.webview.asWebviewUri(vscode.Uri.joinPath(codiconsRoot, 'codicon.css')),
 			title: l10n.strings['chat.webviewTitle'],
 			screen: 'chat',
 			l10n,
@@ -69,14 +98,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 		webviewView.onDidDispose(() => {
 			messageSub.dispose();
-			if (this.view === webviewView) {
-				this.view = undefined;
-			}
+			this.views.delete(webviewView);
 		});
 	}
 
 	private post(message: ToWebviewMessage): void {
-		void this.view?.webview.postMessage(message);
+		for (const view of this.views) {
+			void view.webview.postMessage(message);
+		}
 	}
 
 	private async buildProjectStatus(): Promise<ChatProjectStatus> {
@@ -118,6 +147,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		switch (msg.type) {
 			case 'ready':
 				await this.postState();
+				// Settings нужны webview для loadModels(baseUrl) на экране чата
+				{
+					const snap = getAdminPolicySnapshot();
+					this.post({
+						type: 'settings',
+						settings: getSettings(),
+						apiKeySet: await hasApiKey(),
+						adminPolicy: {
+							active: isAdminPolicyActive(),
+							path: snap.path,
+							lockedKeys: [...snap.lockedKeys],
+						},
+					});
+				}
 				return;
 			case 'clear':
 				this.session.clear();
@@ -129,13 +172,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				await this.session.send(msg.text, msg.images);
 				return;
 			case 'editMessage':
-				await this.session.editMessage(msg.id, msg.content);
+				await this.session.editMessage(msg.id, msg.content, {
+					revertFiles: msg.revertFiles,
+				});
 				return;
 			case 'reviewHunk':
 				await this.session.reviewHunk(msg.toolCallId, msg.hunkId, msg.action);
 				return;
 			case 'reviewDiff':
 				await this.session.reviewDiff(msg.toolCallId, msg.action);
+				return;
+			case 'reviewPendingPath':
+				await this.session.reviewPendingPath(msg.path, msg.action);
 				return;
 			case 'mentionSuggest': {
 				const items = await suggestMentions(msg.query);
@@ -149,11 +197,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'setChatMode':
 				await this.session.setMode(msg.mode);
 				return;
+			case 'setModel':
+				this.session.setModel(msg.model);
+				return;
+			case 'loadModels':
+				await this.handleLoadModels(msg.baseUrl, msg.requestId);
+				return;
 			case 'openSettings':
 				SettingsPanel.show(this.context);
 				return;
 			case 'confirmChoice':
 				this.session.resolveConfirm(msg.id, msg.choice);
+				return;
+			case 'answerQuestion':
+				this.session.answerQuestion(msg.id, msg.answer);
 				return;
 			case 'enableProject': {
 				const folder = await enableProject();
@@ -187,6 +244,79 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'forkSession':
 				this.session.forkFromMessage(msg.messageId);
 				return;
+			case 'setComposerDraft':
+				this.session.setComposerDraft(msg.text, msg.chips, msg.sessionId);
+				return;
+			case 'continueAgent':
+				await this.session.continueAgent();
+				return;
+			case 'stopAgentPause':
+				this.session.stopAgentPause();
+				return;
+			case 'cancelToolCall':
+				this.session.cancelToolCall(msg.id);
+				return;
+			case 'dismissPlanHandoff':
+				this.session.dismissPlanHandoff();
+				return;
+			case 'dismissTurnDiff':
+				this.session.dismissTurnDiff();
+				return;
+			case 'openPath': {
+				const path = String(msg.path ?? '').trim();
+				if (!path) {
+					return;
+				}
+				try {
+					const resolved = await resolveWorkspacePath(path);
+					await vscode.window.showTextDocument(resolved.uri, { preview: true });
+				} catch {}
+				return;
+			}
+		}
+	}
+
+	// Загрузить список моделей для компактного picker в шапке чата
+	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {
+		this.modelsAbort?.abort();
+		const controller = new AbortController();
+		this.modelsAbort = controller;
+
+		try {
+			const models = await this.client.listModelOptions({
+				baseUrl,
+				signal: controller.signal,
+			});
+			if (controller.signal.aborted) {
+				return;
+			}
+
+			if (models.length > 0) {
+				const current = getSettings().model;
+				if (!current || !models.some((item) => item.id === current)) {
+					setSessionModel(models[0].id);
+				}
+			}
+
+			this.post({
+				type: 'models',
+				models,
+				requestId,
+			});
+		} catch (err) {
+			if (isAbortError(err) || controller.signal.aborted) {
+				return;
+			}
+
+			this.post({
+				type: 'modelsError',
+				message: err instanceof Error ? err.message : String(err),
+				requestId,
+			});
+		} finally {
+			if (this.modelsAbort === controller) {
+				this.modelsAbort = undefined;
+			}
 		}
 	}
 }

@@ -4,8 +4,11 @@ import { getSettings, setSessionModel, type GenSettings } from '../config/settin
 import { httpErrorMessage, isAbortError, isRetryableError, LlmHttpError, parseErrorDetail, parseRetryAfterMs, retryDelayMs, toAbortError, toTimeoutError, isTimeoutError } from './errors';
 import type { LlmRetryInfo } from './types';
 import { logLlm } from './log';
+import { beginLlmCompleteSpan } from './otel';
+import { assertProviderUseAllowed } from './providerUsePolicy';
 import { parseModelsListResponse, type LlmModelOption } from './modelLabel';
 import { parseUsage } from './usage';
+import { extractThinkingDelta, splitAssistantPayload } from './thinking';
 import type {
 	ChatMessage,
 	CompleteParams,
@@ -117,6 +120,7 @@ function parseToolCalls(raw: ChatCompletionsResponse['choices']): LlmToolCall[] 
 
 interface StreamAccum {
 	content: string;
+	thinking: string;
 	finishReason?: string;
 	error?: string;
 	usage?: CompleteResult['usage'];
@@ -127,7 +131,12 @@ interface StreamAccum {
 	}>;
 }
 
-function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onDelta?: (chunk: string) => void): void {
+function applyStreamDelta(
+	acc: StreamAccum,
+	parsed: ChatCompletionsResponse,
+	onDelta?: (chunk: string) => void,
+	onThinkingDelta?: (chunk: string) => void,
+): void {
 	const usage = parseUsage(parsed.usage);
 	if (usage) {
 		acc.usage = usage;
@@ -148,22 +157,42 @@ function applyStreamDelta(acc: StreamAccum, parsed: ChatCompletionsResponse, onD
 	}
 
 	const delta = (choice as {
-		delta?: {
-			content?: string | null;
-			tool_calls?: Array<{
-				index?: number;
-				id?: string;
-				function?: {
-					name?: string;
-					arguments?: string
-				}
-			}>
+		delta?: Record<string, unknown>;
+		message?: Record<string, unknown>;
+		text?: string;
+	}).delta ?? (choice as { 
+		message?: Record<string, unknown> 
+	}).message;
+
+	const thinkingPiece = extractThinkingDelta(delta);
+	if (thinkingPiece) {
+		acc.thinking += thinkingPiece;
+		onThinkingDelta?.(thinkingPiece);
+	}
+
+	const piece = typeof (delta as { content?: unknown } | undefined)?.content === 'string'
+		? (delta as { content: string }).content
+		: typeof choice.text === 'string'
+			? choice.text
+			: '';
+	// content[] в delta - только текстовые части (thinking уже извлечён выше)
+	let textPiece = piece;
+	if (!textPiece && delta && typeof delta === 'object' && Array.isArray((delta as { content?: unknown }).content)) {
+		const split = splitAssistantPayload({ 
+			content: (delta as { 
+				content: unknown 
+			}).content 
+		});
+		textPiece = split.content;
+		if (split.thinking && !thinkingPiece) {
+			acc.thinking += split.thinking;
+			onThinkingDelta?.(split.thinking);
 		}
-	}).delta ?? choice.message;
-	const piece = delta?.content ?? choice.text;
-	if (typeof piece === 'string' && piece) {
-		acc.content += piece;
-		onDelta?.(piece);
+	}
+
+	if (typeof textPiece === 'string' && textPiece) {
+		acc.content += textPiece;
+		onDelta?.(textPiece);
 	}
 
 	const toolDeltas = (choice as {
@@ -222,12 +251,13 @@ function accumToResult(acc: StreamAccum): CompleteResult {
 			},
 		}))
 		: undefined;
-	if (!acc.content.trim() && !toolCalls?.length) {
+	if (!acc.content.trim() && !toolCalls?.length && !acc.thinking.trim()) {
 		throw new Error(vscode.l10n.t('llm.emptyResponse'));
 	}
 
 	return {
 		content: acc.content,
+		thinking: acc.thinking.trim() || undefined,
 		toolCalls,
 		finishReason: acc.finishReason,
 		usage: acc.usage,
@@ -249,127 +279,162 @@ export class HttpLlmClient implements LlmClient {
 
 	async complete(params: CompleteParams): Promise<CompleteResult> {
 		const settings = this.getConfig();
-		const model = params.model?.trim() || await this.resolveSessionModel(settings);
-		if (!model) {
-			throw new Error(vscode.l10n.t('llm.needModel'));
-		}
+		const span = beginLlmCompleteSpan(settings);
+		const started = Date.now();
+		let modelForSpan = '';
 
-		const useTools = Boolean(params.tools?.length) && params.toolChoice !== 'none';
-
-		let streamedAny = false;
-		const onDelta = (chunk: string) => {
-			streamedAny = true;
-			params.onDelta?.(chunk);
-		};
-
-		const attempt = async (withTools: boolean, stream: boolean): Promise<CompleteResult> => {
-			const body: Record<string, unknown> = {
-				model,
-				messages: params.messages,
-				temperature: settings.temperature,
-				max_tokens: settings.maxTokens,
-				stream,
-			};
-
-			if (withTools && params.tools?.length) {
-				body.tools = params.tools;
-				body.tool_choice = params.toolChoice ?? 'auto';
+		try {
+			const model = params.model?.trim() || await this.resolveSessionModel(settings);
+			modelForSpan = model;
+			if (!model) {
+				throw new Error(vscode.l10n.t('llm.needModel'));
 			}
 
-			if (stream) {
-				body.stream_options = { include_usage: true };
+			// Policy provider.use - до любого HTTP
+			assertProviderUseAllowed(settings, model);
+
+			const useTools = Boolean(params.tools?.length) && params.toolChoice !== 'none';
+
+			let streamedAny = false;
+			const onDelta = (chunk: string) => {
+				streamedAny = true;
+				params.onDelta?.(chunk);
+			};
+			const onThinkingDelta = (chunk: string) => {
+				params.onThinkingDelta?.(chunk);
+			};
+
+			const attempt = async (withTools: boolean, stream: boolean): Promise<CompleteResult> => {
+				const body: Record<string, unknown> = {
+					model,
+					messages: params.messages,
+					temperature: settings.temperature,
+					max_tokens: settings.maxTokens,
+					stream,
+				};
+
+				if (withTools && params.tools?.length) {
+					body.tools = params.tools;
+					body.tool_choice = params.toolChoice ?? 'auto';
+				}
+
+				if (stream) {
+					body.stream_options = { include_usage: true };
+					try {
+						return await this.requestStream(body, params.signal, settings, onDelta, onThinkingDelta, params.onRetry);
+					} catch (err) {
+						if (!(err instanceof LlmHttpError) || err.status !== 400) {
+							throw err;
+						}
+
+						delete body.stream_options;
+						return this.requestStream(body, params.signal, settings, onDelta, onThinkingDelta, params.onRetry);
+					}
+				}
+
+				const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(body),
+					signal: params.signal,
+				}, settings, params.onRetry);
+
+				if (data.error?.message) {
+					throw new Error(data.error.message);
+				}
+
+				const choice = data.choices?.[0];
+				const toolCalls = parseToolCalls(data.choices);
+				const split = splitAssistantPayload(choice?.message, choice?.text);
+				const text = split.content;
+				const thinking = split.thinking || undefined;
+
+				if (!text.trim() && !toolCalls?.length && !thinking) {
+					throw new Error(vscode.l10n.t('llm.emptyResponse'));
+				}
+
+				if (thinking) {
+					onThinkingDelta(thinking);
+				}
+
+				if (text && !streamedAny) {
+					onDelta(text);
+				}
+
+				return {
+					content: text,
+					thinking,
+					toolCalls,
+					finishReason: choice?.finish_reason,
+					usage: parseUsage(data.usage),
+				};
+			};
+
+			const run = async (withTools: boolean): Promise<CompleteResult> => {
 				try {
-					return await this.requestStream(body, params.signal, settings, onDelta, params.onRetry);
+					return await attempt(withTools, true);
 				} catch (err) {
-					if (!(err instanceof LlmHttpError) || err.status !== 400) {
+					if (isTimeoutError(err)) {
 						throw err;
 					}
 
-					delete body.stream_options;
-					return this.requestStream(body, params.signal, settings, onDelta, params.onRetry);
+					if (isAbortError(err) || params.signal?.aborted) {
+						throw toAbortError(err);
+					}
+
+					const truncated = toTruncatedToolArgsError(err);
+					if (truncated) {
+						throw truncated;
+					}
+
+					return attempt(withTools, false);
 				}
-			}
-
-			const data = await this.requestJson<ChatCompletionsResponse>('/v1/chat/completions', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(body),
-				signal: params.signal,
-			}, settings, params.onRetry);
-
-			if (data.error?.message) {
-				throw new Error(data.error.message);
-			}
-
-			const choice = data.choices?.[0];
-			const toolCalls = parseToolCalls(data.choices);
-			const content = choice?.message?.content ?? choice?.text ?? '';
-			const text = typeof content === 'string' ? content : '';
-
-			if (!text.trim() && !toolCalls?.length) {
-				throw new Error(vscode.l10n.t('llm.emptyResponse'));
-			}
-
-			if (text && !streamedAny) {
-				onDelta(text);
-			}
-
-			return {
-				content: text,
-				toolCalls,
-				finishReason: choice?.finish_reason,
-				usage: parseUsage(data.usage),
 			};
-		};
 
-		const run = async (withTools: boolean): Promise<CompleteResult> => {
-			try {
-				return await attempt(withTools, true);
-			} catch (err) {
-				if (isTimeoutError(err)) {
-					throw err;
+			let result: CompleteResult;
+			if (!useTools) {
+				result = await run(false);
+			} else {
+				try {
+					result = await run(true);
+				} catch (err) {
+					if (isAbortError(err) || params.signal?.aborted) {
+						throw toAbortError(err);
+					}
+
+					const truncated = toTruncatedToolArgsError(err);
+					if (truncated) {
+						throw truncated;
+					}
+
+					if (!looksLikeToolsUnsupported(err)) {
+						throw err;
+					}
+
+					const fallback = await run(false);
+					result = {
+						...fallback,
+						toolsFallback: true,
+					};
 				}
-
-				if (isAbortError(err) || params.signal?.aborted) {
-					throw toAbortError(err);
-				}
-
-				const truncated = toTruncatedToolArgsError(err);
-				if (truncated) {
-					throw truncated;
-				}
-
-				return attempt(withTools, false);
 			}
-		};
 
-		if (!useTools) {
-			return run(false);
-		}
-
-		try {
-			return await run(true);
+			span?.end({
+				model: modelForSpan,
+				status: 'ok',
+				durationMs: Date.now() - started,
+				usage: result.usage,
+			});
+			return result;
 		} catch (err) {
-			if (isAbortError(err) || params.signal?.aborted) {
-				throw toAbortError(err);
-			}
-
-			const truncated = toTruncatedToolArgsError(err);
-			if (truncated) {
-				throw truncated;
-			}
-
-			if (!looksLikeToolsUnsupported(err)) {
-				throw err;
-			}
-
-			const fallback = await run(false);
-			return {
-				...fallback,
-				toolsFallback: true,
-			};
+			span?.end({
+				model: modelForSpan,
+				status: 'error',
+				durationMs: Date.now() - started,
+			});
+			throw err;
 		}
 	}
 
@@ -489,6 +554,7 @@ export class HttpLlmClient implements LlmClient {
 		signal: AbortSignal | undefined,
 		settings: GenSettings,
 		onDelta?: (chunk: string) => void,
+		onThinkingDelta?: (chunk: string) => void,
 		onRetry?: (info: LlmRetryInfo) => void,
 	): Promise<CompleteResult> {
 		const url = new URL('/v1/chat/completions', settings.baseUrl).toString();
@@ -500,7 +566,7 @@ export class HttpLlmClient implements LlmClient {
 		return this.withRetry(
 			'POST',
 			url,
-			() => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta),
+			() => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta, onThinkingDelta),
 			onRetry,
 		);
 	}
@@ -512,6 +578,7 @@ export class HttpLlmClient implements LlmClient {
 		signal: AbortSignal | undefined,
 		timeoutMs: number,
 		onDelta?: (chunk: string) => void,
+		onThinkingDelta?: (chunk: string) => void,
 	): Promise<{ result: CompleteResult; status: number }> {
 		const controller = new AbortController();
 		let timedOut = false;
@@ -561,19 +628,25 @@ export class HttpLlmClient implements LlmClient {
 
 				const choice = data.choices?.[0];
 				const toolCalls = parseToolCalls(data.choices);
-				const content = choice?.message?.content ?? choice?.text ?? '';
-				const text = typeof content === 'string' ? content : '';
+				const split = splitAssistantPayload(choice?.message, choice?.text);
+				const text = split.content;
+				const thinking = split.thinking || undefined;
+				if (thinking) {
+					onThinkingDelta?.(thinking);
+				}
+
 				if (text) {
 					onDelta?.(text);
 				}
 
-				if (!text.trim() && !toolCalls?.length) {
+				if (!text.trim() && !toolCalls?.length && !thinking) {
 					throw new Error(vscode.l10n.t('llm.emptyResponse'));
 				}
 
 				return {
 					result: {
 						content: text,
+						thinking,
 						toolCalls,
 						finishReason: choice?.finish_reason,
 						usage: parseUsage(data.usage),
@@ -586,7 +659,7 @@ export class HttpLlmClient implements LlmClient {
 				throw new Error(vscode.l10n.t('llm.streamNoBody'));
 			}
 
-			const acc: StreamAccum = { content: '', calls: [] };
+			const acc: StreamAccum = { content: '', thinking: '', calls: [] };
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
 			let buffer = '';
@@ -614,7 +687,7 @@ export class HttpLlmClient implements LlmClient {
 					}
 
 					try {
-						applyStreamDelta(acc, JSON.parse(payload) as ChatCompletionsResponse, onDelta);
+						applyStreamDelta(acc, JSON.parse(payload) as ChatCompletionsResponse, onDelta, onThinkingDelta);
 					} catch {
 					}
 				}

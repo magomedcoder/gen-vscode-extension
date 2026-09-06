@@ -22,8 +22,12 @@
 ## Использование
 
 1. Открыть workspace и чат Gen.
-2. Нажать **Создать конфиг и индекс** (пишет `.gen/config.json` и строит `.gen/index/`). До этого при открытии папки `.gen/` не создаётся.
+2. Нажать **Создать конфиг и индекс** (пишет `.gen/config.json`, scaffold-каталоги и строит `.gen/index/`). До этого при открытии папки `.gen/` не создаётся. То же scaffold делает slash `/init`.
 3. В режиме Agent вызвать `codebase_search` с `query` (символ, фраза, путь).
 4. Для точного grep по строке - `search_files`.
+
+### Каталоги `.gen/` (scaffold)
+
+При enable проекта или `/init` создаются (если ещё нет): `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` - плюс краткий `.gen/README.md` и `.gitkeep` в пустых каталогах. Существующие файлы не перезаписываются. `references.json` появляется по требованию, не при scaffold.
 
 Подробнее про tools: [tools-ru.md](tools-ru.md).

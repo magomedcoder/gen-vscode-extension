@@ -10,6 +10,7 @@ export function renderChatHtml(params: {
 	nonce: string;
 	scriptUri: Uri;
 	styleUri: Uri;
+	codiconsStyleUri?: Uri;
 	title?: string;
 	screen?: 'chat' | 'settings';
 	l10n: WebviewL10nPack;
@@ -18,15 +19,18 @@ export function renderChatHtml(params: {
 	const title = params.title ?? l10n.strings['chat.webviewTitle'] ?? 'Gen Chat';
 	const screen = params.screen ?? 'chat';
 	const lang = l10n.locale || 'en';
+	const codiconsLink = params.codiconsStyleUri
+		? `\n\t<link href="${params.codiconsStyleUri}" rel="stylesheet">`
+		: '';
 
 	return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; script-src ${cspSource} 'nonce-${nonce}'; img-src https: data:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; font-src ${cspSource} data:; script-src ${cspSource} 'nonce-${nonce}'; img-src https: data:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>${title}</title>
-	<link href="${styleUri}" rel="stylesheet">
+	<link href="${styleUri}" rel="stylesheet">${codiconsLink}
 </head>
 <body data-screen="${screen}">
 	<div id="root"></div>

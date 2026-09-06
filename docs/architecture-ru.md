@@ -39,6 +39,32 @@ Comment command
 - Опциональный markdown/текст в корне workspace: стиль кода, архитектура, договорённости команды.
 - Загружается при старте расширения и при изменении файла; подмешивается в промпты agent / ask / комментариев (обрезка до 12k символов).
 
+## Локальные plugins / tools (MVP)
+
+Без npm и без выполнения произвольного JS. Только discovery + каталог в system prompt + tools `list_plugins` / `plugin` (+ Open в Settings Rules/Skills).
+
+| Вид          | Путь                              | Заметки                                                                        |
+| ------------ | --------------------------------- | ------------------------------------------------------------------------------ |
+| Tool (файл)  | `.gen/tools/<name>.md`            | YAML frontmatter: `name`, `description`                                        |
+| Tool (пакет) | `.gen/tools/<name>/TOOL.md`       | Как skills/`SKILL.md`                                                          |
+| Plugin       | `.gen/plugins/<name>/plugin.json` | Обязательная точка обнаружения: `{ "name"?, "description"?, "instructions"? }` |
+| Plugin body  | `.gen/plugins/<name>/PLUGIN.md`   | Если `instructions` в JSON пуст                                                |
+
+Агент читает тело через `plugin` (по имени) или `read_file` по пути из каталога. npm-пакеты плагинов - ещё нет.
+
+## Слои конфига
+
+- User JSON + project `.gen/config.json` мержатся в effective `GenSettings` (`src/config/layers.ts`).
+- Опциональная **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) блокирует security-subset - наивысший приоритет (`src/config/adminPolicy.ts`).
+- Приоритет: defaults user UI (non-default) project **admin policy**. Remote `.well-known` / полный MDM - не реализован.
+- Подробнее: [settings-ru.md](settings-ru.md).
+
+## Opt-in `.gen/` и scaffold
+
+- При открытии папки `.gen/` **не** создаётся. Opt-in: кнопка в чате (enable + индекс) или `/init`.
+- `enableProject` / `ensureGenScaffold` (`src/project/config.ts`): `config.json` + каталоги `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; без перезаписи).
+- Подробнее: [codebase-index-ru.md](codebase-index-ru.md).
+
 ## Индекс кодовой базы
 
 - Фоновая индексация в `.gen/index/manifest.json` (`src/index/`).

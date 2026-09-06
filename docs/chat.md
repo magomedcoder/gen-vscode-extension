@@ -6,26 +6,29 @@ Chat lives in the bottom **Gen** panel.
 
 ## Modes
 
-| Mode       | How to enable     | Behavior                                                                          |
-| ---------- | ----------------- | --------------------------------------------------------------------------------- |
-| **Ask**    | button / `/ask`   | Text only. Selection in the active editor is added to context.                    |
-| **Agent**  | button / `/agent` | Loop: LLM -> tool calls -> tool results -> LLM again (up to the iteration limit). |
-| **Debug**  | `/debug`          | Like Agent, focused on logs and diagnostics (`find_logs`, `read_log_tail`).       |
-| **Design** | `/design`         | Like Agent, focused on UI preview (`open_browser`, `fetch_page`).                 |
+| Mode          | How to enable     | Behavior                                                                                                                                                                              |
+| ------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ask**       | button / `/ask`   | Text only, no tools. Not the same as Plan.                                                                                                                                            |
+| **Agent**     | button / `/agent` | Loop: LLM -> tool calls -> tool results -> LLM again (up to the iteration limit).                                                                                                     |
+| **Plan**      | `/plan`           | Read/search + `propose_plan`. Edits denied. Shell: `planShellPolicy` (`ask` default - always confirm; `deny` - hidden). Plan Agent banner after approve; reminder when entering Plan. |
+| **Debug**     | `/debug`          | Like Agent, focused on logs and diagnostics (`find_logs`, `read_log_tail`).                                                                                                           |
+| **Design**    | `/design`         | Like Agent, focused on UI preview (`open_browser`, `fetch_page`).                                                                                                                     |
+| **Multitask** | `/multitask`      | Coordinator: no direct edits; delegate via `task`.                                                                                                                                    |
 
 Type `/` in the input for slash-command autocomplete. You can attach a question: `/debug why is auth failing?`. Active Debug/Design shows as a badge next to Ask/Agent (click to return to Agent).
 
-## Agent access level
+## Permissions (Security)
 
-Set in **Chat & Agent** settings:
+Confirmations are controlled in **Settings -> Security** (`approvalPolicy` + `autoApprove`):
 
-| Level         | Code   | Behavior                                                     |
-| ------------- | ------ | ------------------------------------------------------------ |
-| **Read**      | `auto` | View and navigate only; write, delete, and shell are blocked |
-| **Ask**       | `ask`  | Write/delete with modal confirmation (Apply / Skip / Stop)   |
-| **No prompt** | `open` | No dialogs; actions are logged to Output `Gen Agent`         |
+| Mode             | Behavior                                         |
+| ---------------- | ------------------------------------------------ |
+| `allow`          | Run without asking                               |
+| `ask` / `review` | Confirmation card (Apply / Always / Skip / Stop) |
+| `deny`           | Blocked; reason returned to the model            |
+| `autoApprove`    | Treats `ask` as allow; **deny stays deny**       |
 
-In **Ask**, writes, deletes, commands, and plan approval use the confirmation card. In **No prompt**, those dialogs are skipped.
+Per-action keys: `shell`, `edits`, `delete`, `mcp`, `web`, `outside`, `task`, `skill`. Capability toggles (terminal / file / web / ...) are coarse switches on top.
 
 ## Chat UI
 
@@ -62,20 +65,37 @@ In Ask and Agent, the active file / selection may be included. The agent can als
 
 In the input, type `@` and choose:
 
-| Mention                         | What is injected                              |
-| ------------------------------- | --------------------------------------------- |
-| `@file path`                    | File contents                                 |
-| `@folder path`                  | Files from a folder (capped)                  |
-| `@code`                         | Editor selection or symbol near the cursor    |
-| `@Docs` / `@Docs query`         | Search `docs/` and markdown                   |
-| `@agent name`                   | Body of `.gen/agents/{name}.md`               |
-| `@codebase` / `@codebase query` | Fragments from the local index + open editors |
-| `@git` / `@git SHA`             | Recent commits or `git show` for a SHA        |
-| `@branch_diff`                  | `git status` + `diff --stat`                  |
-| `@rules`                        | AGENTS.md / `.genrules`                       |
-| `@link url`                     | Fetched page text (capped)                    |
+| Mention                         | What is injected                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------- |
+| `@file path`                    | File contents                                                                 |
+| `@folder path`                  | Files from a folder (capped)                                                  |
+| `@code`                         | Editor selection or symbol near the cursor                                    |
+| `@Docs` / `@Docs query`         | Search `docs/` and markdown                                                   |
+| `@agent name`                   | Body of `.gen/agents/{name}.md`                                               |
+| `@codebase` / `@codebase query` | Fragments from the local index + open editors                                 |
+| `@git` / `@git SHA`             | Recent commits or `git show` for a SHA                                        |
+| `@branch_diff`                  | `git status` + `diff --stat`                                                  |
+| `@rules`                        | AGENTS.md / `.genrules`                                                       |
+| `@link url`                     | Fetched page text (capped)                                                    |
+| `@alias name` / `@ref:name`     | Reference from `.gen/references.json` (cached under `.gen/cache/references/`) |
 
 Autocomplete: arrows / Tab / Enter.
+
+### References (`@alias`)
+
+Named pointers to a local path or git repo. Manifest: `.gen/references.json` (or per-alias `.gen/references/<alias>.json`):
+
+```json
+{
+  "version": 1,
+  "references": {
+    "sdk": { "path": "packages/sdk", "description": "Local package" },
+    "upstream": { "git": "https://github.com/org/repo.git", "branch": "main" }
+  }
+}
+```
+
+On first `@alias sdk` / `@ref:sdk`, content is copied (path) or shallow-cloned (git) into `.gen/cache/references/<alias>/`, then injected like `@folder` / `@file`.
 
 Images: paste or drag-and-drop into Composer -> saved under `.gen/attachments/` with an `[image path]` marker in the message. If **visionEnabled** is on, the model also receives `image_url` parts (capped by `attachmentImageMaxBase64`).
 

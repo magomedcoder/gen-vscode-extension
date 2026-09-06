@@ -33,7 +33,7 @@ If the model changed more than comments:
 
 ## Settings
 
-See **Comments** in [settings.md](settings.md): style, preview, extra prompt.
+See **Chat Comments** in [settings.md](settings.md): style, preview, extra prompt.
 
 ## Languages
 

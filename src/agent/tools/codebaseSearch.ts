@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getSettings } from '../../config/settings';
 import { getIndexManager } from '../../index/IndexManager';
 import { isProjectEnabled } from '../../project/config';
 import { AGENT_LIMITS } from '../policy';
@@ -30,6 +31,14 @@ export const codebaseSearchTool: ToolDefinition = {
 			return { 
 				ok: false, 
 				content: vscode.l10n.t('tool.queryRequired') 
+			};
+		}
+
+		const settings = getSettings();
+		if (settings.indexForGrep === false) {
+			return {
+				ok: false,
+				content: vscode.l10n.t('tool.indexForGrepOff'),
 			};
 		}
 

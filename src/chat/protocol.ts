@@ -1,18 +1,31 @@
-import type { ChatMode, GenSettings } from '../config/types';
+import type { ChatMode, ChatTextSize, GenSettings } from '../config/types';
 import type { TokenUsage } from '../llm/usage';
 import type { ConfirmChoice } from '../agent/types';
 import type { DiffHunkPayload, HunkReviewStatus } from '../agent/diff';
+import type { ActivityEntry } from '../stores/activityStore';
 import type { ModelUsage } from '../stores/usageStore';
 import type { McpServerStatus } from '../integrations/mcpClient';
+import type { IndexEngineStatus } from '../index/engineStatus';
 import type { SessionSummary } from './sessionStore';
 
+export type { ActivityEntry } from '../stores/activityStore';
 export type { McpServerStatus } from '../integrations/mcpClient';
+export type { IndexEngineStatus } from '../index/engineStatus';
 export type { ChatMode, ConfirmChoice, DiffHunkPayload, HunkReviewStatus };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
 export type ToolCallStatus = 'pending' | 'ok' | 'error' | 'denied';
 export type ConfirmVariant = 'agent' | 'binary';
 
+// Источник внешнего hook-файла (compat discover: hooks.json / settings.json layouts)
+export type ExternalHookKind = | 'hooks-json-user' | 'hooks-json-project' | 'settings-json-user' | 'settings-json-project';
+
+// Снимок admin policy для Settings UI (баннер locked keys)
+export interface AdminPolicyInfo {
+	active: boolean;
+	path?: string;
+	lockedKeys: string[];
+}
 export interface ToolCallUi {
 	id: string;
 	name: string;
@@ -22,12 +35,27 @@ export interface ToolCallUi {
 	path?: string;
 	diff?: string;
 	hunks?: DiffHunkPayload[];
+	// Epoch ms - когда tool стал pending (для countdown)
+	startedAt?: number;
+	// Таймаут tool в мс (например timeout_ms у run_command)
+	timeoutMs?: number;
+	// Рабочий каталог shell (из вывода `cwd:`)
+	cwd?: string;
+	// Код выхода shell (из вывода `exit:`)
+	exitCode?: number;
+}
+
+export interface AgentPausedState {
+	reason: 'max_steps';
+	iterations: number;
 }
 
 export interface ChatUiMessage {
 	id: string;
 	role: ChatRole;
 	content: string;
+	// Reasoning/thinking от модели (только если API реально отдал)
+	thinking?: string;
 	toolCalls?: ToolCallUi[];
 	toolCallId?: string;
 	toolName?: string;
@@ -51,6 +79,28 @@ export interface PendingConfirm {
 	alwaysLabel?: string;
 	suggestion?: string;
 	allowAlways?: boolean;
+}
+
+// Вопрос агента mid-run (ask_question)
+export interface PendingQuestion {
+	id: string;
+	title: string;
+	prompt: string;
+	options?: string[];
+}
+
+export interface ChatTodoItem {
+	id: string;
+	content: string;
+	status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+}
+
+// Файлы, изменённые успешными mutating-tools за один agent run
+export interface SessionDiffEvent {
+	turnId: string;
+	paths: string[];
+	// Epoch ms - когда ход завершился
+	at: number;
 }
 
 export interface ChatProjectStatus {
@@ -77,29 +127,113 @@ export interface ChatViewState {
 	sessionId?: string;
 	sessions?: SessionSummary[];
 	pendingConfirm?: PendingConfirm;
+	pendingQuestion?: PendingQuestion;
+	todos?: ChatTodoItem[];
 	project?: ChatProjectStatus;
 	// Кастомные slash из `.gen/commands` для автодополнения Composer
 	customSlashCommands?: Array<{ id: string; name: string; detail?: string; mode?: ChatMode }>;
+	// Мягкая пауза агента (лимит итераций) - Continue / Stop в UI
+	agentPaused?: AgentPausedState;
+	// Id tool, который сейчас выполняется (для per-tool kill)
+	activeToolCallId?: string;
+	// Размер текста чата из настроек (для CSS class на .app)
+	chatTextSize?: ChatTextSize;
+	// План подтверждён в mode=plan - баннер «Run in Agent»
+	planHandoff?: { title?: string };
+	// Текущая session-модель из getSettings().model
+	model?: string;
+	// Diff последнего agent-хода (уникальные пути)
+	lastTurnDiff?: SessionDiffEvent;
+	// Черновик Composer для текущей сессии (persist per sessionId)
+	composerDraft?: string;
+	// Chips Composer (insert-строки mention) для текущей сессии
+	composerChips?: string[];
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
-	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[] }
-	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[] }
+	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
+	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
 	| { type: 'settingsError'; message: string }
 	| { type: 'models'; models: Array<{ id: string; label: string }>; requestId: number }
 	| { type: 'modelsError'; message: string; requestId: number }
 	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] }
 	| { type: 'usageLedger'; ledger: Record<string, ModelUsage> }
-	| { type: 'mcpStatus'; servers: McpServerStatus[] };
+	| { type: 'activityLedger'; entries: ActivityEntry[] }
+	| { type: 'mcpStatus'; servers: McpServerStatus[] }
+	| { type: 'indexStatus'; status: IndexEngineStatus }
+	| {
+		type: 'hooksData';
+		beforeSubmit: string[];
+		beforeShell: string[];
+		sessionDiff: string[];
+		sessionCompacting: string[];
+		shellEnv: string[];
+		fileWatcher: string[];
+		path?: string;
+		error?: string;
+	}
+	| { type: 'hooksSaved'; ok: boolean; error?: string }
+	// Найденные внешние hook-файлы - только discover, без запуска
+	| {
+		type: 'externalHooksData';
+		files: Array<{
+			kind: ExternalHookKind;
+			path: string;
+			mappedCommandCount: number;
+			skippedEvents: string[];
+			error?: string;
+		}>;
+	}
+	| {
+		type: 'externalHooksImported';
+		ok: boolean;
+		mode: 'merge' | 'replace';
+		mappedCommandCount: number;
+		skippedEvents: string[];
+		error?: string;
+	}
+	// Builtin presets + кастомные агенты из `.gen/agents/`
+	| { type: 'agentsData'; presets: AgentPresetInfo[]; custom: AgentCustomInfo[]; error?: string }
+	| { type: 'agentsCloned'; relativePath: string; created: boolean; error?: string }
+	// Кандидаты rules + discovered skills/plugins (read-only UI)
+	| {
+		type: 'rulesSkillsData';
+		rules: Array<{ label: string; path: string; exists: boolean }>;
+		skills: Array<{ name: string; description: string; path: string }>;
+		plugins: Array<{ kind: 'tool' | 'plugin'; name: string; description: string; path: string }>;
+	}
+	// Список персон (builtin + `.gen/personas/*.md`) для Settings * Personas
+	| { type: 'personasData'; personas: PersonaOption[] }
+	// Короткий beep в chat webview (завершение хода)
+	| { type: 'playNotifySound' };
+
+export interface AgentPresetInfo {
+	id: string;
+	name: string;
+	description: string;
+	readonly: boolean;
+	mode?: string;
+}
+
+export interface AgentCustomInfo {
+	id: string;
+	name: string;
+	description: string;
+	readonly: boolean;
+}
 
 export interface PersonaOption {
 	id: string;
 	name: string;
 	description: string;
+	// Workspace-relative путь к `.md` (пусто у builtin)
+	path?: string;
+	// Источник: встроенный пресет или `.gen/personas/*.md`
+	source?: 'builtin' | 'custom';
 }
 
 export interface MentionSuggestion {
-	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent';
+	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref';
 	label: string;
 	insert: string;
 	detail?: string;
@@ -116,24 +250,61 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'cancel' }
 	| { type: 'clear' }
 	| { type: 'setChatMode'; mode: ChatMode }
+	| { type: 'setModel'; model: string }
 	| { type: 'openExternal'; url: string }
 	| { type: 'openSettings' }
-	| { type: 'closeSettings' }
-	| { type: 'loadSettings' }
 	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
 	| { type: 'openLogsFolder' }
 	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice }
+	| { type: 'answerQuestion'; id: string; answer: string }
 	| { type: 'mentionSuggest'; requestId: number; query: string }
 	| { type: 'enableProject' }
-	| { type: 'editMessage'; id: string; content: string }
+	| { type: 'editMessage'; id: string; content: string; revertFiles?: boolean }
 	| { type: 'reviewHunk'; toolCallId: string; hunkId: string; action: 'accept' | 'reject' }
 	| { type: 'reviewDiff'; toolCallId: string; action: 'acceptAll' | 'rejectAll' }
+	// Accept/Reject всех pending-хунков одного файла (сессионная панель)
+	| { type: 'reviewPendingPath'; path: string; action: 'accept' | 'reject' }
 	| { type: 'newSession' }
 	| { type: 'switchSession'; id: string }
 	| { type: 'renameSession'; id: string; title: string }
 	| { type: 'deleteSession'; id: string }
 	| { type: 'forkSession'; messageId: string }
+	// Черновик Composer (debounce на webview); chips - insert-строки
+	| { type: 'setComposerDraft'; text: string; chips?: string[]; sessionId?: string }
 	| { type: 'loadUsage' }
 	| { type: 'resetUsage' }
-	| { type: 'refreshMcp' };
+	| { type: 'loadActivity' }
+	| { type: 'clearActivity' }
+	| { type: 'refreshMcp' }
+	| { type: 'mcpOAuthAuth'; serverName: string }
+	| { type: 'mcpOAuthLogout'; serverName: string }
+	| { type: 'mcpOAuthDebug'; serverName: string }
+	| { type: 'loadIndexStatus' }
+	| { type: 'loadHooks' }
+	| {
+		type: 'saveHooks';
+		beforeSubmit: string[];
+		beforeShell: string[];
+		sessionDiff: string[];
+		sessionCompacting: string[];
+		shellEnv: string[];
+		fileWatcher: string[];
+	}
+	| { type: 'openHooksFile' }
+	| { type: 'loadExternalHooks' }
+	| { type: 'openExternalHookFile'; path: string }
+	| { type: 'importExternalHooks'; path: string; mode: 'merge' | 'replace'; kind: ExternalHookKind }
+	| { type: 'loadAgents' }
+	| { type: 'cloneAgentPreset'; id: string }
+	| { type: 'loadRulesSkills' }
+	// Пересканировать персоны (builtin + `.gen/personas/*.md`)
+	| { type: 'loadPersonas' }
+	// Открыть путь проекта / абсолютный файл в редакторе (или http(s) во внешнем браузере)
+	| { type: 'openProjectPath'; path: string }
+	| { type: 'continueAgent' }
+	| { type: 'stopAgentPause' }
+	| { type: 'cancelToolCall'; id: string }
+	| { type: 'dismissPlanHandoff' }
+	| { type: 'dismissTurnDiff' }
+	| { type: 'openPath'; path: string };

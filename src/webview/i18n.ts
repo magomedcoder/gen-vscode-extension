@@ -21,7 +21,3 @@ export function t(key: string, ...args: Array<string | number>): string {
 		return value === undefined ? `{${index}}` : String(value);
 	});
 }
-
-export function locale(): string {
-	return pack().locale;
-}

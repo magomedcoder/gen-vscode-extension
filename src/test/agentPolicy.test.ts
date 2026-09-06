@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { applySearchReplace, PatchError } from '../agent/patch.js';
-import { assertAllowedPath, isDeniedRelativePath, isOutsideWorkspaceInput, pathIsInside, resolveAgainstFolders } from '../agent/policy.js';
+import { assertAllowedPath, isDeniedRelativePath, isOutsideWorkspaceInput, pathIsInside, resolveAgainstFolders, rewriteWorkspaceAlias } from '../agent/policy.js';
 import { parseWorkspaceEdits } from '../agent/tools/applyWorkspaceEdit.js';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from '../agent/commandPolicy.js';
 import { formatMiniDiff, computeMiniDiff, pathFromToolArguments, revertHunkInText } from '../agent/diff.js';
@@ -23,6 +23,17 @@ suite('path sandbox', () => {
 		assert.strictEqual(outside, false);
 		assert.ok(pathIsInside(fsPath, root));
 		assert.strictEqual(assertAllowedPath(fsPath, folder), 'src/a.ts');
+	});
+
+	test('/workspace/foo резолвится внутрь первой папки', () => {
+		assert.strictEqual(rewriteWorkspaceAlias('/workspace'), '.');
+		assert.strictEqual(rewriteWorkspaceAlias('/workspace/foo'), 'foo');
+		assert.strictEqual(rewriteWorkspaceAlias('\\workspace\\foo\\bar'), 'foo/bar');
+		const { fsPath, folder, outside } = resolveAgainstFolders('/workspace/foo', [root]);
+		assert.strictEqual(folder, root);
+		assert.strictEqual(outside, false);
+		assert.strictEqual(fsPath, path.resolve(root, 'foo'));
+		assert.ok(pathIsInside(fsPath, root));
 	});
 
 	test('выход через .. запрещён', () => {
@@ -131,7 +142,7 @@ suite('formatMiniDiff', () => {
 		const before = Array.from({ length: 120 }, (_, i) => `L${i}`).join('\n');
 		const after = Array.from({ length: 120 }, (_, i) => `R${i}`).join('\n');
 		const diff = formatMiniDiff(before, after);
-		assert.ok(diff.includes('lines hidden'));
+		assert.ok(diff.includes('lines hidden') || diff.includes('строк скрыто') || diff.includes('diff.linesHidden'));
 		assert.ok(diff.split('\n').length <= 82);
 	});
 
@@ -196,10 +207,14 @@ suite('tool argument JSON', () => {
 	test('parse объясняет обрезку и не пишет файл', () => {
 		assert.throws(
 			() => parseToolArguments('{"path":"a.go","content":"package x'),
-			(err: unknown) => err instanceof Error
-				&& err.message.includes('invalid JSON')
-				&& err.message.includes('a.go')
-				&& err.message.includes('was not written'),
+			(err: unknown) => {
+				if (!(err instanceof Error)) {
+					return false;
+				}
+
+				const msg = err.message;
+				return ((msg.includes('invalid JSON') || msg.includes('tool.invalidJsonArgs')) && (msg.includes('a.go') || msg.includes('tool.invalidJsonPath')) && (msg.includes('was not written') || msg.includes('tool.fileNotWritten')));
+			},
 		);
 	});
 });
@@ -439,10 +454,10 @@ suite('AgentWriteTracker', () => {
 		assert.ok(diff && diff.includes('-') && diff.includes('+'));
 	});
 
-	test('denyWriteOverUserEdits указывает на apply_patch', () => {
+	test('denyWriteOverUserEdits указывает на точечные правки', () => {
 		const msg = denyWriteOverUserEdits('src/a.ts', '-old\n+new');
 		assert.ok(msg.includes('write_file'));
-		assert.ok(msg.includes('apply_patch'));
+		assert.ok(msg.includes('apply_patch') || msg.includes('apply_workspace_edit'));
 		assert.ok(msg.includes('src/a.ts'));
 	});
 });

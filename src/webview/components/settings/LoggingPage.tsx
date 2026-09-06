@@ -1,5 +1,7 @@
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
+import { FieldText, FieldToggle } from './SettingsFields';
+import { SettingsSection } from './SettingsSection';
 
 interface LoggingPageProps extends SettingsPageProps {
 	onOpenLogsFolder: () => void;
@@ -8,18 +10,36 @@ interface LoggingPageProps extends SettingsPageProps {
 export function LoggingPage({ draft, setField, onOpenLogsFolder }: LoggingPageProps) {
 	return (
 		<>
-			<label className="field field--row">
-				<input
-					type="checkbox"
+			<SettingsSection titleKey="settings.section.logging.files" hintKey="settings.section.logging.filesHint">
+				<FieldToggle
+					labelKey="settings.loggingEnabled.label"
+					hintKey="settings.loggingEnabled.hint"
 					checked={draft.loggingEnabled}
-					onChange={(e) => setField('loggingEnabled', e.target.checked)}
+					onChange={(v) => setField('loggingEnabled', v)}
 				/>
-				<span className="field__label">{t('settings.loggingEnabled.label')}</span>
-			</label>
-			<span className="field__hint">{t('settings.loggingEnabled.hint')}</span>
-			<button className="btn btn--secondary" type="button" onClick={onOpenLogsFolder}>
-				{t('settings.openLogsFolder')}
-			</button>
+				<div className="settings__actions">
+					<button className="btn btn--secondary" type="button" onClick={onOpenLogsFolder}>
+						{t('settings.openLogsFolder')}
+					</button>
+				</div>
+			</SettingsSection>
+
+			<SettingsSection titleKey="settings.section.logging.otel" hintKey="settings.section.logging.otelHint" defaultOpen={false}>
+				<FieldToggle
+					labelKey="settings.otelEnabled.label"
+					hintKey="settings.otelEnabled.hint"
+					checked={draft.otelEnabled}
+					onChange={(v) => setField('otelEnabled', v)}
+				/>
+				<FieldText
+					labelKey="settings.otelEndpoint.label"
+					hintKey="settings.otelEndpoint.hint"
+					value={draft.otelEndpoint}
+					placeholder={t('settings.otelEndpoint.placeholder')}
+					onChange={(v) => setField('otelEndpoint', v)}
+					disabled={!draft.otelEnabled}
+				/>
+			</SettingsSection>
 		</>
 	);
 }

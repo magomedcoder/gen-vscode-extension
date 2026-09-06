@@ -18,7 +18,7 @@ export const listMcpToolsTool: ToolDefinition = {
 		return {
 			ok: true,
 			content: JSON.stringify({
-				status: mcp.status(),
+				status: await mcp.status(),
 				tools: mcp.listTools(),
 			}, null, 2),
 		};

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
+import { getSettings } from '../config/settings';
 import { assertAllowedCommand, CommandPolicyError, formatCommandLine } from './commandPolicy';
 import { AGENT_LIMITS, previewText } from './policy';
 
@@ -12,6 +13,8 @@ export interface ShellExecRequest {
 	cwd: string;
 	timeoutMs?: number;
 	signal?: AbortSignal;
+	// Доп. env (например из hook shell.env)
+	env?: Record<string, string>;
 }
 
 export interface ShellExecResult {
@@ -22,8 +25,11 @@ export interface ShellExecResult {
 }
 
 function clampTimeout(ms: number | undefined): number {
-	const value = ms ?? AGENT_LIMITS.defaultCommandTimeoutMs;
-	return Math.min(AGENT_LIMITS.maxCommandTimeoutMs, Math.max(1000, Math.floor(value)));
+	const settings = getSettings();
+	const defaultMs = settings.defaultToolTimeoutMs || AGENT_LIMITS.defaultCommandTimeoutMs;
+	const maxMs = settings.maxToolTimeoutMs || AGENT_LIMITS.maxCommandTimeoutMs;
+	const value = ms ?? defaultMs;
+	return Math.min(maxMs, Math.max(1000, Math.floor(value)));
 }
 
 function formatExecOutput(params: {
@@ -72,6 +78,7 @@ export async function runShellCommand(request: ShellExecRequest): Promise<ShellE
 				...process.env,
 				FORCE_COLOR: '0',
 				NO_COLOR: '1',
+				...(request.env ?? {}),
 			},
 		});
 

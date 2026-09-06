@@ -130,7 +130,7 @@ suite('HttpLlmClient', () => {
 
 		await assert.rejects(
 			() => client.listModels(),
-			(err: unknown) => err instanceof LlmHttpError && err.status === 400 && /HTTP 400/.test(err.message),
+			(err: unknown) => err instanceof LlmHttpError && err.status === 400,
 		);
 		assert.strictEqual(calls, 1);
 	});

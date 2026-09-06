@@ -39,6 +39,32 @@ Comment command
 - Optional markdown/text file in the workspace root: coding style, architecture, team conventions.
 - Loaded at extension start and on file change; injected into agent, ask, and comment prompts (truncated at 12k chars).
 
+## Local plugins / tools (MVP)
+
+No npm and no arbitrary JS execution. Discovery + system-prompt catalog + tools `list_plugins` / `plugin` (+ Open on Settings Rules/Skills).
+
+| Kind           | Path                              | Notes                                                                    |
+| -------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| Tool (file)    | `.gen/tools/<name>.md`            | YAML frontmatter: `name`, `description`                                  |
+| Tool (package) | `.gen/tools/<name>/TOOL.md`       | Same idea as skills/`SKILL.md`                                           |
+| Plugin         | `.gen/plugins/<name>/plugin.json` | Required discovery entry: `{ "name"?, "description"?, "instructions"? }` |
+| Plugin body    | `.gen/plugins/<name>/PLUGIN.md`   | Used when `instructions` in JSON is empty                                |
+
+The agent loads body via `plugin` (by name) or `read_file` using the catalog path. npm plugin packages - not yet.
+
+## Config layers
+
+- User JSON + project `.gen/config.json` merge into effective `GenSettings` (`src/config/layers.ts`).
+- Optional **admin policy** (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / `%ProgramData%/gen/policy.json`) locks a security subset - highest precedence (`src/config/adminPolicy.ts`).
+- Precedence: defaults user UI (non-default) project **admin policy**. Remote `.well-known` / full MDM not implemented.
+- Details: [settings.md](settings.md).
+
+## Opt-in `.gen/` and scaffold
+
+- Opening a folder does **not** create `.gen/`. Opt-in: chat banner (enable + index) or `/init`.
+- `enableProject` / `ensureGenScaffold` (`src/project/config.ts`): `config.json` plus dirs `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` (`.gitkeep`, README; never overwrite).
+- Details: [codebase-index.md](codebase-index.md).
+
 ## Codebase index
 
 - Background indexing into `.gen/index/manifest.json` (`src/index/`).

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CommandPolicyError } from '../agent/commandPolicy';
 import { runShellCommand } from '../agent/shellExec';
 import { AGENT_LIMITS, previewText } from '../agent/policy';
+import { getSettings } from '../config/settings';
 
 export interface BangMatch {
 	raw: string;
@@ -144,7 +145,7 @@ export async function resolveBangCommands(text: string, signal?: AbortSignal): P
 				command: parsed.command,
 				args: parsed.args,
 				cwd,
-				timeoutMs: Math.min(30_000, AGENT_LIMITS.defaultCommandTimeoutMs),
+				timeoutMs: Math.min(30_000, getSettings().defaultToolTimeoutMs || AGENT_LIMITS.defaultCommandTimeoutMs),
 				signal,
 			});
 			const body = previewText(result.content, MAX_BANG_OUTPUT);

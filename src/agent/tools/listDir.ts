@@ -7,7 +7,7 @@ import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 
 export const listDirTool: ToolDefinition = {
 	name: 'list_dir',
-	description: 'Список файлов и папок в каталоге workspace. Путь относительный или абсолютный внутри проекта.',
+	description: 'Список файлов и папок в каталоге workspace. Путь относительный или абсолютный внутри проекта. В JSON есть legend («/ = directory»); имена каталогов оканчиваются на /.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -47,8 +47,12 @@ export const listDirTool: ToolDefinition = {
 			return !ignoresRelative(matcher, childRel);
 		});
 
-		const sliced = visible.slice(0, cap).map(([name, type]) => {
-			const kind = type & vscode.FileType.Directory ? 'dir' : type & vscode.FileType.SymbolicLink ? 'link' : 'file';
+		const legend = vscode.l10n.t('tool.listDirLegend');
+		const sliced = visible.slice(0, cap).map(([entryName, type]) => {
+			const isDir = Boolean(type & vscode.FileType.Directory);
+			const kind = isDir ? 'dir' : type & vscode.FileType.SymbolicLink ? 'link' : 'file';
+			// Каталоги помечаем завершающим `/` (см. legend)
+			const name = isDir ? `${entryName}/` : entryName;
 			return { name, kind };
 		});
 
@@ -57,6 +61,7 @@ export const listDirTool: ToolDefinition = {
 			content: JSON.stringify({
 				path: resolved.relative,
 				truncated: visible.length > cap,
+				legend,
 				entries: sliced,
 			}, null, 2),
 		};

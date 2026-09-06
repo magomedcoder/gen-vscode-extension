@@ -1,11 +1,32 @@
 import * as vscode from 'vscode';
 import { spawn } from 'node:child_process';
+import { getSettings } from '../../config/settings';
+import { saveImageAttachments } from '../../chat/attachments';
 import { AGENT_LIMITS, looksBinary, previewText } from '../policy';
 import { asOptionalInt, asString, type ToolContext, type ToolDefinition, type ToolResult } from '../types';
 import { resolveWorkspacePath, throwIfAborted } from '../workspacePath';
 
+const IMAGE_EXT_MIME: Record<string, string> = {
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+};
+
 function isPdfPath(relative: string): boolean {
 	return relative.toLowerCase().endsWith('.pdf');
+}
+
+// MIME по расширению (.png/.jpg/.jpeg/.gif/.webp) - до looksBinary reject
+function imageMimeFromPath(relative: string): string | undefined {
+	const lower = relative.toLowerCase();
+	const dot = lower.lastIndexOf('.');
+	if (dot < 0) {
+		return undefined;
+	}
+
+	return IMAGE_EXT_MIME[lower.slice(dot)];
 }
 
 function runPdftotext(fsPath: string, signal?: AbortSignal): Promise<{ ok: true; text: string } | { ok: false; missing: boolean; error: string }> {
@@ -87,9 +108,68 @@ async function readPdfText(resolved: { uri: vscode.Uri; relative: string; fsPath
 	};
 }
 
+// Прочитать картинку * `.gen/attachments` + attachments для vision-цикла агента
+async function readImageFile(
+	resolved: { 
+		uri: vscode.Uri
+		relative: string
+	},
+	mimeType: string,
+): Promise<ToolResult> {
+	const settings = getSettings();
+	if (!settings.visionEnabled) {
+		return {
+			ok: false,
+			content: vscode.l10n.t('tool.imageVisionDisabled', resolved.relative),
+		};
+	}
+
+	let raw: Uint8Array;
+	try {
+		raw = await vscode.workspace.fs.readFile(resolved.uri);
+	} catch {
+		return {
+			ok: false,
+			content: vscode.l10n.t('tool.fileNotFound', resolved.relative),
+		};
+	}
+
+	const base64 = Buffer.from(raw).toString('base64');
+	const maxB64 = settings.attachmentImageMaxBase64;
+	if (base64.length > maxB64) {
+		return {
+			ok: false,
+			content: vscode.l10n.t('tool.imageTooLarge', resolved.relative, base64.length, maxB64),
+		};
+	}
+
+	const name = resolved.relative.split(/[/\\]/).pop() || 'image';
+	const saved = await saveImageAttachments([
+		{
+			name,
+			mimeType,
+			base64,
+		},
+	]);
+	if (saved.length === 0) {
+		return {
+			ok: false,
+			content: vscode.l10n.t('tool.imageSaveFailed', resolved.relative),
+		};
+	}
+
+	const att = saved[0]!;
+	return {
+		ok: true,
+		content: vscode.l10n.t('tool.imageSaved', att.path),
+		path: resolved.relative,
+		attachments: saved,
+	};
+}
+
 export const readFileTool: ToolDefinition = {
 	name: 'read_file',
-	description: 'Прочитать текстовый файл из workspace (или PDF через pdftotext). Можно указать диапазон строк (1-based, включительно) для текста.',
+	description: 'Прочитать текстовый файл из workspace (или PDF через pdftotext; картинки .png/.jpg/.gif/.webp - через vision). Можно указать диапазон строк (1-based, включительно) для текста.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -115,6 +195,11 @@ export const readFileTool: ToolDefinition = {
 
 		if (isPdfPath(resolved.relative)) {
 			return readPdfText(resolved, ctx.signal);
+		}
+
+		const imageMime = imageMimeFromPath(resolved.relative);
+		if (imageMime) {
+			return readImageFile(resolved, imageMime);
 		}
 
 		let raw: Uint8Array;

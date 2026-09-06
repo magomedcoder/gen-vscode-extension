@@ -40,6 +40,16 @@ export function ignoresRelative(matcher: IgnoreMatcher, relativePosix: string): 
 	return matcher.ignores(`${normalized}/`);
 }
 
+// Совпадает ли относительный путь с glob/gitignore-паттернами watcherIgnore
+export function matchesWatcherIgnore(relPath: string, patterns: readonly string[]): boolean {
+	const active = patterns.map((p) => p.trim()).filter((p) => p && !p.startsWith('#'));
+	if (active.length === 0) {
+		return false;
+	}
+
+	return ignoresRelative(createIgnoreMatcher(active), relPath);
+}
+
 async function readIgnoreLines(folderFsPath: string, fileName: string): Promise<string[]> {
 	try {
 		const text = await fs.readFile(path.join(folderFsPath, fileName), 'utf8');
@@ -50,7 +60,8 @@ async function readIgnoreLines(folderFsPath: string, fileName: string): Promise<
 }
 
 /**
- * Матчер корня workspace: `.gitignore` + `.genignore` (+ встроенный `.git`).
+ * Матчер корня workspace: `.gitignore` + `.genignore` + `.ignore` + `.rgignore` (если есть)
+ * (+ встроенный `.git`). Строки `!` (re-include) передаются в `ignore` как есть.
  * Не spawn'ит `git check-ignore`.
  */
 export async function getFolderIgnoreMatcher(folderFsPath: string): Promise<IgnoreMatcher> {
@@ -60,12 +71,14 @@ export async function getFolderIgnoreMatcher(folderFsPath: string): Promise<Igno
 		return cached;
 	}
 
-	const [gitignore, genignore] = await Promise.all([
+	const [gitignore, genignore, dotIgnore, rgignore] = await Promise.all([
 		readIgnoreLines(key, '.gitignore'),
 		readIgnoreLines(key, '.genignore'),
+		readIgnoreLines(key, '.ignore'),
+		readIgnoreLines(key, '.rgignore'),
 	]);
 
-	const matcher = createIgnoreMatcher([...gitignore, ...genignore]);
+	const matcher = createIgnoreMatcher([...gitignore, ...genignore, ...dotIgnore, ...rgignore]);
 	cache.set(key, matcher);
 	return matcher;
 }

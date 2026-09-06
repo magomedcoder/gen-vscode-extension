@@ -24,6 +24,12 @@ suite('slashCommands', () => {
 			rest: '',
 			custom: false,
 		});
+		assert.deepStrictEqual(parseSlashMode('/import'), {
+			mode: undefined,
+			command: 'import',
+			rest: '',
+			custom: false,
+		});
 		assert.deepStrictEqual(parseSlashMode('/new'), {
 			mode: undefined,
 			command: 'new',

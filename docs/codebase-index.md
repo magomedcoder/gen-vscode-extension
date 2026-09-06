@@ -22,8 +22,12 @@ The agent searches it via the `codebase_search` tool (trigrams), without sending
 ## Usage
 
 1. Open a workspace and open Gen chat.
-2. Click **Create config & index** (writes `.gen/config.json` and builds `.gen/index/`). Until then Gen does not create `.gen/` on folder open.
+2. Click **Create config & index** (writes `.gen/config.json`, scaffold dirs, and builds `.gen/index/`). Until then Gen does not create `.gen/` on folder open. The same scaffold runs on slash `/init`.
 3. In Agent mode, call `codebase_search` with `query` (symbol, phrase, path).
 4. For exact line grep - `search_files`.
+
+### `.gen/` directories (scaffold)
+
+On project enable or `/init`, these are created if missing: `agents/`, `commands/`, `plugins/`, `skills/`, `tools/`, `references/`, `plans/` - plus a short `.gen/README.md` and `.gitkeep` in empty dirs. Existing files are never overwritten. `references.json` is created on demand, not during scaffold.
 
 More on tools: [tools.md](tools.md).

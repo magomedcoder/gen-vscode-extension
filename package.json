@@ -38,8 +38,28 @@
         "category": "%extension.category%"
       },
       {
+        "command": "gen.openChatPanel",
+        "title": "%command.openChatPanel.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.openChatSidebar",
+        "title": "%command.openChatSidebar.title%",
+        "category": "%extension.category%"
+      },
+      {
         "command": "gen.addSelectionToChat",
         "title": "%command.addSelectionToChat.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.hunk.accept",
+        "title": "%command.hunkAccept.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.hunk.reject",
+        "title": "%command.hunkReject.title%",
         "category": "%extension.category%"
       }
     ],
@@ -62,7 +82,34 @@
         "when": "editorHasSelection && editorTextFocus"
       }
     ],
+    "configuration": {
+      "title": "%configuration.gen.title%",
+      "properties": {
+        "gen.chatViewLocation": {
+          "type": "string",
+          "enum": [
+            "panel",
+            "sidebar",
+            "both"
+          ],
+          "default": "both",
+          "description": "%config.gen.chatViewLocation.description%",
+          "enumDescriptions": [
+            "%config.gen.chatViewLocation.panel%",
+            "%config.gen.chatViewLocation.sidebar%",
+            "%config.gen.chatViewLocation.both%"
+          ]
+        }
+      }
+    },
     "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gen-sidebar",
+          "title": "%viewsContainers.activitybar.gen-sidebar.title%",
+          "icon": "media/logo.svg"
+        }
+      ],
       "panel": [
         {
           "id": "gen",
@@ -77,11 +124,31 @@
           "type": "webview",
           "id": "gen.chatView",
           "name": "%views.gen.chatView.name%",
-          "icon": "media/logo.svg"
+          "icon": "media/logo.svg",
+          "when": "config.gen.chatViewLocation != 'sidebar'"
+        }
+      ],
+      "gen-sidebar": [
+        {
+          "type": "webview",
+          "id": "gen.chatViewSidebar",
+          "name": "%views.gen.chatView.name%",
+          "icon": "media/logo.svg",
+          "when": "config.gen.chatViewLocation != 'panel'"
         }
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "gen.hunk.accept",
+          "when": "false"
+        },
+        {
+          "command": "gen.hunk.reject",
+          "when": "false"
+        }
+      ],
       "editor/context": [
         {
           "command": "gen.commentSelection",
@@ -94,7 +161,30 @@
           "group": "gen@2"
         }
       ]
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": [
+          "**/.gen/config.json",
+          "**/gen/config.json"
+        ],
+        "url": "./schemas/gen-config.schema.json"
+      },
+      {
+        "fileMatch": [
+          "**/.gen/hooks.json",
+          "**/gen/hooks.json"
+        ],
+        "url": "./schemas/gen-hooks.schema.json"
+      },
+      {
+        "fileMatch": [
+          "**/.gen/references.json",
+          "**/.gen/references/*.json"
+        ],
+        "url": "./schemas/gen-references.schema.json"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "yarn run package",
@@ -104,8 +194,8 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "yarn run check-types && yarn run lint && node esbuild.js --production",
     "package:vsix": "vsce package --yarn --no-dependencies",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "watch-tests": "tsc -p tsconfig.test.json -w",
     "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",

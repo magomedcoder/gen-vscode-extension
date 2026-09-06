@@ -23,10 +23,6 @@ export function initLogger(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(channels.llm, channels.agent);
 }
 
-export function getLogsDir(): string | undefined {
-	return logsDir;
-}
-
 export function writeLog(stream: LogStream, line: string): void {
 	if (!getSettings().loggingEnabled) {
 		return;
@@ -34,6 +30,19 @@ export function writeLog(stream: LogStream, line: string): void {
 
 	channels[stream]?.appendLine(line);
 	if (!writer || !logsDir) {
+		return;
+	}
+
+	writer.enqueue(join(logsDir, `${stream}.log`), line);
+}
+
+/**
+ * Всегда пишет в Output-канал (для opt-in OTEL без loggingEnabled).
+ * На диск - только если loggingEnabled.
+ */
+export function appendLogLine(stream: LogStream, line: string): void {
+	channels[stream]?.appendLine(line);
+	if (!getSettings().loggingEnabled || !writer || !logsDir) {
 		return;
 	}
 

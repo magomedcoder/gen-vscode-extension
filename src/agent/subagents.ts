@@ -1,6 +1,5 @@
 import { discoverCustomAgents, resolveBuiltinPresetSubagent, BUILTIN_PRESETS } from '../project/customAgents';
 
-export type BuiltinSubagentType = 'explore' | 'general' | 'scout';
 export type SubagentType = string;
 
 export interface SubagentDef {
@@ -56,7 +55,7 @@ export function getBuiltinSubagent(id: string): SubagentDef | undefined {
 	return BUILTIN_SUBAGENTS.find((s) => s.id === id || s.name.toLowerCase() === id.toLowerCase());
 }
 
-// Builtin + кастомные `.gen/agents/*.md` + OpenCursor presets
+// Builtin + кастомные `.gen/agents/*.md` + встроенные presets
 export async function resolveSubagent(id: string): Promise<SubagentDef | undefined> {
 	const builtin = getBuiltinSubagent(id);
 	if (builtin) {
@@ -73,11 +72,6 @@ export async function resolveSubagent(id: string): Promise<SubagentDef | undefin
 	return resolveBuiltinPresetSubagent(id);
 }
 
-// @deprecated используй resolveSubagent для кастомных агентов
-export function getSubagent(id: string): SubagentDef | undefined {
-	return getBuiltinSubagent(id);
-}
-
 export async function listSubagentIds(): Promise<string[]> {
 	const customs = await discoverCustomAgents();
 	return [
@@ -86,5 +80,3 @@ export async function listSubagentIds(): Promise<string[]> {
 		...customs.map((s) => s.id),
 	];
 }
-
-export const DEFAULT_SUBAGENT_DEPTH = 2;

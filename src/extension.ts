@@ -5,9 +5,11 @@ import { registerCommentFile } from './commands/commentFile';
 import { initSettings } from './config/settings';
 import { initIndexManager } from './index/IndexManager';
 import { initLogger } from './log/logger';
+import { initFileWatcherHooks } from './project/fileWatcherHooks';
 import { initGenRulesManager } from './project/genrules';
 import { DiffContentProvider, registerDiffContentProvider } from './preview/showDiff';
 
+import { initActivityStore } from './stores/activityStore';
 import { initUsageStore } from './stores/usageStore';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -15,7 +17,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	initLogger(context);
 	initIndexManager(context);
 	initGenRulesManager(context);
+	initFileWatcherHooks(context);
 	initUsageStore(context);
+	initActivityStore(context);
 
 	const diffProvider = new DiffContentProvider();
 

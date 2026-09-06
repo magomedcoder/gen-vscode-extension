@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { isIgnoredByGitIgnore, matchesWatcherIgnore } from '../agent/gitIgnore';
+import { getSettings } from '../config/settings';
 import { isProjectEnabled } from '../project/config';
 import { chunkFileContent } from './chunk';
 import { contentHash } from './hash';
@@ -20,6 +22,10 @@ export class IndexManager implements vscode.Disposable {
 		this.disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders((e) => {
 				for (const folder of e.added) {
+					// Не автоиндексировать новые папки, если indexNewFolders выкл.
+					if (getSettings().indexNewFolders === false) {
+						continue;
+					}
 					void this.maybeSchedule(folder);
 				}
 
@@ -89,10 +95,17 @@ export class IndexManager implements vscode.Disposable {
 
 	// Создать индекс после того, как пользователь подтвердит свое согласие (запись в каталог `.gen/`)
 	async enableAndIndex(folder: vscode.WorkspaceFolder): Promise<void> {
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
 		await this.scheduleFullIndex(folder, true);
 	}
 
 	async search(query: string, maxResults: number): Promise<CodebaseSearchHit[]> {
+		if (getSettings().indexingEnabled === false) {
+			return [];
+		}
+
 		const folder = vscode.workspace.workspaceFolders?.[0];
 		if (!folder) {
 			return [];
@@ -133,12 +146,18 @@ export class IndexManager implements vscode.Disposable {
 	}
 
 	private async bootstrapExisting(): Promise<void> {
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
 		for (const folder of vscode.workspace.workspaceFolders ?? []) {
 			await this.maybeSchedule(folder);
 		}
 	}
 
 	private async maybeSchedule(folder: vscode.WorkspaceFolder): Promise<void> {
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
 		if (!(await isProjectEnabled(folder.uri.fsPath))) {
 			return;
 		}
@@ -146,7 +165,28 @@ export class IndexManager implements vscode.Disposable {
 		void this.scheduleFullIndex(folder);
 	}
 
+	// true - событие watcher'а нужно пропустить (настройки / gitignore)
+	private async shouldSkipWatcherPath(folder: vscode.WorkspaceFolder, relative: string): Promise<boolean> {
+		if (!relative || relative.startsWith('.gen/')) {
+			return true;
+		}
+
+		if (matchesWatcherIgnore(relative, getSettings().watcherIgnore)) {
+			return true;
+		}
+
+		if (await isIgnoredByGitIgnore(folder.uri.fsPath, relative)) {
+			return true;
+		}
+
+		return false;
+	}
+
 	private async onWorkspaceFileChange(uri: vscode.Uri): Promise<void> {
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
+
 		const folder = vscode.workspace.getWorkspaceFolder(uri);
 		if (!folder) {
 			return;
@@ -157,7 +197,7 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-		if (!relative || relative.startsWith('.gen/')) {
+		if (await this.shouldSkipWatcherPath(folder, relative)) {
 			return;
 		}
 
@@ -165,6 +205,10 @@ export class IndexManager implements vscode.Disposable {
 	}
 
 	private async onWorkspaceFileDelete(uri: vscode.Uri): Promise<void> {
+		if (getSettings().indexingEnabled === false) {
+			return;
+		}
+
 		const folder = vscode.workspace.getWorkspaceFolder(uri);
 		if (!folder) {
 			return;
@@ -175,7 +219,7 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-		if (!relative || relative.startsWith('.gen/')) {
+		if (await this.shouldSkipWatcherPath(folder, relative)) {
 			return;
 		}
 
@@ -216,6 +260,7 @@ export class IndexManager implements vscode.Disposable {
 				state: 'ready',
 				fileCount: Object.keys(manifest.files).length,
 				chunkCount: Object.keys(manifest.chunks).length,
+				updatedAt: manifest.updatedAt,
 				lastError: undefined,
 			});
 		} catch (err) {
@@ -268,6 +313,7 @@ export class IndexManager implements vscode.Disposable {
 			state: 'ready',
 			fileCount: Object.keys(manifest.files).length,
 			chunkCount: Object.keys(manifest.chunks).length,
+			updatedAt: manifest.updatedAt,
 		});
 	}
 
@@ -363,5 +409,14 @@ export function initIndexManager(context: vscode.ExtensionContext): IndexManager
 }
 
 export function getIndexManager(): IndexManager | undefined {
+	// При выключенном indexingEnabled инструменты видят «пустой» менеджер
+	if (getSettings().indexingEnabled === false) {
+		return undefined;
+	}
+	return instance;
+}
+
+// Экземпляр для UI-статуса (даже если indexingEnabled выкл.)
+export function getIndexManagerInstance(): IndexManager | undefined {
 	return instance;
 }

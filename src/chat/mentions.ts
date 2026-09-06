@@ -5,8 +5,12 @@ import type { ContextHit } from '../index/contextEngine';
 import { semanticSearchWorkspace } from '../index/embeddings';
 import { getSettings } from '../config/settings';
 import { loadProjectRulesAppendix } from '../project/projectRules';
+import { collectReferenceHits, ensureReferenceCached, formatReferenceSourceBlock } from '../project/references';
+import { ensureTerminalBufferListener, getTerminalBuffers } from './terminalBuffer';
+import { getSessionPeek } from './sessionStore';
+import type { ChatUiMessage } from './protocol';
 
-export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent';
+export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref';
 
 export interface ParsedMention {
 	kind: MentionKind;
@@ -24,7 +28,19 @@ export interface ResolvedMentions {
 }
 
 // codebase раньше code - иначе @codebase сматчится как @code + arg "base"
-const MENTION_RE = /@(file|folder|codebase|code|git|branch_diff|rules|link|docs|agent)(?:\s+`([^`]+)`|:([^\s]+)|(?:\s+)([^\s@]+))?/gi;
+const MENTION_RE = /@(file|folder|codebase|code|git|branch_diff|rules|link|docs|agent|terminals|past|alias|ref)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
+
+// Kinds без аргумента: не глотать следующее слово как arg
+const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'rules', 'terminals']);
+
+function stripOuterBackticks(value: string): string {
+	const t = value.trim();
+	if (t.length >= 2 && t.startsWith('`') && t.endsWith('`')) {
+		return t.slice(1, -1).trim();
+	}
+
+	return t;
+}
 
 function git(args: string[]): Promise<string> {
 	const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -255,18 +271,145 @@ async function resolveAgentContext(name: string | undefined): Promise<string> {
 	return `[agent] файл .gen/agents/${slug || rawName}.md не найден`;
 }
 
+// Хвосты вывода открытых терминалов (ring-буфер из terminalBuffer)
+function resolveTerminalsContext(): string {
+	ensureTerminalBufferListener();
+	const perCap = Math.min(4_000, getSettings().maxInputChars);
+	const terminals = getTerminalBuffers();
+	if (terminals.length === 0) {
+		return '[terminals] нет открытых терминалов';
+	}
+
+	const blocks = terminals.map((t) => {
+		const body = t.text.trim()
+			? (t.text.length > perCap ? `${t.text.slice(-perCap)}\n...` : t.text)
+			: '(нет буферизованного вывода - выполни команду в терминале)';
+		return `[terminal ${t.name}]\n${body}`;
+	});
+	return blocks.join('\n\n').slice(0, Math.min(24_000, getSettings().maxInputChars * 3));
+}
+
+const PAST_MSG_ROLES = new Set(['user', 'assistant']);
+const PAST_LAST_N = 12;
+
+function lastUserSnippet(messages: ChatUiMessage[], maxLen = 120): string {
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const m = messages[i]!;
+		if (m.role === 'user' && m.content.trim()) {
+			const line = m.content.trim().replace(/\s+/g, ' ');
+			return line.length > maxLen ? `${line.slice(0, maxLen - 1)}...` : line;
+		}
+	}
+
+	return '';
+}
+
+function formatPastMessages(messages: ChatUiMessage[], budget: number): string {
+	const picked = messages.filter((m) => PAST_MSG_ROLES.has(m.role) && m.content.trim()).slice(-PAST_LAST_N);
+	const blocks: string[] = [];
+	let used = 0;
+	for (const m of picked) {
+		const role = m.role === 'user' ? 'user' : 'assistant';
+		const body = m.content.trim();
+		const remaining = budget - used;
+		if (remaining <= 40) {
+			blocks.push('...');
+			break;
+		}
+
+		const clipped = body.length > remaining ? `${body.slice(0, remaining)}\n...` : body;
+		const block = `${role}:\n${clipped}`;
+		blocks.push(block);
+		used += block.length + 2;
+	}
+
+	return blocks.join('\n\n');
+}
+
+// Прошлые чаты из SessionStore (через setSessionPeek)
+function resolvePastChat(arg?: string): string {
+	const store = getSessionPeek();
+	if (!store) {
+		return '[past] нет доступа к сессиям';
+	}
+
+	const maxChars = getSettings().maxInputChars;
+	const needle = arg?.trim();
+	const currentId = store.getCurrentSessionId();
+
+	if (needle) {
+		const lower = needle.toLowerCase();
+		const summaries = store.listSessions();
+		const byId = summaries.find((s) => s.id === needle);
+		const byExactTitle = summaries.find((s) => s.title.toLowerCase() === lower);
+		const bySub = summaries.find((s) => s.title.toLowerCase().includes(lower));
+		const hit = byId ?? byExactTitle ?? bySub;
+		if (!hit) {
+			return `[past] сессия «${needle}» не найдена`;
+		}
+
+		const session = store.getSession(hit.id);
+		if (!session) {
+			return `[past] сессия «${hit.title}» не найдена`;
+		}
+
+		const body = formatPastMessages(session.messages, maxChars);
+		if (!body) {
+			return `[past ${session.title}]\n(нет сообщений)`;
+		}
+
+		return `[past ${session.title}]\n${body}`.slice(0, maxChars + 200);
+	}
+
+	// Без arg - список недавних сессий (без текущей)
+	const recent = store.listSessions().filter((s) => s.id !== currentId).slice(0, 12);
+	if (recent.length === 0) {
+		return '[past] нет других сохранённых чатов';
+	}
+
+	const lines = recent.map((s) => {
+		const session = store.getSession(s.id);
+		const snip = session ? lastUserSnippet(session.messages) : '';
+		const tail = snip ? ` - ${snip}` : '';
+		return `- ${s.title}${tail}`;
+	});
+	return `[past chats]\n${lines.join('\n')}`.slice(0, maxChars);
+}
+
 export function parseMentions(text: string): ParsedMention[] {
 	const out: ParsedMention[] = [];
 	for (const match of text.matchAll(MENTION_RE)) {
 		const kind = match[1]!.toLowerCase() as MentionKind;
-		const arg = (match[2] ?? match[3] ?? match[4] ?? '').trim() || undefined;
+		const rawMatch = match[0];
 		const start = match.index ?? 0;
+		let arg = (match[2] ?? match[3] ?? match[4] ?? match[5] ?? '').trim() || undefined;
+		let end = start + rawMatch.length;
+
+		// kinds без arg: не съедать следующее слово (`@terminals что` * только @terminals)
+		if (ARGLESS_MENTION_KINDS.has(kind) && arg && !rawMatch.includes('`') && !rawMatch.includes(':')) {
+			const kindOnly = `@${kind}`;
+			arg = undefined;
+			end = start + kindOnly.length;
+			out.push({
+				kind,
+				arg,
+				raw: text.slice(start, end),
+				start,
+				end,
+			});
+			continue;
+		}
+
+		if (arg) {
+			arg = stripOuterBackticks(arg) || undefined;
+		}
+
 		out.push({
 			kind,
 			arg,
-			raw: match[0],
+			raw: rawMatch,
 			start,
-			end: start + match[0].length,
+			end,
 		});
 	}
 
@@ -400,6 +543,39 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 					extraBlocks.push(`[link ${url}] error: ${err instanceof Error ? err.message : String(err)}`);
 				}
 			}
+
+			continue;
+		}
+
+		if (mention.kind === 'terminals') {
+			labels.push('@terminals');
+			extraBlocks.push(resolveTerminalsContext());
+			continue;
+		}
+
+		if (mention.kind === 'past') {
+			labels.push(mention.arg ? `@past ${mention.arg}` : '@past');
+			extraBlocks.push(resolvePastChat(mention.arg));
+			continue;
+		}
+
+		if (mention.kind === 'alias' || mention.kind === 'ref') {
+			const name = mention.arg?.trim();
+			const tag = mention.kind === 'ref' ? '@ref' : '@alias';
+			labels.push(name ? `${tag} ${name}` : `${tag}(?)`);
+			if (!name) {
+				extraBlocks.push(`[alias] укажи имя: @alias name или @ref:name`);
+				continue;
+			}
+
+			const resolved = await ensureReferenceCached(name);
+			if ('error' in resolved) {
+				extraBlocks.push(`[alias ${name}] ${resolved.error}`);
+				continue;
+			}
+
+			extraBlocks.push(formatReferenceSourceBlock(resolved));
+			hits.push(...await collectReferenceHits(resolved));
 		}
 	}
 

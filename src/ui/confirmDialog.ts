@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ConfirmChoice } from '../agent/types';
+import { focusChatView } from '../chat/focusChat';
 import type { ConfirmVariant } from '../chat/protocol';
 
 export interface ConfirmDialogOptions {
@@ -26,6 +27,6 @@ export async function showConfirmDialog(options: ConfirmDialogOptions): Promise<
 		throw new Error(vscode.l10n.t('ui.confirmHostMissing'));
 	}
 
-	await vscode.commands.executeCommand('gen.chatView.focus').then(undefined, () => undefined);
+	await focusChatView().then(undefined, () => undefined);
 	return host(options);
 }

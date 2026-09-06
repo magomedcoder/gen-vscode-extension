@@ -64,12 +64,3 @@ export async function generateSessionTitle(
 		return undefined;
 	}
 }
-
-// Заглушка: краткое summary хода (Wave 4D). Пока не используется
-export async function summarizeTurn(
-	_messages: readonly ChatUiMessage[],
-	_client: LlmClient,
-	_opts?: { signal?: AbortSignal },
-): Promise<string | undefined> {
-	return undefined;
-}

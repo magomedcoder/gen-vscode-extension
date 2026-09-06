@@ -3,10 +3,14 @@ import type { McpServerStatus } from '../../../chat/protocol';
 import type { GenSettings } from '../../../config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
+import { SettingsSection } from './SettingsSection';
 
 interface McpPageProps extends SettingsPageProps {
 	mcpServers?: McpServerStatus[];
 	onRefreshMcp?: () => void;
+	onMcpOAuthAuth?: (serverName: string) => void;
+	onMcpOAuthLogout?: (serverName: string) => void;
+	onMcpOAuthDebug?: (serverName: string) => void;
 }
 
 function commandSummary(server: GenSettings['mcpServers'][number]): string {
@@ -14,7 +18,15 @@ function commandSummary(server: GenSettings['mcpServers'][number]): string {
 	return parts.filter(Boolean).join(' ');
 }
 
-export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpPageProps) {
+export function McpPage({
+	draft,
+	setField,
+	mcpServers = [],
+	onRefreshMcp,
+	onMcpOAuthAuth,
+	onMcpOAuthLogout,
+	onMcpOAuthDebug,
+}: McpPageProps) {
 	const [mcpJson, setMcpJson] = useState(() => JSON.stringify(draft.mcpServers, null, 2));
 	const [mcpError, setMcpError] = useState('');
 	const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -59,7 +71,18 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 
 	return (
 		<>
-			<span className="field__hint">{t('settings.mcp.pageHint')}</span>
+			<SettingsSection titleKey="settings.section.mcp.servers" hintKey="settings.mcp.pageHint">
+			<span className="field__hint">{t('settings.mcp.oauthHint')}</span>
+
+			<label className="field field--row">
+				<input
+					type="checkbox"
+					checked={draft.codeModeEnabled}
+					onChange={(e) => setField('codeModeEnabled', e.target.checked)}
+				/>
+				<span className="field__label">{t('settings.codeModeEnabled.label')}</span>
+			</label>
+			<span className="field__hint field__hint--warning">{t('settings.codeModeEnabled.warning')}</span>
 
 			<div className="settings__actions">
 				<button className="btn btn--secondary" type="button" onClick={onRefreshMcp}>{t('settings.mcp.refresh')}</button>
@@ -72,6 +95,8 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 					{draft.mcpServers.map((server, index) => {
 						const live = statusByName.get(server.name);
 						const toolsOpen = Boolean(expanded[server.name]);
+						const oauthRequested = server.oauth === true || live?.oauthRequested === true;
+						const oauthInfo = live?.oauth;
 						let badgeClass = 'mcp-card__badge';
 						let badgeText = t('settings.mcp.disconnected');
 						if (!server.enabled) {
@@ -96,6 +121,16 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 									<div className="mcp-card__title-row">
 										<span className="mcp-card__name">{server.name || '-'}</span>
 										<span className={badgeClass}>{badgeText}</span>
+										{oauthRequested ? (
+											<span
+												className={`mcp-card__badge${oauthInfo?.hasToken ? ' mcp-card__badge--ok' : ' mcp-card__badge--muted'}`}
+												title={t('settings.mcp.oauthHint')}
+											>
+												{oauthInfo?.hasToken
+													? t('settings.mcp.oauthAuthed', oauthInfo.maskedPreview ?? '****')
+													: t('settings.mcp.oauthNeeded')}
+											</span>
+										) : null}
 									</div>
 									<label className="field field--row mcp-card__enabled">
 										<input
@@ -108,6 +143,32 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 								</div>
 								<code className="mcp-card__command">{commandSummary(server) || '-'}</code>
 								{live?.error ? (<span className="field__hint field__hint--error">{live.error}</span>) : null}
+								{oauthRequested ? (
+									<div className="mcp-card__oauth">
+										<button
+											type="button"
+											className="btn btn--secondary"
+											onClick={() => onMcpOAuthAuth?.(server.name)}
+										>
+											{t('settings.mcp.oauthAuth')}
+										</button>
+										<button
+											type="button"
+											className="btn btn--secondary"
+											onClick={() => onMcpOAuthLogout?.(server.name)}
+											disabled={!oauthInfo?.hasToken}
+										>
+											{t('settings.mcp.oauthLogout')}
+										</button>
+										<button
+											type="button"
+											className="btn btn--secondary"
+											onClick={() => onMcpOAuthDebug?.(server.name)}
+										>
+											{t('settings.mcp.oauthDebug')}
+										</button>
+									</div>
+								) : null}
 								{server.enabled && toolCount > 0 ? (
 									<>
 										<button
@@ -135,9 +196,9 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 					})}
 				</div>
 			)}
+			</SettingsSection>
 
-			<details className="mcp-advanced">
-				<summary className="mcp-advanced__summary">{t('settings.mcpServers.label')}</summary>
+			<SettingsSection titleKey="settings.section.mcp.json" hintKey="settings.mcpServers.hint" defaultOpen={false}>
 				<label className="field">
 					<textarea
 						className="field__input field__input--code"
@@ -146,10 +207,10 @@ export function McpPage({ draft, setField, mcpServers = [], onRefreshMcp }: McpP
 						onChange={(e) => onMcpJsonChange(e.target.value)}
 						spellCheck={false}
 					/>
-					<span className="field__hint">{t('settings.mcpServers.hint')}</span>
+					<span className="field__hint">{t('settings.mcp.oauthHint')}</span>
 					{mcpError ? <span className="field__hint field__hint--error">{mcpError}</span> : null}
 				</label>
-			</details>
+			</SettingsSection>
 		</>
 	);
 }

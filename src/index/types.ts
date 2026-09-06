@@ -37,6 +37,8 @@ export interface IndexProgress {
 	state: 'idle' | 'indexing' | 'ready' | 'error';
 	fileCount: number;
 	chunkCount: number;
+	// ISO из manifest.updatedAt после успешной индексации
+	updatedAt?: string;
 	lastError?: string;
 }
 

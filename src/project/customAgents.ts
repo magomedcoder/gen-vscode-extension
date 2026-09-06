@@ -238,3 +238,21 @@ export async function generateAgentStub(params: {
 		created,
 	};
 }
+
+// Клонировать builtin preset в `.gen/agents/{name}.md`
+export async function cloneBuiltinPreset(id: string): Promise<{
+	relativePath: string;
+	created: boolean;
+}> {
+	const preset = getBuiltinPreset(id);
+	if (!preset) {
+		throw new Error(`Неизвестный builtin preset: ${id}`);
+	}
+
+	return generateAgentStub({
+		name: preset.name,
+		description: preset.description,
+		mode: preset.mode,
+		readonly: preset.readonly,
+	});
+}

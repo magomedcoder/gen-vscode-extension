@@ -1,6 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as vscode from 'vscode';
+import { interpolateConfigString } from '../config/interpolate';
 import { getSettings } from '../config/settings';
+import { getMcpOAuthDebugInfo, getMcpOAuthTokens } from '../stores/mcpOAuthStore';
+import type { McpOAuthDebugInfo } from '../stores/mcpOAuthStore';
 
 const EXTENSION_ID = 'magomedcoder.gen-agent-vscode';
 
@@ -15,9 +18,62 @@ export interface McpServerConfig {
 	command: string;
 	args?: string[];
 	env?: Record<string, string>;
+	// Заголовки: для stdio пробрасываются как GEN_MCP_HEADER_* (и в env, если ключ похож на имя переменной); будущий HTTP-транспорт будет слать их как HTTP-заголовки.
+	headers?: Record<string, string>;
 	cwd?: string;
 	timeoutMs?: number;
 	enabled: boolean;
+	/**
+	 * Запросить OAuth для сервера. По умолчанию false / omit.
+	 * MVP: paste-token / optional authorize URL; полный OIDC - WIP. stdio без oauth не ломаем.
+	 */
+	oauth?: boolean;
+	/**
+	 * Опциональный URL авторизации (placeholder для будущего OIDC).
+	 * При Auth открывается через vscode.env.openExternal, если задан.
+	 */
+	mcpOAuthAuthorizeUrl?: string;
+}
+
+/**
+ * Если oauth:true и есть accessToken - Bearer в headers + MCP_OAUTH_TOKEN в env.
+ * Для будущего HTTP-транспорта headers уже готовы; stdio * GEN_MCP_HEADER_*.
+ */
+export async function applyMcpOAuthToConfig(cfg: McpServerConfig): Promise<McpServerConfig> {
+	if (cfg.oauth !== true) {
+		return cfg;
+	}
+
+	const tokens = await getMcpOAuthTokens(cfg.name);
+	const accessToken = tokens?.accessToken?.trim();
+	if (!accessToken) {
+		return cfg;
+	}
+
+	const bearer = `Bearer ${accessToken}`;
+	const headers: Record<string, string> = {
+		...(cfg.headers ?? {}),
+		Authorization: bearer,
+	};
+	const env: Record<string, string> = {
+		...(cfg.env ?? {}),
+		MCP_OAUTH_TOKEN: accessToken,
+	};
+	return { 
+		...cfg, 
+		headers, 
+		env 
+	};
+}
+
+// Имя заголовка * безопасный суффикс для GEN_MCP_HEADER_*
+function sanitizeHeaderEnvKey(key: string): string {
+	return key.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase();
+}
+
+// Ключ похож на имя env-переменной (можно мержить напрямую в env)
+function looksLikeEnvKey(key: string): boolean {
+	return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
 }
 
 export interface McpToolInfo {
@@ -38,6 +94,10 @@ export interface McpServerStatus {
 		description?: string 
 	}>;
 	error?: string;
+	// В конфиге oauth:true
+	oauthRequested?: boolean;
+	// Debug OAuth без сырого токена (только при oauth:true)
+	oauth?: McpOAuthDebugInfo;
 }
 
 interface JsonRpcMessage {
@@ -67,12 +127,37 @@ class StdioMcpConnection {
 	constructor(cfg: McpServerConfig) {
 		this.name = cfg.name;
 		this.requestTimeoutMs = cfg.timeoutMs && cfg.timeoutMs >= 1000 ? cfg.timeoutMs : 30_000;
-		this.proc = spawn(cfg.command, cfg.args ?? [], {
+		// Подстановка ${env:...} / {env:...} / {file:...} в command, args, env, cwd
+		const interpOpts = {
+			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+		};
+		const command = interpolateConfigString(cfg.command, interpOpts);
+		const args = (cfg.args ?? []).map((a) => interpolateConfigString(a, interpOpts));
+		const cwd = cfg.cwd ? interpolateConfigString(cfg.cwd, interpOpts) : undefined;
+		const env: Record<string, string> = {};
+		if (cfg.env) {
+			for (const [key, value] of Object.entries(cfg.env)) {
+				env[key] = interpolateConfigString(value, interpOpts);
+			}
+		}
+
+		// headers * GEN_MCP_HEADER_* для stdio; если ключ похож на env - ещё и напрямую в env
+		if (cfg.headers) {
+			for (const [key, value] of Object.entries(cfg.headers)) {
+				const interpolated = interpolateConfigString(value, interpOpts);
+				env[`GEN_MCP_HEADER_${sanitizeHeaderEnvKey(key)}`] = interpolated;
+				if (looksLikeEnvKey(key)) {
+					env[key] = interpolated;
+				}
+			}
+		}
+
+		this.proc = spawn(command, args, {
 			stdio: ['pipe', 'pipe', 'pipe'],
-			cwd: cfg.cwd || undefined,
+			cwd: cwd || undefined,
 			env: {
 				...process.env,
-				...cfg.env
+				...env,
 			},
 		});
 		this.proc.stdout.setEncoding('utf8');
@@ -229,7 +314,9 @@ class McpManager {
 			}
 
 			try {
-				const conn = new StdioMcpConnection(cfg);
+				// oauth:true + токен * Bearer / MCP_OAUTH_TOKEN; иначе cfg без изменений
+				const cfgReady = await applyMcpOAuthToConfig(cfg);
+				const conn = new StdioMcpConnection(cfgReady);
 				await conn.initialize();
 				this.connections.set(cfg.name, conn);
 			} catch (err) {
@@ -259,16 +346,17 @@ class McpManager {
 		return conn.callTool(toolName, args);
 	}
 
-	status(): McpServerStatus[] {
+	async status(): Promise<McpServerStatus[]> {
 		const servers = getSettings().mcpServers ?? [];
-		return servers.map((s) => {
+		const out: McpServerStatus[] = [];
+		for (const s of servers) {
 			const c = this.connections.get(s.name);
 			const tools = (c?.listTools() ?? []).map((t) => ({
 				name: t.name,
 				description: t.description,
 			}));
 			const error = this.lastErrors.get(s.name);
-			return {
+			const row: McpServerStatus = {
 				name: s.name,
 				enabled: Boolean(s.enabled),
 				connected: Boolean(c),
@@ -276,7 +364,14 @@ class McpManager {
 				tools,
 				...(error ? { error } : {}),
 			};
-		});
+			if (s.oauth === true) {
+				row.oauthRequested = true;
+				// Debug без сырого токена
+				row.oauth = await getMcpOAuthDebugInfo(s.name);
+			}
+			out.push(row);
+		}
+		return out;
 	}
 }
 

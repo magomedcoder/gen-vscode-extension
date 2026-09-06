@@ -55,6 +55,11 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
 		detailKey: 'chat.slash.export',
 	},
 	{
+		id: 'import',
+		name: 'import',
+		detailKey: 'chat.slash.import',
+	},
+	{
 		id: 'init',
 		name: 'init',
 		detailKey: 'chat.slash.init',

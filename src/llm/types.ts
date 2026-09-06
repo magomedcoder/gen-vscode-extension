@@ -59,6 +59,8 @@ export interface CompleteParams {
 	tools?: LlmToolDefinition[];
 	toolChoice?: 'auto' | 'none' | 'required';
 	onDelta?: (chunk: string) => void;
+	// Поток reasoning/thinking, если провайдер отдаёт отдельное поле
+	onThinkingDelta?: (chunk: string) => void;
 	// Вызывается перед паузой между повторами HTTP-запроса
 	onRetry?: (info: LlmRetryInfo) => void;
 	// Переопределение модели (например smallModel для /compact)
@@ -67,6 +69,8 @@ export interface CompleteParams {
 
 export interface CompleteResult {
 	content: string;
+	// Reasoning/thinking от модели (если провайдер отдал)
+	thinking?: string;
 	toolCalls?: LlmToolCall[];
 	finishReason?: string;
 	toolsFallback?: boolean; // если true запрос был повторен без инструментов, потому что сервер их отклонил
