@@ -2,7 +2,9 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## 0.3.0-dev (Development version)
+## dev (Development version)
+
+## 0.3.0 (7 September 2026)
 
 - **Context overflow:** parse `exceed_context_size_error` (incl. nested llama.cpp JSON); preflight estimate + shrink; auto-compact before turn; limited retry; `contextOverflowPolicy` on Request settings; clear user-facing errors instead of raw HTTP 400
 - Permissions v2: approval policy UI (`allow` / `ask` / `review` / `deny`), Always + suggested pattern, session allowlist, auto-approve, continue-on-deny, capability toggles (legacy `agentAuthLevel` auto/ask/open migrated into policy / autoApprove)
