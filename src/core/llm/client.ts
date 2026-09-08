@@ -9,7 +9,8 @@ import { assertProviderUseAllowed } from './providerUsePolicy';
 import { parseModelsListResponse, type LlmModelOption } from './modelLabel';
 import { parseUsage } from './usage';
 import { extractThinkingDelta, splitAssistantPayload } from './thinking';
-import type { ChatMessage, CompleteParams, CompleteResult, ListModelsParams, LlmClient, LlmToolCall } from './types';
+import type { ChatMessage, CompleteParams, CompleteResult, ConnectionHealthResult, ListModelsParams, LlmClient, LlmToolCall } from './types';
+import { extractNCtxFromModelsPayload, extractNCtxFromProps, getCachedNCtx, setCachedNCtx, softCacheNCtxFromCompletePayload } from './contextBudget';
 
 interface ChatCompletionsResponse {
 	choices?: Array<{
@@ -288,6 +289,9 @@ export class HttpLlmClient implements LlmClient {
 			// Policy provider.use - до любого HTTP
 			assertProviderUseAllowed(settings, model);
 
+			// Soft probe n_ctx до первого 400 (не блокирует complete)
+			await this.probeNCtxSoft(settings, model, params.signal);
+
 			const useTools = Boolean(params.tools?.length) && params.toolChoice !== 'none';
 
 			let streamedAny = false;
@@ -359,6 +363,9 @@ export class HttpLlmClient implements LlmClient {
 				if (text && !streamedAny) {
 					onDelta(text);
 				}
+
+				// Soft-update n_ctx из тела ответа (если сервер отдал)
+				softCacheNCtxFromCompletePayload(settings.baseUrl, model, data);
 
 				return {
 					content: text,
@@ -447,20 +454,103 @@ export class HttpLlmClient implements LlmClient {
 			throw new Error(vscode.l10n.t('llm.needBaseUrl'));
 		}
 
-		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
-			method: 'GET',
-			signal: params.signal,
-		}, {
+		const cfg = {
 			...settings,
 			baseUrl,
 			requestTimeoutMs: Math.min(settings.requestTimeoutMs, 30_000),
-		});
+		};
+		const data = await this.requestJson<ModelsListResponse>('/v1/models', {
+			method: 'GET',
+			signal: params.signal,
+		}, cfg);
 
 		if (data.error?.message) {
 			throw new Error(data.error.message);
 		}
 
-		return parseModelsListResponse(data);
+		const options = parseModelsListResponse(data);
+		const modelHint = settings.model.trim() || options[0]?.id;
+		const fromModels = extractNCtxFromModelsPayload(data, modelHint);
+		if (fromModels && modelHint) {
+			setCachedNCtx(baseUrl, modelHint, fromModels);
+		}
+
+		// Soft probe /props (llama.cpp) - мягкий сбой
+		await this.probeNCtxSoft(cfg, modelHint || settings.model, params.signal);
+
+		return options;
+	}
+
+	async checkConnectionHealth(params: ListModelsParams = {}): Promise<ConnectionHealthResult> {
+		try {
+			const options = await this.listModelOptions(params);
+			if (options.length === 0) {
+				return {
+					ok: false,
+					modelCount: 0,
+					message: vscode.l10n.t('settings.connection.healthNoModels'),
+				};
+			}
+			return {
+				ok: true,
+				modelCount: options.length,
+				message: vscode.l10n.t('settings.connection.healthOk', options.length),
+			};
+		} catch (err) {
+			return {
+				ok: false,
+				modelCount: 0,
+				message: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	// GET /props или ../props; кэш n_ctx. Ошибки глотаем
+	private async probeNCtxSoft(
+		settings: GenSettings,
+		model: string,
+		signal?: AbortSignal,
+	): Promise<void> {
+		const baseUrl = settings.baseUrl.trim();
+		const modelId = model.trim();
+		if (!baseUrl || !modelId) {
+			return;
+		}
+
+		if (getCachedNCtx(baseUrl, modelId)) {
+			return;
+		}
+
+		const shortTimeout = Math.min(settings.requestTimeoutMs, 5_000);
+		const tryPaths = ['/props', '../props'];
+		for (const path of tryPaths) {
+			try {
+				const data = await this.requestJsonOnceSoft(path, settings, shortTimeout, signal);
+				const nCtx = extractNCtxFromProps(data);
+				if (nCtx) {
+					setCachedNCtx(baseUrl, modelId, nCtx);
+					return;
+				}
+			} catch {}
+		}
+	}
+
+	// Один GET без retry-шума (для optional /props)
+	private async requestJsonOnceSoft(
+		path: string,
+		settings: GenSettings,
+		timeoutMs: number,
+		signal?: AbortSignal,
+	): Promise<unknown> {
+		const url = new URL(path, settings.baseUrl).toString();
+		const headers = await this.authHeaders(settings);
+		const { result } = await this.requestJsonOnce<unknown>(
+			url,
+			{ method: 'GET', headers },
+			signal,
+			timeoutMs,
+		);
+		return result;
 	}
 
 	private async resolveSessionModel(settings: GenSettings): Promise<string> {
@@ -563,7 +653,7 @@ export class HttpLlmClient implements LlmClient {
 		return this.withRetry(
 			'POST',
 			url,
-			() => this.requestStreamOnce(url, body, headers, signal, settings.requestTimeoutMs, onDelta, onThinkingDelta),
+			() => this.requestStreamOnce(url, body, headers, signal, settings, onDelta, onThinkingDelta),
 			onRetry,
 		);
 	}
@@ -573,10 +663,12 @@ export class HttpLlmClient implements LlmClient {
 		body: Record<string, unknown>,
 		headers: Record<string, string>,
 		signal: AbortSignal | undefined,
-		timeoutMs: number,
+		settings: GenSettings,
 		onDelta?: (chunk: string) => void,
 		onThinkingDelta?: (chunk: string) => void,
 	): Promise<{ result: CompleteResult; status: number }> {
+		const timeoutMs = settings.requestTimeoutMs;
+		const modelHint = typeof body.model === 'string' ? body.model : '';
 		const controller = new AbortController();
 		let timedOut = false;
 		const timer = setTimeout(() => {
@@ -640,6 +732,8 @@ export class HttpLlmClient implements LlmClient {
 					throw new Error(vscode.l10n.t('llm.emptyResponse'));
 				}
 
+				softCacheNCtxFromCompletePayload(settings.baseUrl, modelHint, data);
+
 				return {
 					result: {
 						content: text,
@@ -688,7 +782,9 @@ export class HttpLlmClient implements LlmClient {
 					}
 
 					try {
-						applyStreamDelta(acc, JSON.parse(payload) as ChatCompletionsResponse, onDelta, onThinkingDelta);
+						const parsed = JSON.parse(payload) as ChatCompletionsResponse;
+						softCacheNCtxFromCompletePayload(settings.baseUrl, modelHint, parsed);
+						applyStreamDelta(acc, parsed, onDelta, onThinkingDelta);
 					} catch {}
 				}
 			}

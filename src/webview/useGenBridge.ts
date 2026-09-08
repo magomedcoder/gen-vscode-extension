@@ -4,7 +4,7 @@ import type { GenSettings } from '../core/config/types';
 import { DEFAULT_SETTINGS } from '../core/config/types';
 import type { LlmModelOption } from '../core/llm/types';
 import type { AgentsPageData } from './components/settings/AgentsPage';
-import type { ExternalHookFileRow, ExternalHookKind, HooksPageData } from './components/settings/HooksPage';
+import type { HooksPageData } from './components/settings/HooksPage';
 import type { RulesSkillsPageData } from './components/settings/RulesSkillsPage';
 import { t } from './i18n';
 import { vscodeApi } from './vscodeApi';
@@ -59,15 +59,20 @@ export function useGenBridge() {
 	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
 	const [modelsLoading, setModelsLoading] = useState(false);
+	const [connectionHealth, setConnectionHealth] = useState<{
+		ok: boolean;
+		message: string
+	} | undefined>();
+	const [connectionHealthLoading, setConnectionHealthLoading] = useState(false);
 	const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
 	const [indexStatus, setIndexStatus] = useState<IndexEngineStatus | undefined>();
 	const [hooks, setHooks] = useState<HooksPageData | undefined>();
 	const [hooksStatus, setHooksStatus] = useState<string | undefined>();
-	const [externalHooks, setExternalHooks] = useState<ExternalHookFileRow[]>([]);
 	const [agents, setAgents] = useState<AgentsPageData | undefined>();
 	const [agentsStatus, setAgentsStatus] = useState<string | undefined>();
 	const [rulesSkills, setRulesSkills] = useState<RulesSkillsPageData | undefined>();
 	const modelsRequestId = useRef(0);
+	const connectionHealthRequestId = useRef(0);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent<ToWebviewMessage>) => {
@@ -131,6 +136,16 @@ export function useGenBridge() {
 					setModelsLoading(false);
 					setModelsStatus(data.message);
 					return;
+				case 'connectionHealth':
+					if (data.requestId !== connectionHealthRequestId.current) {
+						return;
+					}
+					setConnectionHealthLoading(false);
+					setConnectionHealth({
+						ok: data.ok,
+						message: data.message
+					});
+					return;
 				case 'mcpStatus':
 					setMcpServers(data.servers);
 					return;
@@ -154,25 +169,6 @@ export function useGenBridge() {
 						setHooksStatus(t('settings.hooks.saved'));
 					} else {
 						setHooksStatus(data.error || t('settings.hooks.saveFailed'));
-					}
-					return;
-				case 'externalHooksData':
-					setExternalHooks(data.files);
-					return;
-				case 'externalHooksImported':
-					if (data.ok) {
-						const skipped = data.skippedEvents.length > 0
-							? ` ${t('settings.hooks.external.skipped', data.skippedEvents.join(', '))}`
-							: '';
-						setHooksStatus(
-							`${t(
-								'settings.hooks.external.imported',
-								data.mappedCommandCount,
-								data.mode,
-							)}${skipped}`,
-						);
-					} else {
-						setHooksStatus(data.error || t('settings.hooks.external.importFailed'));
 					}
 					return;
 				case 'agentsData':
@@ -242,6 +238,27 @@ export function useGenBridge() {
 		});
 	}, []);
 
+	const checkConnection = useCallback((baseUrl: string) => {
+		const trimmed = baseUrl.trim();
+		if (!trimmed) {
+			setConnectionHealth({ 
+				ok: false, 
+				message: t('settings.models.needUrl')
+			});
+			return;
+		}
+
+		const requestId = connectionHealthRequestId.current + 1;
+		connectionHealthRequestId.current = requestId;
+		setConnectionHealthLoading(true);
+		setConnectionHealth(undefined);
+		vscodeApi.postMessage({
+			type: 'checkConnection',
+			baseUrl: trimmed,
+			requestId,
+		});
+	}, []);
+
 	const openLogsFolder = useCallback(() => {
 		vscodeApi.postMessage({ type: 'openLogsFolder' });
 	}, []);
@@ -295,23 +312,6 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'openHooksFile' });
 	}, []);
 
-	const loadExternalHooks = useCallback(() => {
-		vscodeApi.postMessage({ type: 'loadExternalHooks' });
-	}, []);
-
-	const openExternalHookFile = useCallback((path: string) => {
-		vscodeApi.postMessage({ type: 'openExternalHookFile', path });
-	}, []);
-
-	const importExternalHooks = useCallback((
-		path: string,
-		mode: 'merge' | 'replace',
-		kind: ExternalHookKind,
-	) => {
-		setHooksStatus(t('settings.hooks.external.importing'));
-		vscodeApi.postMessage({ type: 'importExternalHooks', path, mode, kind });
-	}, []);
-
 	const loadAgents = useCallback(() => {
 		setAgentsStatus(undefined);
 		vscodeApi.postMessage({ type: 'loadAgents' });
@@ -345,16 +345,18 @@ export function useGenBridge() {
 		models,
 		modelsStatus,
 		modelsLoading,
+		connectionHealth,
+		connectionHealthLoading,
 		mcpServers,
 		indexStatus,
 		hooks,
 		hooksStatus,
-		externalHooks,
 		agents,
 		agentsStatus,
 		rulesSkills,
 		saveSettings,
 		loadModels,
+		checkConnection,
 		openLogsFolder,
 		refreshMcp,
 		mcpOAuthAuth,
@@ -364,9 +366,6 @@ export function useGenBridge() {
 		loadHooks,
 		saveHooks,
 		openHooksFile,
-		loadExternalHooks,
-		openExternalHookFile,
-		importExternalHooks,
 		loadAgents,
 		cloneAgentPreset,
 		loadRulesSkills,

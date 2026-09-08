@@ -6,15 +6,15 @@ import { throwIfAborted } from '../../workspacePath';
 
 export const semanticSearchTool: ToolDefinition = {
 	name: 'semantic_search',
-	description: 'Семантический поиск по workspace через remote OpenAI-compatible /embeddings (нужен embeddingsBaseUrl или baseUrl).',
+	description: 'Семантический поиск: remote /embeddings или offline trigram (localEmbeddingsMode=trigram).',
 	parameters: {
 		type: 'object',
 		properties: {
-			query: { 
-				type: 'string' 
+			query: {
+				type: 'string',
 			},
-			max_results: { 
-				type: 'integer' 
+			max_results: {
+				type: 'integer',
 			},
 		},
 		required: ['query'],
@@ -24,9 +24,9 @@ export const semanticSearchTool: ToolDefinition = {
 		throwIfAborted(ctx.signal);
 		const settings = getSettings();
 		if (settings.indexingEnabled === false) {
-			return { 
-				ok: false, 
-				content: 'semantic_search: индексирование отключено в настройках' 
+			return {
+				ok: false,
+				content: 'semantic_search: индексирование отключено в настройках',
 			};
 		}
 
@@ -39,9 +39,9 @@ export const semanticSearchTool: ToolDefinition = {
 
 		const query = asString(args, 'query').trim();
 		if (!query) {
-			return { 
-				ok: false, 
-				content: 'semantic_search: нужен параметр query' 
+			return {
+				ok: false,
+				content: 'semantic_search: нужен параметр query',
 			};
 		}
 
@@ -52,7 +52,15 @@ export const semanticSearchTool: ToolDefinition = {
 			});
 			return {
 				ok: true,
-				content: JSON.stringify({ query, hits }, null, 2),
+				content: JSON.stringify(
+					{
+						query,
+						localEmbeddingsMode: settings.localEmbeddingsMode,
+						hits,
+					},
+					null,
+					2,
+				),
 			};
 		} catch (err) {
 			return {

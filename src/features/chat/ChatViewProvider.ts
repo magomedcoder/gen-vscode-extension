@@ -11,7 +11,6 @@ import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../../host/ui/confirmDialog';
 import { enableProject, isProjectEnabled } from '../project/config';
 import { getIndexManager } from '../index/IndexManager';
-import { resolveWorkspacePath } from '../agent/workspacePath';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
 	// Все активные chat webview (panel + sidebar могут быть одновременно)
@@ -203,6 +202,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 			case 'loadModels':
 				await this.handleLoadModels(msg.baseUrl, msg.requestId);
 				return;
+			case 'checkConnection':
+				await this.handleCheckConnection(msg.baseUrl, msg.requestId);
+				return;
 			case 'openSettings':
 				SettingsPanel.show(this.context);
 				return;
@@ -276,16 +278,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				if (!path) {
 					return;
 				}
-				try {
-					const resolved = await resolveWorkspacePath(path);
-					await vscode.window.showTextDocument(resolved.uri, { preview: true });
-				} catch {}
+				await this.session.openEditedPath(path);
 				return;
 			}
 		}
 	}
 
 	// Загрузить список моделей для компактного picker в шапке чата
+	private async handleCheckConnection(baseUrl: string, requestId: number): Promise<void> {
+		this.modelsAbort?.abort();
+		const controller = new AbortController();
+		this.modelsAbort = controller;
+
+		try {
+			const health = await this.client.checkConnectionHealth({
+				baseUrl,
+				signal: controller.signal,
+			});
+			if (controller.signal.aborted) {
+				return;
+			}
+
+			this.post({
+				type: 'connectionHealth',
+				ok: health.ok,
+				modelCount: health.modelCount,
+				message: health.message,
+				requestId,
+			});
+		} catch (err) {
+			if (isAbortError(err) || controller.signal.aborted) {
+				return;
+			}
+
+			this.post({
+				type: 'connectionHealth',
+				ok: false,
+				modelCount: 0,
+				message: err instanceof Error ? err.message : String(err),
+				requestId,
+			});
+		} finally {
+			if (this.modelsAbort === controller) {
+				this.modelsAbort = undefined;
+			}
+		}
+	}
+
 	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {
 		this.modelsAbort?.abort();
 		const controller = new AbortController();

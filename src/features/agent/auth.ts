@@ -5,6 +5,7 @@ const WRITE_TOOLS = new Set([
 	'write_file',
 	'apply_patch',
 	'apply_workspace_edit',
+	'edit_file',
 	'create_dir',
 	'edit_notebook',
 ]);

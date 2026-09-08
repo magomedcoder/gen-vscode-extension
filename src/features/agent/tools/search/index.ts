@@ -1,15 +1,15 @@
 import { registerTool } from '../registry';
 import { codebaseSearchTool } from './codebaseSearch';
 import { fileSearchTool } from './fileSearchWeb';
+import { findCodeTool } from './findCode';
+import { findSymbolTool } from './findSymbol';
 import { globTool, grepTool } from './globGrep';
-import { searchFilesTool } from './searchFiles';
+import { packContextTool } from './packContext';
+import { projectMapTool } from './projectMap';
 import { searchDocsTool, semanticSearchTool } from './semanticSearch';
+import { similarCodeTool } from './similarCode';
 
 export function registerSearchTools(): void {
-	registerTool(searchFilesTool, { 
-		tags: ['search'], 
-		risk: 'read'
-	});
 	registerTool(globTool, { 
 		tags: ['search'], 
 		risk: 'read'
@@ -20,6 +20,14 @@ export function registerSearchTools(): void {
 	});
 	registerTool(fileSearchTool, { 
 		tags: ['search'], 
+		risk: 'read'
+	});
+	registerTool(findCodeTool, {
+		tags: ['search'],
+		risk: 'read'
+	});
+	registerTool(findSymbolTool, {
+		tags: ['search'],
 		risk: 'read'
 	});
 	registerTool(codebaseSearchTool, { 
@@ -34,5 +42,16 @@ export function registerSearchTools(): void {
 		tags: ['search'], 
 		risk: 'read'
 	});
+	registerTool(projectMapTool, {
+		tags: ['search'],
+		risk: 'read',
+	});
+	registerTool(packContextTool, {
+		tags: ['search'],
+		risk: 'read',
+	});
+	registerTool(similarCodeTool, {
+		tags: ['search'],
+		risk: 'read',
+	});
 }
-

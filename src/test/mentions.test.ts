@@ -61,6 +61,19 @@ suite('parseMentions', () => {
 		assert.strictEqual(stripMentions(text, mentions), 'сравни и плюс');
 	});
 
+	test('разбирает @map и @symbols', () => {
+		const text = 'смотри @map и @symbols Foo плюс @symbols:`Bar`';
+		const mentions = parseMentions(text);
+		assert.strictEqual(mentions.length, 3);
+		assert.strictEqual(mentions[0]!.kind, 'map');
+		assert.strictEqual(mentions[0]!.arg, undefined);
+		assert.strictEqual(mentions[1]!.kind, 'symbols');
+		assert.strictEqual(mentions[1]!.arg, 'Foo');
+		assert.strictEqual(mentions[2]!.kind, 'symbols');
+		assert.strictEqual(mentions[2]!.arg, 'Bar');
+		assert.strictEqual(stripMentions(text, mentions), 'смотри и плюс');
+	});
+
 	test('разбирает @alias и @ref без поломки других mentions', () => {
 		const text = 'смотри @alias sdk и @ref:upstream плюс @file src/a.ts';
 		const mentions = parseMentions(text);

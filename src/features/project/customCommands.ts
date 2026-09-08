@@ -13,7 +13,7 @@ export interface CustomCommand {
 }
 
 const MAX_BODY_CHARS = 32_000;
-const MODES = new Set<ChatMode>(['ask', 'agent', 'debug', 'design', 'plan', 'multitask']);
+const MODES = new Set<ChatMode>(['ask', 'agent', 'debug', 'design', 'plan', 'multitask', 'project']);
 
 function parseFrontmatter(raw: string): {
 	title?: string;

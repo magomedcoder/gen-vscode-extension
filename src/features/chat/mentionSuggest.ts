@@ -38,6 +38,18 @@ function kindTemplates(): Array<{
 			detail: vscode.l10n.t('chat.mention.detail.codebase'),
 		},
 		{
+			kind: 'map',
+			label: '@map',
+			insert: '@map',
+			detail: vscode.l10n.t('chat.mention.detail.map'),
+		},
+		{
+			kind: 'symbols',
+			label: '@symbols',
+			insert: '@symbols ',
+			detail: vscode.l10n.t('chat.mention.detail.symbols'),
+		},
+		{
 			kind: 'code',
 			label: '@code',
 			insert: '@code',
@@ -106,7 +118,7 @@ function kindTemplates(): Array<{
 	];
 }
 
-const KIND_NAMES: MentionKind[] = ['file', 'folder', 'codebase', 'code', 'docs', 'agent', 'alias', 'ref', 'git', 'branch_diff', 'rules', 'link', 'terminals', 'past'];
+const KIND_NAMES: MentionKind[] = ['file', 'folder', 'codebase', 'map', 'symbols', 'code', 'docs', 'agent', 'alias', 'ref', 'git', 'branch_diff', 'rules', 'link', 'terminals', 'past'];
 
 async function suggestReferenceAliases(prefix: string): Promise<MentionSuggestion[]> {
 	const isRef = prefix.startsWith('ref');

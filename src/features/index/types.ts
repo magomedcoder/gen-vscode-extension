@@ -22,6 +22,8 @@ export interface IndexManifest {
 	files: Record<string, IndexFileRecord>;
 	chunks: Record<string, IndexChunk>;
 	trigrams: Record<string, string[]>;
+	// Merkle / dir-дайджесты: POSIX-путь -> hash прямых детей
+	dirDigests: Record<string, string>;
 }
 
 export interface CodebaseSearchHit {
@@ -49,5 +51,6 @@ export function emptyManifest(): IndexManifest {
 		files: {},
 		chunks: {},
 		trigrams: {},
+		dirDigests: {},
 	};
 }

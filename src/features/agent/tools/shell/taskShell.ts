@@ -121,6 +121,9 @@ export const taskTool: ToolDefinition = {
 				signal: ctx.signal ?? new AbortController().signal,
 				cwd: worktreeCwd,
 			});
+			const synthesizeHint = getSettings().chatMode === 'project'
+				? '\n\n[team-lead] Субагент завершил задачу. Синтезируй отчёт в общий план/итог для пользователя; не оставляй сырой вывод без сводки.'
+				: '';
 			return {
 				ok: true,
 				content: JSON.stringify({
@@ -129,7 +132,7 @@ export const taskTool: ToolDefinition = {
 						worktree: worktreeMeta
 					} : {}),
 					report,
-				}, null, 2),
+				}, null, 2) + synthesizeHint,
 			};
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') {

@@ -1,5 +1,6 @@
 import { registerTool } from '../registry';
 import { runCommandTool } from './runCommand';
+import { runScratchTool } from './runScratch';
 import { runTestsTool } from './runTests';
 import { awaitShellTool } from './taskShell';
 
@@ -16,5 +17,8 @@ export function registerShellTools(): void {
 		tags: ['shell'],
 		risk: 'shell'
 	});
+	registerTool(runScratchTool, {
+		tags: ['shell'],
+		risk: 'shell',
+	});
 }
-

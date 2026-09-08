@@ -73,6 +73,8 @@ In the input, type `@` and choose:
 | `@Docs` / `@Docs query`         | Search `docs/` and markdown                                                   |
 | `@agent name`                   | Body of `.gen/agents/{name}.md`                                               |
 | `@codebase` / `@codebase query` | Fragments from the local index + open editors                                 |
+| `@map`                          | Project map outline (`.gen/map`)                                              |
+| `@symbols` / `@symbols query`   | Symbol index summary or query (`.gen/index/symbols.json`)                     |
 | `@git` / `@git SHA`             | Recent commits or `git show` for a SHA                                        |
 | `@branch_diff`                  | `git status` + `diff --stat`                                                  |
 | `@rules`                        | AGENTS.md / `.genrules`                                                       |

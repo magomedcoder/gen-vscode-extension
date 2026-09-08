@@ -60,11 +60,23 @@
 					"enabled": { "type": "boolean" },
 					"oauth": {
 						"type": "boolean",
-						"description": "If true, enable MCP OAuth MVP (paste token / optional authorize URL). Default false."
+						"description": "If true, enable MCP OAuth (paste token / PKCE code exchange). Default false."
+					},
+					"mcpOAuthIssuer": {
+						"type": "string",
+						"description": "Optional OAuth/OIDC issuer for discovery (/.well-known/openid-configuration or oauth-authorization-server)."
+					},
+					"mcpOAuthClientId": {
+						"type": "string",
+						"description": "OAuth client_id for PKCE (default gen-agent-vscode)."
 					},
 					"mcpOAuthAuthorizeUrl": {
 						"type": "string",
-						"description": "Optional http(s) authorize URL opened on Auth (full OIDC WIP)."
+						"description": "Optional http(s) authorize URL; PKCE code_challenge appended on Auth."
+					},
+					"mcpOAuthTokenUrl": {
+						"type": "string",
+						"description": "Optional token URL for authorization_code / refresh_token (POST form-urlencoded)."
 					}
 				},
 				"additionalProperties": true
@@ -238,6 +250,11 @@
 		"gitSyncAutoKeep": { "type": "boolean" },
 		"embeddingsBaseUrl": { "type": "string" },
 		"embeddingsModel": { "type": "string" },
+		"localEmbeddingsMode": {
+			"type": "string",
+			"enum": ["off", "trigram"],
+			"description": "Local offline semantic path: off (remote only) | trigram (default offline fallback)"
+		},
 		"compactTailTurns": {
 			"type": "integer",
 			"minimum": 1,
@@ -248,9 +265,13 @@
 			"type": "integer",
 			"minimum": 0
 		},
+		"midLoopAutoCompact": {
+			"type": "boolean",
+			"description": "When near context budget mid-loop, soft-compact api messages once before shrink (default false)"
+		},
 		"chatMode": {
 			"type": "string",
-			"enum": ["ask", "agent", "debug", "design", "plan", "multitask"]
+			"enum": ["ask", "agent", "debug", "design", "plan", "multitask", "project"]
 		},
 		"shareMode": {
 			"type": "string",

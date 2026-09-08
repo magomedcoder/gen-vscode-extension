@@ -3,6 +3,12 @@ import { showConfirmDialog } from '../ui/confirmDialog';
 
 export const GEN_COMMENT_SCHEME = 'gen-comment';
 
+let sharedDiffProvider: DiffContentProvider | undefined;
+
+export function getSharedDiffProvider(): DiffContentProvider | undefined {
+	return sharedDiffProvider;
+}
+
 function languageIdFromUri(uri: vscode.Uri): string | undefined {
 	const lang = new URLSearchParams(uri.query).get('lang');
 	return lang?.trim() || undefined;
@@ -92,6 +98,7 @@ export class DiffContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export function registerDiffContentProvider(provider: DiffContentProvider): vscode.Disposable {
+	sharedDiffProvider = provider;
 	const languageSub = vscode.workspace.onDidOpenTextDocument((doc) => {
 		void applyVirtualDocumentLanguage(doc);
 	});
@@ -100,15 +107,62 @@ export function registerDiffContentProvider(provider: DiffContentProvider): vsco
 		void applyVirtualDocumentLanguage(doc);
 	}
 
-	return vscode.Disposable.from(vscode.workspace.registerTextDocumentContentProvider(GEN_COMMENT_SCHEME, provider), languageSub);
+	return vscode.Disposable.from(
+		vscode.workspace.registerTextDocumentContentProvider(GEN_COMMENT_SCHEME, provider),
+		languageSub,
+		{ dispose: () => {
+			if (sharedDiffProvider === provider) {
+				sharedDiffProvider = undefined;
+			}
+		} },
+	);
 }
 
-function buildVirtualUri(side: 'original' | 'commented', stamp: number, fileName: string, languageId: string): vscode.Uri {
+function buildVirtualUri(side: 'original' | 'commented' | 'before', stamp: number, fileName: string, languageId: string): vscode.Uri {
 	return vscode.Uri.from({
 		scheme: GEN_COMMENT_SCHEME,
 		path: `/${side}/${stamp}/${fileName}`,
 		query: `lang=${encodeURIComponent(languageId)}`,
 	});
+}
+
+/**
+ * Diff «до правок агента» ↔ текущий файл при открытии изменённого файла.
+ * Left = виртуальный снимок; right = живой URI на диске.
+ */
+export async function showAgentEditDiff(params: {
+	provider: DiffContentProvider;
+	fileUri: vscode.Uri;
+	fileName: string;
+	languageId?: string;
+	original: string;
+}): Promise<void> {
+	const stamp = Date.now();
+	let languageId = params.languageId?.trim();
+	if (!languageId) {
+		try {
+			const doc = await vscode.workspace.openTextDocument(params.fileUri);
+			languageId = doc.languageId;
+		} catch {
+			languageId = 'plaintext';
+		}
+	}
+
+	const leftUri = buildVirtualUri('before', stamp, params.fileName, languageId || 'plaintext');
+	params.provider.set(leftUri, params.original);
+
+	const title = vscode.l10n.t('agent.editDiffTitle', params.fileName);
+	await vscode.commands.executeCommand(
+		'vscode.diff',
+		leftUri,
+		params.fileUri,
+		title,
+		{ 
+			preview: true 
+		},
+	);
+
+	params.provider.scheduleClearAfterDiffClosed(leftUri);
 }
 
 // Показывает diff исходник <-> с комментариями и спрашивает решение пользователя

@@ -73,6 +73,12 @@ body {
 	cursor: default;
 }
 
+.mode-badge--project {
+	border-color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
 .mode-toggle {
 	display: inline-flex;
 	flex-wrap: wrap;
@@ -387,6 +393,24 @@ body {
 	border-color: var(--vscode-focusBorder, rgba(127, 127, 127, 0.5));
 }
 
+.tool-card--awaiting_confirm {
+	border-color: var(--vscode-focusBorder, #3794ff);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder, rgba(55, 148, 255, 0.35));
+}
+
+.tool-card__awaiting {
+	font-size: 11px;
+	opacity: 0.85;
+	margin-right: 6px;
+}
+
+.tool-card__confirm-hint {
+	margin: 0 0 8px;
+	font-size: 12px;
+	opacity: 0.85;
+	line-height: 1.4;
+}
+
 .tool-card--error {
 	border-color: var(--vscode-inputValidation-errorBorder, #f14c4c);
 }
@@ -568,6 +592,22 @@ body {
 	opacity: 0.75;
 	white-space: nowrap;
 	flex-shrink: 0;
+}
+
+.token-meter-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	flex-shrink: 1;
+}
+
+.token-meter--budget {
+	opacity: 0.55;
+	font-variant-numeric: tabular-nums;
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .token-meter--msg {
@@ -936,9 +976,14 @@ body {
 	display: flex;
 	align-items: flex-start;
 	gap: 8px;
+	margin: 2px 0 4px;
+	padding: 8px 10px;
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-button-background));
+	border-radius: 4px;
+	background: var(--vscode-inputValidation-infoBackground, var(--vscode-editor-inactiveSelectionBackground, transparent));
 	font-size: 12px;
 	line-height: 1.35;
-	color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+	color: var(--vscode-foreground);
 	cursor: pointer;
 	user-select: none;
 }
@@ -946,6 +991,24 @@ body {
 .msg-edit__revert input {
 	margin-top: 2px;
 	flex-shrink: 0;
+}
+
+.msg-edit__revert-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.msg-edit__revert-label {
+	font-weight: 600;
+}
+
+.msg-edit__revert-hint {
+	font-size: 11px;
+	font-weight: 400;
+	opacity: 0.85;
+	color: var(--vscode-descriptionForeground, var(--vscode-foreground));
 }
 
 .msg-edit__actions {
@@ -969,11 +1032,23 @@ body {
 	text-align: center;
 }
 
+.msg--confirm {
+	align-self: stretch;
+	background: transparent;
+	padding: 0;
+	border: none;
+	box-shadow: none;
+}
+
+.msg--confirm .confirm-card {
+	margin: 0;
+}
+
 .confirm-card {
 	flex-shrink: 0;
-	margin: 0 var(--pad);
+	margin: 0;
 	padding: 10px 12px;
-	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-widget-border, rgba(127, 127, 127, 0.35)));
 	border-radius: 8px;
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	color: var(--vscode-foreground);
@@ -1872,6 +1947,11 @@ body[data-screen='settings'] .settings {
 .field__hint--error {
 	opacity: 1;
 	color: var(--vscode-errorForeground, #f44747);
+}
+
+.field__hint--ok {
+	opacity: 1;
+	color: var(--vscode-testing-iconPassed, #89d185);
 }
 
 .field__hint--warning {

@@ -3,6 +3,7 @@ import { applyPatchTool } from './applyPatch';
 import { applyWorkspaceEditTool } from './applyWorkspaceEdit';
 import { createDirTool } from './createDir';
 import { deleteFileTool } from './deleteFile';
+import { editFileTool } from './editFile';
 import { editNotebookTool } from './editNotebook';
 import { listDirTool } from './listDir';
 import { readFileTool } from './readFile';
@@ -25,6 +26,10 @@ export function registerFsTools(): void {
 		tags: ['fs'], 
 		risk: 'write' 
 	});
+	registerTool(editFileTool, {
+		tags: ['fs'],
+		risk: 'write',
+	});
 	registerTool(applyWorkspaceEditTool, { 
 		tags: ['fs'], 
 		risk: 'write' 
@@ -42,4 +47,3 @@ export function registerFsTools(): void {
 		risk: 'write' 
 	});
 }
-

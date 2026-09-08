@@ -2,26 +2,35 @@
 
 [English version](CHANGELOG.md)
 
-## dev (Версия в разработке)
+## 0.4.dev (Версия в разработке)
+
+- Plugins: `run_plugin` - spawn объявленных `command`/`args` или `bin` только под workspace (shell confirm; без `require` в host); `package.json` `gen`/`genAgent` и `.gen/npm-plugins.json` в `list_plugins` (без require/execute)
+- Project polish: бейдж «Project lead», усиленный промпт тимлида / `/project`, напоминание синтезировать после `task`
+- Режим **project**: промпт тимлида, slash `/project`, мутирующие tools как в multitask
+- **Tool confirm UX:** статус `awaiting_confirm` на карточке tool + строка busy; pretty JSON args; один центральный ask до execute; ConfirmCard в composer dock; вопрос перед text-only fallback, если сервер отклонил tools
+- **Index/codebase MVP:** `localEmbeddingsMode` (`off`|`trigram`); `embeddingsBaseUrl` / `embeddingsModel`; TS outline -> `.gen/index/outline.json`; tools `find_references`, `design_inspect`; PDF text + до 3 PNG через `pdftoppm`; debounce outline/symbols на watcher
+- Context: n_ctx probe + budget UI + hygiene; Merkle/LSP symbols/`@map`; `edit_file` / scratch / ephemeral / `repo_health`
+- MCP OAuth: OIDC discovery (`mcpOAuthIssuer`), PKCE + обмен code (paste code/URL или UriHandler `/mcp-oauth`); хранение/refresh `refresh_token`; `mcpOAuthTokenUrl` POST refresh
+- `smallModel`: общий `resolveSmallModel` для title + compact/summary
 
 ## 0.3.0 (7 сентября 2026)
 
 - **Переполнение контекста:** разбор `exceed_context_size_error` (в т.ч. вложенный JSON llama.cpp); preflight оценка + shrink; auto-compact перед ходом; ограниченный retry; `contextOverflowPolicy` на экране Запросы; понятные ошибки вместо сырого HTTP 400
-- Permissions v2: UI политики подтверждений (`allow` / `ask` / `review` / `deny`), Always + подсказка паттерна, session allowlist, auto-approve, continue-on-deny, capability toggles (legacy `agentAuthLevel` мигрирует в policy / autoApprove)
+- Permissions v2: UI политики подтверждений (`allow` / `ask` / `review` / `deny`), Always + подсказка паттерна, session allowlist, auto-approve, continue-on-deny, capability toggles
 - Карточка подтверждения: кнопка **Always** + hint; allow/deny провайдеров по паттерну (`providerUsePolicy`)
 - Admin policy: блокировка security-ключей через `GEN_ADMIN_POLICY` / `/etc/gen/policy.json` (баннер read-only в Settings)
 - Slash-режимы: `/debug` `/design` `/plan` `/ask` `/agent`; также `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
 - Режим **Plan**: правки только на чтение; shell ask или deny (`planShellPolicy`); handoff Plan↔Agent (banner + reminders)
 - Multitask + `plan_enter` / `plan_exit` / `switch_mode`; артефакты WritePlan в `.gen/plans/`
 - MCP stdio: отдельный экран настроек (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, cwd/timeout/headers на сервер
-- MCP OAuth MVP: paste-token в SecretStorage, Auth / Logout / Debug (полный OIDC позже)
+- MCP OAuth MVP: paste-token в SecretStorage, Auth / Logout / Debug
 - Experimental code-mode: opt-in tool `execute` - JSON-шаги только как MCP-вызовы (без eval JS на хосте)
 - Skills и rules: `AGENTS.md` / `.genrules`, discovery + tool `skill`, `/init`; экран Rules/Skills
 - Personas: dropdown в Chat + экран Personas (`.gen/personas/`); экран Agents - clone builtin presets в `.gen/agents/`
-- Локальные plugins/tools: discovery `.gen/tools` и `.gen/plugins` (каталог + `list_plugins` / `plugin`; без npm/JS runtime)
+- Локальные plugins/tools: discovery `.gen/tools` и `.gen/plugins` (каталог + `list_plugins` / `plugin`)
 - Scaffold проекта: Enable / `/init` создаёт `.gen/{agents,commands,plugins,skills,tools,references,plans}`
 - Слои конфига: user `~/.config/gen/config.json` + project `.gen/config.json`; JSON Schema + валидация VS Code
-- Hooks: экран `.gen/hooks.json`; события `beforeSubmit` / `beforeShell` / `session.diff` / `session.compacting` / `shell.env` / `file.watcher`; импорт внешних hook-файлов
+- Hooks: экран `.gen/hooks.json`; события `beforeSubmit` / `beforeShell` / `session.diff` / `session.compacting` / `shell.env` / `file.watcher`
 - Субагенты: `task` (`explore` / `general`), лимит вложенности, опциональные git worktrees + start command после create
 - Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `edit_notebook`, `lsp`, `semantic_search` / `search_docs`
 - Web search: DuckDuckGo, Exa, Parallel или custom HTTP; model-routed patch (GPT оставляет `apply_patch`)
@@ -30,8 +39,7 @@
 - Chat UX: multi-session + fork, параллельные runs по табам, drafts, AskQuestion / Todo, thinking toggle, model picker, context ring, звук notify
 - Review: pending-changes с деревом файлов + Accept/Reject на файл; CodeLens Keep/Undo; git-sync auto-Keep; edit + revertFiles
 - Indexing: toggles + статус движка (CPU trigram / remote embeddings); opt-in OTEL spans для LLM
-- Connection: пресеты llama.cpp (probe + list models)
-- Settings UI: отдельные экраны (Чат / Агент / Индекс / Права); нав Основное / Дополнительно; все разделы всегда видны; блок пресетов локальных моделей убран; удобнее toggles полей
+- Settings UI: отдельные экраны (Чат / Агент / Индекс / Права); нав Основное / Дополнительно; все разделы всегда видны; удобнее toggles полей
 - Usage: ledger токенов по моделям (totals/sort); placeholder Quota (OAuth)
 - Поиск по Settings; deep-links в VS Code; sidebar или bottom panel (`chatViewLocation`); light/HC polish
 - LLM: учёт `Retry-After` при 429/5xx со статусом в composer; параллельные read-only tool batches; обрезка вывода tools

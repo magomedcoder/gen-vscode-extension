@@ -38,6 +38,12 @@ suite('tools category smoke', () => {
 	test('fs: list_dir (workspace или policy)', async () => {
 		assertTagged('list_dir', 'fs', 'read');
 		assertTagged('write_file', 'fs', 'write');
+		assertTagged('edit_file', 'fs', 'write');
+		assertTagged('run_scratch', 'shell', 'shell');
+		assertTagged('run_plugin', 'meta', 'shell');
+		assertTagged('register_ephemeral_tool', 'meta', 'read');
+		assertTagged('repo_health', 'meta', 'read');
+		assertTagged('test_impact', 'meta', 'read');
 		const tool = getToolByName('list_dir')!;
 		try {
 			const result = await tool.execute({ path: '.', max_entries: 5 }, {});

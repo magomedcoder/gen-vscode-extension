@@ -38,6 +38,12 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
 		mode: 'multitask',
 	},
 	{
+		id: 'project',
+		name: 'project',
+		detailKey: 'chat.slash.project',
+		mode: 'project',
+	},
+	{
 		id: 'ask',
 		name: 'ask',
 		detailKey: 'chat.slash.ask',

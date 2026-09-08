@@ -1,8 +1,6 @@
 /**
  * Core host services (config / llm / stores / log).
- *
- * New code may import from `../core/config/...` etc.
- * Legacy `src/config`, `src/llm`, `src/stores`, `src/log` are thin shims.
+ * Импортируй из `../core/config/...` и т.п.
  */
 export { initSettings, getSettings } from './config/settings';
 export type { GenSettings } from './config/settings';

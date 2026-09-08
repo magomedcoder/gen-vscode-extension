@@ -1,13 +1,17 @@
 import { registerTool } from '../registry';
 import { webSearchTool } from '../search/fileSearchWeb';
 import { taskTool } from '../shell/taskShell';
+import { designInspectTool } from './designInspect';
 import { fetchPageTool } from './fetchPage';
 import { findLogsTool } from './findLogs';
 import { generateAgentTool } from './generateAgent';
 import { getWorkspaceInfoTool } from './getWorkspaceInfo';
 import { openBrowserTool } from './openBrowser';
-import { listPluginsTool, pluginTool } from './plugins';
+import { listPluginsTool, pluginTool, runPluginTool } from './plugins';
 import { readLogTailTool } from './readLogTail';
+import { registerEphemeralToolTool } from './registerEphemeralTool';
+import { repoHealthTool } from './repoHealth';
+import { testImpactTool } from './testImpact';
 import { askQuestionTool, skillTool, todoReadTool, todoWriteTool } from './todoQuestionSkill';
 
 export function registerMetaTools(): void {
@@ -47,6 +51,10 @@ export function registerMetaTools(): void {
 		tags: ['meta'], 
 		risk: 'read' 
 	});
+	registerTool(runPluginTool, {
+		tags: ['meta'],
+		risk: 'shell',
+	});
 	registerTool(taskTool, { 
 		tags: ['meta'], 
 		risk: 'read' 
@@ -54,6 +62,18 @@ export function registerMetaTools(): void {
 	registerTool(generateAgentTool, { 
 		tags: ['meta'], 
 		risk: 'write' 
+	});
+	registerTool(registerEphemeralToolTool, {
+		tags: ['meta'],
+		risk: 'read',
+	});
+	registerTool(repoHealthTool, {
+		tags: ['meta'],
+		risk: 'read',
+	});
+	registerTool(testImpactTool, {
+		tags: ['meta'],
+		risk: 'read',
 	});
 	registerTool(webSearchTool, { 
 		tags: ['meta'], 
@@ -67,5 +87,8 @@ export function registerMetaTools(): void {
 		tags: ['meta'], 
 		risk: 'web' 
 	});
+	registerTool(designInspectTool, {
+		tags: ['meta'],
+		risk: 'web',
+	});
 }
-

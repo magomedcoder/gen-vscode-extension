@@ -10,28 +10,17 @@ import { loadWebviewL10n } from '../../l10n/loadBundle';
 import { revealLogsFolder } from '../../core/log/logger';
 import { discoverPersonas } from '../project/personas';
 import { BUILTIN_PRESETS, cloneBuiltinPreset, discoverCustomAgents } from '../project/customAgents';
-import { discoverExternalHookFiles, getWorkspaceRootFsPath, mergeGenHooksLists, parseExternalHooksFile } from '../project/externalHooks';
-import type { ExternalHookKind, GenHooksLists } from '../project/externalHooks';
 import { listRulesCandidates } from '../project/projectRules';
 import { discoverSkills } from '../project/skills';
 import { discoverLocalPlugins } from '../project/plugins';
 import { clearActivity, readActivity } from '../../core/stores/activityStore';
-import { clearMcpOAuthTokens, getMcpOAuthDebugInfo, setMcpOAuthLastError, setMcpOAuthTokens } from '../../core/stores/mcpOAuthStore';
+import { clearMcpOAuthPkceSession, clearMcpOAuthTokens, getMcpOAuthDebugInfo, getMcpOAuthPkceSession, parseMcpOAuthPastePayload, setMcpOAuthLastError, setMcpOAuthPkceSession, setMcpOAuthTokens } from '../../core/stores/mcpOAuthStore';
+import { buildAuthorizeUrl, discoverOAuthEndpoints, exchangeAuthorizationCode, generateOAuthState, generatePkcePair, parseAuthorizationCallbackInput } from '../../core/stores/mcpOAuthPkce';
+import { buildMcpOAuthRedirectUri } from '../../integrations/mcpOAuthUriHandler';
 import { readUsage, resetUsage } from '../../core/stores/usageStore';
 import { createNonce, renderChatHtml } from './chatHtml';
 import type { AdminPolicyInfo, FromWebviewMessage, PersonaOption, ToWebviewMessage } from './protocol';
 const VIEW_TYPE = 'gen.settings';
-
-function emptyHookLists(): GenHooksLists {
-	return {
-		beforeSubmit: [],
-		beforeShell: [],
-		sessionDiff: [],
-		sessionCompacting: [],
-		shellEnv: [],
-		fileWatcher: [],
-	};
-}
 function isAbortError(err: unknown): boolean {
 	return err instanceof Error && err.name === 'AbortError';
 }
@@ -57,16 +46,16 @@ export class SettingsPanel {
 			localResourceRoots: [assetsRoot, codiconsRoot],
 		});
 		panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'logo.svg');
-		SettingsPanel.current = new SettingsPanel(panel, assetsRoot, context.extensionUri, codiconsRoot);
+		SettingsPanel.current = new SettingsPanel(panel, assetsRoot, context, codiconsRoot);
 	}
 
 	private constructor(
 		private readonly panel: vscode.WebviewPanel,
 		assetsRoot: vscode.Uri,
-		extensionUri: vscode.Uri,
+		private readonly context: vscode.ExtensionContext,
 		codiconsRoot: vscode.Uri,
 	) {
-		const l10n = loadWebviewL10n(extensionUri);
+		const l10n = loadWebviewL10n(this.context.extensionUri);
 		this.panel.webview.html = renderChatHtml({
 			cspSource: this.panel.webview.cspSource,
 			nonce: createNonce(),
@@ -170,6 +159,9 @@ export class SettingsPanel {
 			case 'loadModels':
 				await this.handleLoadModels(msg.baseUrl, msg.requestId);
 				return;
+			case 'checkConnection':
+				await this.handleCheckConnection(msg.baseUrl, msg.requestId);
+				return;
 			case 'openLogsFolder':
 				await revealLogsFolder();
 				return;
@@ -229,15 +221,6 @@ export class SettingsPanel {
 				return;
 			case 'openHooksFile':
 				await this.handleOpenHooksFile();
-				return;
-			case 'loadExternalHooks':
-				await this.postExternalHooksData();
-				return;
-			case 'openExternalHookFile':
-				await this.handleOpenExternalHookFile(msg.path);
-				return;
-			case 'importExternalHooks':
-				await this.handleImportExternalHooks(msg.path, msg.mode, msg.kind);
 				return;
 			case 'loadAgents':
 				await this.postAgentsData();
@@ -517,139 +500,6 @@ export class SettingsPanel {
 		}
 	}
 
-	// Discover внешних hook-файлов (без автозапуска)
-	private async postExternalHooksData(): Promise<void> {
-		try {
-			const files = await discoverExternalHookFiles(getWorkspaceRootFsPath());
-			this.post({
-				type: 'externalHooksData',
-				files: files.map((f) => ({
-					kind: f.kind,
-					path: f.path,
-					mappedCommandCount: f.mappedCommandCount,
-					skippedEvents: f.skippedEvents,
-					error: f.error,
-				})),
-			});
-		} catch {
-			this.post({ 
-				type: 'externalHooksData', 
-				files: [] 
-			});
-		}
-	}
-
-	private async handleOpenExternalHookFile(rawPath: string): Promise<void> {
-		const filePath = String(rawPath ?? '').trim();
-		if (!filePath) {
-			return;
-		}
-		
-		try {
-			const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-			await vscode.window.showTextDocument(doc, { preview: false });
-		} catch (err) {
-			this.post({
-				type: 'externalHooksImported',
-				ok: false,
-				mode: 'merge',
-				mappedCommandCount: 0,
-				skippedEvents: [],
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
-	}
-
-	/**
-	 * Импорт внешних хуков в `.gen/hooks.json` (merge | replace).
-	 * Не запускает внешние команды - только копирует в Gen-формат.
-	 */
-	private async handleImportExternalHooks(
-		rawPath: string,
-		mode: 'merge' | 'replace',
-		kind: ExternalHookKind,
-	): Promise<void> {
-		const filePath = String(rawPath ?? '').trim();
-		const uri = this.hooksFileUri();
-		if (!filePath || !uri) {
-			this.post({
-				type: 'externalHooksImported',
-				ok: false,
-				mode,
-				mappedCommandCount: 0,
-				skippedEvents: [],
-				error: !uri ? vscode.l10n.t('policy.noWorkspace') : 'Missing path',
-			});
-			return;
-		}
-
-		try {
-			const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-			const raw = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-			const parsed = parseExternalHooksFile(kind, raw);
-
-			let next: GenHooksLists = {
-				...emptyHookLists(),
-				...parsed.mapped,
-			};
-			if (mode === 'merge') {
-				let base = emptyHookLists();
-				try {
-					const existing = await vscode.workspace.fs.readFile(uri);
-					const existingRaw = JSON.parse(new TextDecoder().decode(existing)) as {
-						hooks?: Record<string, unknown>;
-					};
-					const hooks = (existingRaw.hooks ?? existingRaw) as Record<string, unknown>;
-					base = {
-						beforeSubmit: this.asHookCommands(hooks.beforeSubmit),
-						beforeShell: this.asHookCommands(hooks.beforeShell),
-						sessionDiff: this.pickHookCommands(hooks, 'sessionDiff', 'session.diff'),
-						sessionCompacting: this.pickHookCommands(
-							hooks,
-							'sessionCompacting',
-							'session.compacting',
-						),
-						shellEnv: this.pickHookCommands(hooks, 'shellEnv', 'shell.env'),
-						fileWatcher: this.pickHookCommands(hooks, 'fileWatcher', 'file.watcher'),
-					};
-				} catch (err) {
-					const code = (err as { code?: string | number }).code;
-					const name = (err as { name?: string }).name;
-					if (!(code === 'FileNotFound' || code === 'ENOENT' || name === 'EntryNotFound')) {
-						throw err;
-					}
-				}
-				next = mergeGenHooksLists(base, parsed.mapped);
-			}
-
-			await this.handleSaveHooks(
-				next.beforeSubmit,
-				next.beforeShell,
-				next.sessionDiff,
-				next.sessionCompacting,
-				next.shellEnv,
-				next.fileWatcher,
-			);
-			this.post({
-				type: 'externalHooksImported',
-				ok: true,
-				mode,
-				mappedCommandCount: parsed.mappedCommandCount,
-				skippedEvents: parsed.skippedEvents,
-			});
-			await this.postExternalHooksData();
-		} catch (err) {
-			this.post({
-				type: 'externalHooksImported',
-				ok: false,
-				mode,
-				mappedCommandCount: 0,
-				skippedEvents: [],
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
-	}
-
 	// Кандидаты rules + discovered skills/plugins для read-only UI
 	private async postRulesSkillsData(): Promise<void> {
 		try {
@@ -777,6 +627,46 @@ export class SettingsPanel {
 		}
 	}
 
+	private async handleCheckConnection(baseUrl: string, requestId: number): Promise<void> {
+		this.modelsAbort?.abort();
+		const controller = new AbortController();
+		this.modelsAbort = controller;
+
+		try {
+			const health = await this.client.checkConnectionHealth({
+				baseUrl,
+				signal: controller.signal,
+			});
+			if (controller.signal.aborted) {
+				return;
+			}
+
+			this.post({
+				type: 'connectionHealth',
+				ok: health.ok,
+				modelCount: health.modelCount,
+				message: health.message,
+				requestId,
+			});
+		} catch (err) {
+			if (isAbortError(err) || controller.signal.aborted) {
+				return;
+			}
+
+			this.post({
+				type: 'connectionHealth',
+				ok: false,
+				modelCount: 0,
+				message: err instanceof Error ? err.message : String(err),
+				requestId,
+			});
+		} finally {
+			if (this.modelsAbort === controller) {
+				this.modelsAbort = undefined;
+			}
+		}
+	}
+
 	private async handleLoadModels(baseUrl: string, requestId: number): Promise<void> {
 		this.modelsAbort?.abort();
 		const controller = new AbortController();
@@ -820,7 +710,7 @@ export class SettingsPanel {
 		}
 	}
 
-	// Auth MVP: опционально openExternal authorize URL, затем paste access token в SecretStorage
+	// Auth: discovery (опц.) -> PKCE openExternal -> paste code/URL/token; UriHandler тоже завершает code flow
 	private async handleMcpOAuthAuth(serverName: string): Promise<void> {
 		const name = serverName.trim();
 		if (!name) {
@@ -834,16 +724,63 @@ export class SettingsPanel {
 			return;
 		}
 
-		const authUrl = (cfg.mcpOAuthAuthorizeUrl ?? '').trim();
-		if (authUrl) {
+		let authorizeUrl = (cfg.mcpOAuthAuthorizeUrl ?? '').trim();
+		let tokenUrl = (cfg.mcpOAuthTokenUrl ?? '').trim();
+		const issuer = (cfg.mcpOAuthIssuer ?? '').trim();
+		const clientId = (cfg.mcpOAuthClientId ?? '').trim() || 'gen-agent-vscode';
+
+		if (issuer && (!authorizeUrl || !tokenUrl)) {
 			try {
-				const uri = vscode.Uri.parse(authUrl);
-				if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+				const discovered = await discoverOAuthEndpoints(issuer);
+				if (!authorizeUrl && discovered.authorizationEndpoint) {
+					authorizeUrl = discovered.authorizationEndpoint;
+				}
+				if (!tokenUrl && discovered.tokenEndpoint) {
+					tokenUrl = discovered.tokenEndpoint;
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				setMcpOAuthLastError(name, message);
+				void vscode.window.showWarningMessage(vscode.l10n.t('mcp.oauth.discoveryFailed', message));
+			}
+		}
+
+		let pkceOpened = false;
+		if (authorizeUrl) {
+			try {
+				const parsedAuth = vscode.Uri.parse(authorizeUrl);
+				if (parsedAuth.scheme !== 'http' && parsedAuth.scheme !== 'https') {
 					void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.invalidAuthorizeUrl'));
 					return;
 				}
-				await vscode.env.openExternal(uri);
-				void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.browserOpenedWip'));
+
+				if (!tokenUrl) {
+					void vscode.window.showWarningMessage(vscode.l10n.t('mcp.oauth.missingTokenUrl'));
+				} else {
+					const extensionId = this.context.extension.id;
+					const redirectUri = await buildMcpOAuthRedirectUri(extensionId);
+					const pkce = generatePkcePair();
+					const state = generateOAuthState();
+					await setMcpOAuthPkceSession({
+						serverName: name,
+						codeVerifier: pkce.verifier,
+						state,
+						tokenUrl,
+						redirectUri,
+						clientId,
+						createdAt: Date.now(),
+					});
+					const urlWithPkce = buildAuthorizeUrl({
+						authorizeUrl,
+						clientId,
+						redirectUri,
+						codeChallenge: pkce.challenge,
+						state,
+					});
+					await vscode.env.openExternal(vscode.Uri.parse(urlWithPkce));
+					pkceOpened = true;
+					void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.browserOpenedPkce'));
+				}
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				setMcpOAuthLastError(name, message);
@@ -855,8 +792,12 @@ export class SettingsPanel {
 
 		const token = await vscode.window.showInputBox({
 			title: vscode.l10n.t('mcp.oauth.pasteTitle', name),
-			prompt: vscode.l10n.t('mcp.oauth.pastePrompt'),
-			placeHolder: vscode.l10n.t('mcp.oauth.pastePlaceholder'),
+			prompt: pkceOpened
+				? vscode.l10n.t('mcp.oauth.pastePromptPkce')
+				: vscode.l10n.t('mcp.oauth.pastePrompt'),
+			placeHolder: pkceOpened
+				? vscode.l10n.t('mcp.oauth.pastePlaceholderPkce')
+				: vscode.l10n.t('mcp.oauth.pastePlaceholder'),
 			password: true,
 			ignoreFocusOut: true,
 		});
@@ -864,14 +805,57 @@ export class SettingsPanel {
 			return;
 		}
 
-		const accessToken = token.trim();
-		if (!accessToken) {
+		const callback = parseAuthorizationCallbackInput(token);
+		if (callback.code && tokenUrl) {
+			const session = await getMcpOAuthPkceSession(name);
+			const verifier = session?.codeVerifier;
+			const redirectUri = session?.redirectUri;
+			const exchangeClientId = session?.clientId || clientId;
+			if (!verifier || !redirectUri) {
+				void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.pkceSessionMissing'));
+				return;
+			}
+
+			try {
+				const exchanged = await exchangeAuthorizationCode({
+					tokenUrl: session?.tokenUrl || tokenUrl,
+					code: callback.code,
+					codeVerifier: verifier,
+					redirectUri,
+					clientId: exchangeClientId,
+				});
+				await setMcpOAuthTokens(name, {
+					accessToken: exchanged.accessToken,
+					...(exchanged.refreshToken ? { refreshToken: exchanged.refreshToken } : {}),
+					...(exchanged.expiresAt !== undefined ? { expiresAt: exchanged.expiresAt } : {}),
+					meta: { client_id: exchangeClientId },
+				});
+				await clearMcpOAuthPkceSession(name);
+				setMcpOAuthLastError(name, undefined);
+				void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.tokenSaved', name));
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				setMcpOAuthLastError(name, message);
+				void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.codeExchangeFailed', message));
+			}
+			await this.postMcpStatus();
+			return;
+		}
+
+		const parsed = parseMcpOAuthPastePayload(token);
+		if (!parsed?.accessToken) {
 			void vscode.window.showErrorMessage(vscode.l10n.t('mcp.oauth.emptyToken'));
 			return;
 		}
 
 		try {
-			await setMcpOAuthTokens(name, { accessToken });
+			await setMcpOAuthTokens(name, {
+				...parsed,
+				meta: {
+					...(parsed.meta ?? {}),
+					client_id: clientId,
+				},
+			});
 			setMcpOAuthLastError(name, undefined);
 			void vscode.window.showInformationMessage(vscode.l10n.t('mcp.oauth.tokenSaved', name));
 		} catch (err) {
@@ -906,6 +890,12 @@ export class SettingsPanel {
 		const tokenLine = info.hasToken
 			? vscode.l10n.t('mcp.oauth.debug.token', info.maskedPreview ?? '****')
 			: vscode.l10n.t('mcp.oauth.debug.token', vscode.l10n.t('mcp.oauth.debug.none'));
+		const refreshLine = vscode.l10n.t(
+			'mcp.oauth.debug.refresh',
+			info.hasRefreshToken
+				? vscode.l10n.t('mcp.oauth.debug.yes')
+				: vscode.l10n.t('mcp.oauth.debug.none'),
+		);
 		const expires =
 			typeof info.expiresAt === 'number' && Number.isFinite(info.expiresAt)
 				? new Date(info.expiresAt).toLocaleString()
@@ -913,6 +903,7 @@ export class SettingsPanel {
 		const lines = [
 			vscode.l10n.t('mcp.oauth.debug.server', info.serverName || name),
 			tokenLine,
+			refreshLine,
 			vscode.l10n.t('mcp.oauth.debug.expires', expires),
 			vscode.l10n.t(
 				'mcp.oauth.debug.lastError',

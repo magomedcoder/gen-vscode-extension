@@ -6,7 +6,7 @@ export type ActivityKind = 'tool' | 'edit' | 'shell' | 'mcp' | 'review';
 
 export interface ActivityEntry {
 	id: string;
-	// Epoch ms
+	// Epoch мс
 	at: number;
 	kind: ActivityKind;
 	// Краткая подпись для UI
@@ -22,7 +22,7 @@ export interface ActivityEntry {
 const STORAGE_KEY = 'gen.activity.entries';
 const MAX_ENTRIES = 200;
 
-const SHELL_TOOLS = new Set(['run_command', 'run_tests', 'await_shell']);
+const SHELL_TOOLS = new Set(['run_command', 'run_tests', 'await_shell', 'run_scratch']);
 const MCP_TOOLS = new Set(['call_mcp_tool', 'execute', 'fetch_mcp_resource', 'list_mcp_resources', 'list_mcp_tools']);
 
 let store: Memento | undefined;

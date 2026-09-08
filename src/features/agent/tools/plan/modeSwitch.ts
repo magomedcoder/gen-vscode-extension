@@ -8,7 +8,7 @@ export interface ModeSwitchContext extends ToolContext {
 	setChatMode?: SetChatModeFn;
 }
 
-const VALID_MODES: readonly ChatMode[] = ['ask', 'agent', 'debug', 'design', 'plan', 'multitask'];
+const VALID_MODES: readonly ChatMode[] = ['ask', 'agent', 'debug', 'design', 'plan', 'multitask', 'project'];
 
 // Напоминание модели при входе в Plan (tool / slash / UI)
 export const PLAN_ENTER_REMINDER = [
@@ -91,13 +91,13 @@ export const planExitTool: ToolDefinition = {
 
 export const switchModeTool: ToolDefinition = {
 	name: 'switch_mode',
-	description: 'Переключить режим чата: ask | agent | debug | design | plan | multitask.',
+	description: 'Переключить режим чата: ask | agent | debug | design | plan | multitask | project.',
 	parameters: {
 		type: 'object',
 		properties: {
 			mode: {
 				type: 'string',
-				description: 'ask | agent | debug | design | plan | multitask',
+				description: 'ask | agent | debug | design | plan | multitask | project',
 			},
 		},
 		required: ['mode'],
@@ -143,6 +143,17 @@ export const switchModeTool: ToolDefinition = {
 					'Режим Multitask (координатор) включён.',
 					'Не правь файлы напрямую - делегируй подзадачи через tool task.',
 					'Сам используй только чтение/поиск и оркестрацию.',
+				].join(' '),
+			};
+		}
+
+		if (mode === 'project') {
+			return {
+				ok: true,
+				content: [
+					'Режим Project (тимлид) включён.',
+					'Не правь файлы напрямую - делегируй подзадачи через tool task.',
+					'Координируй команду и собирай отчёты субагентов.',
 				].join(' '),
 			};
 		}

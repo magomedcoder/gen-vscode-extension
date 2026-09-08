@@ -3,9 +3,12 @@ import { isIgnoredByGitIgnore, matchesWatcherIgnore } from '../agent/gitIgnore';
 import { getSettings } from '../../core/config/settings';
 import { isProjectEnabled } from '../project/config';
 import { chunkFileContent } from './chunk';
+import { applyDirDigests, canSkipDirRewalk, parentDir } from './dirDigests';
 import { contentHash } from './hash';
 import { listIndexableFiles, readIndexableText } from './scanner';
 import { loadManifest, saveManifest } from './store';
+import { maybeRefreshSymbolIndex } from './symbolIndex';
+import { maybeRefreshOutlineIndex } from './tsOutline';
 import { rebuildManifestTrigrams, searchTrigrams } from './trigram';
 import type { CodebaseSearchHit, IndexManifest, IndexProgress } from './types';
 
@@ -15,6 +18,8 @@ export class IndexManager implements vscode.Disposable {
 	private indexing = new Set<string>();
 	private indexed = new Set<string>();
 	private readonly onChangeListeners = new Set<() => void>();
+	// Debounce пересборки outline/symbol после инкрементальных обновлений watcher
+	private outlineRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		void this.bootstrapExisting();
@@ -53,12 +58,34 @@ export class IndexManager implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		for (const timer of this.outlineRefreshTimers.values()) {
+			clearTimeout(timer);
+		}
+		this.outlineRefreshTimers.clear();
+
 		for (const d of this.disposables) {
 			d.dispose();
 		}
 
 		this.disposables.length = 0;
 		this.onChangeListeners.clear();
+	}
+
+	// Coalesce обновления outline + LSP symbol index после reindex от watcher
+	private scheduleOutlineAndSymbolsRefresh(folder: vscode.WorkspaceFolder): void {
+		const key = folder.uri.fsPath;
+		const prev = this.outlineRefreshTimers.get(key);
+		if (prev) {
+			clearTimeout(prev);
+		}
+		this.outlineRefreshTimers.set(
+			key,
+			setTimeout(() => {
+				this.outlineRefreshTimers.delete(key);
+				void maybeRefreshSymbolIndex(folder);
+				void maybeRefreshOutlineIndex(folder);
+			}, 800),
+		);
 	}
 
 	onDidChange(listener: () => void): vscode.Disposable {
@@ -265,6 +292,8 @@ export class IndexManager implements vscode.Disposable {
 				updatedAt: manifest.updatedAt,
 				lastError: undefined,
 			});
+			void maybeRefreshSymbolIndex(folder);
+			void maybeRefreshOutlineIndex(folder);
 		} catch (err) {
 			this.setProgress(key, {
 				state: 'error',
@@ -282,8 +311,43 @@ export class IndexManager implements vscode.Disposable {
 		const files = await listIndexableFiles(folder);
 		const seen = new Set<string>();
 
+		// Stat sizes (cheap) для dir-digest skip
+		const withSizes: Array<{ relative: string; uri: vscode.Uri; size: number }> = [];
 		for (const file of files) {
 			seen.add(file.relative);
+			let size = -1;
+			try {
+				const st = await vscode.workspace.fs.stat(file.uri);
+				size = st.size;
+			} catch {
+				size = -1;
+			}
+			withSizes.push({ relative: file.relative, uri: file.uri, size });
+		}
+
+		// Группы по родительскому каталогу (MVP skip)
+		const byParent = new Map<string, typeof withSizes>();
+		for (const row of withSizes) {
+			const parent = parentDir(row.relative);
+			const list = byParent.get(parent) ?? [];
+			list.push(row);
+			byParent.set(parent, list);
+		}
+
+		const skipFiles = new Set<string>();
+		for (const [dir, group] of byParent) {
+			if (canSkipDirRewalk(manifest, dir, group)) {
+				for (const f of group) {
+					skipFiles.add(f.relative);
+				}
+			}
+		}
+
+		for (const file of withSizes) {
+			if (skipFiles.has(file.relative)) {
+				continue;
+			}
+
 			await this.indexOneFile(manifest, folderFsPath, file.relative, file.uri, {
 				save: false,
 			});
@@ -296,6 +360,7 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		rebuildManifestTrigrams(manifest);
+		applyDirDigests(manifest);
 		await saveManifest(folderFsPath, manifest);
 	}
 
@@ -310,6 +375,7 @@ export class IndexManager implements vscode.Disposable {
 		}
 
 		rebuildManifestTrigrams(manifest);
+		applyDirDigests(manifest);
 		await saveManifest(folderFsPath, manifest);
 		this.setProgress(folderFsPath, {
 			state: 'ready',
@@ -317,6 +383,7 @@ export class IndexManager implements vscode.Disposable {
 			chunkCount: Object.keys(manifest.chunks).length,
 			updatedAt: manifest.updatedAt,
 		});
+		this.scheduleOutlineAndSymbolsRefresh(folder);
 	}
 
 	private async removeFile(folderFsPath: string, relative: string): Promise<void> {
@@ -327,7 +394,12 @@ export class IndexManager implements vscode.Disposable {
 
 		this.dropFile(manifest, relative);
 		rebuildManifestTrigrams(manifest);
+		applyDirDigests(manifest);
 		await saveManifest(folderFsPath, manifest);
+		const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(folderFsPath));
+		if (folder) {
+			this.scheduleOutlineAndSymbolsRefresh(folder);
+		}
 	}
 
 	private dropFile(manifest: IndexManifest, relative: string): void {
@@ -358,6 +430,7 @@ export class IndexManager implements vscode.Disposable {
 				this.dropFile(manifest, relative);
 				if (opts.save) {
 					rebuildManifestTrigrams(manifest);
+					applyDirDigests(manifest);
 					await saveManifest(folderFsPath, manifest);
 				}
 
@@ -386,12 +459,13 @@ export class IndexManager implements vscode.Disposable {
 
 		manifest.files[relative] = {
 			hash,
-			size: text.length,
+			size: Buffer.byteLength(text, 'utf8'),
 			chunkIds,
 		};
 
 		if (opts.save) {
 			rebuildManifestTrigrams(manifest);
+			applyDirDigests(manifest);
 			await saveManifest(folderFsPath, manifest);
 		}
 

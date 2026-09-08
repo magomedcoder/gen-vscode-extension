@@ -43,7 +43,7 @@ function activeMentionQuery(text: string, cursor: number): { start: number; quer
 	}
 
 	const fragment = before.slice(at + 1);
-	if (/\s/.test(fragment) && !/^(file|folder|codebase|git|link|docs|agent|past|alias|ref)\s+\S*$/i.test(fragment)) {
+	if (/\s/.test(fragment) && !/^(file|folder|codebase|symbols|git|link|docs|agent|past|alias|ref)\s+\S*$/i.test(fragment)) {
 		return undefined;
 	}
 
@@ -138,7 +138,7 @@ function chipFromSuggestion(item: MentionSuggestion): ContextChip {
 	};
 }
 
-const MENTION_KINDS = new Set<MentionSuggestion['kind']>(['file', 'folder', 'codebase', 'code', 'git', 'branch_diff', 'rules', 'link', 'docs', 'agent', 'terminals', 'past', 'alias', 'ref']);
+const MENTION_KINDS = new Set<MentionSuggestion['kind']>(['file', 'folder', 'codebase', 'map', 'symbols', 'code', 'git', 'branch_diff', 'rules', 'link', 'docs', 'agent', 'terminals', 'past', 'alias', 'ref']);
 
 // Восстановить chip из сохранённой insert-строки (@file path ...)
 function chipFromInsert(insert: string): ContextChip {
@@ -569,7 +569,7 @@ export function Composer({
 	};
 
 	const canSend = Boolean(draft.trim()) || chips.length > 0 || pendingImages.length > 0;
-	const specialMode = mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask';
+	const specialMode = mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask' || mode === 'project';
 
 	return (
 		<form className="composer" onSubmit={onSubmit}>
@@ -665,7 +665,13 @@ export function Composer({
 					className="composer__input"
 					rows={2}
 					value={draft}
-					placeholder={busy ? t('chat.composer.placeholderBusy') : t('chat.composer.placeholder')}
+					placeholder={
+						busy
+							? t('chat.composer.placeholderBusy')
+							: mode === 'project'
+								? t('chat.composer.placeholderProject')
+								: t('chat.composer.placeholder')
+					}
 					onChange={(e) => {
 						const next = e.target.value;
 						setDraft(next);
@@ -707,12 +713,12 @@ export function Composer({
 						{specialMode ? (
 							<button
 								type="button"
-								className="mode-badge"
+								className={`mode-badge${mode === 'project' ? ' mode-badge--project' : ''}`}
 								disabled={busy}
-								title={t('chat.composer.slashExitHint')}
+								title={mode === 'project' ? t('chat.composer.modeBadge.projectHint') : t('chat.composer.slashExitHint')}
 								onClick={() => setMode('agent')}
 							>
-								/{mode}
+								{mode === 'project' ? t('chat.composer.modeBadge.project') : `/${mode}`}
 							</button>
 						) : null}
 					</div>

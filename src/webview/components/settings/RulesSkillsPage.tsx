@@ -15,7 +15,7 @@ export interface RulesSkillsSkillRow {
 }
 
 export interface RulesSkillsPluginRow {
-	kind: 'tool' | 'plugin';
+	kind: 'tool' | 'plugin' | 'npm';
 	name: string;
 	description: string;
 	path: string;

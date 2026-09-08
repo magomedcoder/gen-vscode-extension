@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { AgentSession, isAbortError } from '../agent';
-import { AgentCheckpoint, offerCheckpointRestore } from '../agent/checkpoint';
+import { AgentCheckpoint } from '../agent/checkpoint';
 import { StickyPlan } from '../agent/plan';
 import { WorkspacePlanStore } from '../agent/planStore';
 import { PLAN_ENTER_REMINDER, PLAN_EXIT_REMINDER } from '../agent/tools/plan/modeSwitch';
@@ -10,11 +10,13 @@ import type { ChatMode } from '../../core/config/types';
 import { writeLog } from '../../core/log/logger';
 import type { LlmClient } from '../../core/llm/types';
 import { sumUsage } from '../../core/llm/usage';
+import { getSharedDiffProvider, showAgentEditDiff } from '../../host/preview/showDiff';
 import { resolveBangCommands } from './bangCommand';
 import { compactChatMessages } from './compact';
-import { completeWithContextGuard, resolveContextBudget } from './fitContext';
+import { completeWithContextGuard, resolveContextBudget, dropSupersededReminders } from './fitContext';
 import { estimateChatMessagesTokens } from '../../core/llm/estimateTokens';
 import type { ChatMessage } from '../../core/llm/types';
+import { getCachedNCtx } from '../../core/llm/contextBudget';
 import { resolveMentions } from './mentions';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { injectImagePathMarkers, saveImageAttachments } from './attachments';
@@ -59,6 +61,39 @@ function cloneMessages(messages: ChatUiMessage[]): ChatUiMessage[] {
 	}));
 }
 
+// Грубое UI->API для estimate / dropSuperseded
+function uiMessagesToRoughApi(messages: readonly ChatUiMessage[]): ChatMessage[] {
+	const out: ChatMessage[] = [];
+	for (const m of messages) {
+		if (m.role === 'user' || m.role === 'assistant') {
+			out.push({ role: m.role, content: m.content });
+		} else if (m.role === 'tool') {
+			out.push({
+				role: 'tool',
+				tool_call_id: m.toolCallId ?? 'x',
+				content: m.content,
+				name: m.toolName,
+			});
+		}
+	}
+	return out;
+}
+
+// Последний prompt_tokens с сервера (CompleteResult.usage) - точнее char-estimate для budget UI
+function lastServerPromptTokens(messages: readonly ChatUiMessage[]): number | undefined {
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const pt = messages[i]?.usage?.promptTokens;
+		if (typeof pt === 'number' && pt > 0) {
+			return pt;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * revealOnEdit: только обычный текстовый документ.
+ * НИКОГДА vscode.diff / showAgentEditDiff - diff только через openEditedPath (клик по пути).
+ */
 async function revealAgentFile(uri: vscode.Uri): Promise<void> {
 	const mode = getSettings().revealOnEdit;
 	if (mode === 'never') {
@@ -73,7 +108,7 @@ async function revealAgentFile(uri: vscode.Uri): Promise<void> {
 		return;
 	}
 
-	// focus - прежнее поведение (preview + фокус редактора)
+	// focus - обычный preview + фокус редактора (не diff)
 	await vscode.window.showTextDocument(uri, { preview: true });
 }
 
@@ -98,6 +133,11 @@ export class ChatSession {
 	private readonly sessions: SessionStore;
 	// Поллинг git-sync auto-Keep (пока есть pending-хунки и setting вкл.)
 	private gitSyncKeepDisposable?: { dispose(): void };
+	// Последний context prune (chars/messages) для UI/debug
+	private lastContextPrune?: { 
+		chars: number; 
+		messages: number 
+	};
 
 	private get messages(): ChatUiMessage[] {
 		return this.runtime.messages;
@@ -268,6 +308,12 @@ export class ChatSession {
 				title: planSnap.title 
 			}
 			: undefined;
+		const cachedNCtx = getCachedNCtx(settings.baseUrl, settings.model);
+		const contextBudget = resolveContextBudget(settings);
+		// Бюджет UI: предпочитаем реальный prompt_tokens с сервера (последний CompleteResult), иначе char-estimate
+		const serverPromptTokens = lastServerPromptTokens(this.messages);
+		const estimatedPromptTokens = serverPromptTokens
+			?? estimateChatMessagesTokens(uiMessagesToRoughApi(this.messages));
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
@@ -276,6 +322,10 @@ export class ChatSession {
 			mode: settings.chatMode,
 			usage: sumUsage(this.messages),
 			maxContextTokens: settings.maxContextTokens,
+			estimatedPromptTokens,
+			contextBudget,
+			cachedNCtx,
+			lastContextPrune: this.lastContextPrune,
 			sessionId: this.sessions.getCurrentSessionId(),
 			sessions: this.listSessionsWithBusy(),
 			customSlashCommands,
@@ -670,13 +720,15 @@ export class ChatSession {
 			this.settleConfirm('abort');
 		}
 
+		void focusChatView().then(undefined, () => undefined);
+
 		const variant = request.variant ?? 'agent';
 		return new Promise<ConfirmChoice>((resolve) => {
 			this.pendingConfirm = {
 				id: messageId(),
 				title: request.title,
 				detail: request.detail,
-				hint: request.hint,
+				hint: request.hint ?? vscode.l10n.t('confirm.panelHint'),
 				variant,
 				applyLabel: request.applyLabel ?? vscode.l10n.t('agent.confirmApply'),
 				skipLabel: vscode.l10n.t('agent.confirmSkip'),
@@ -1252,8 +1304,10 @@ export class ChatSession {
 			this.dismissedPlanHandoffKey = undefined;
 		}
 
-		// Synthetic reminders Plan ↔ Agent (UI / slash / tools * setChatMode)
+		// Синтетические напоминания Plan ↔ Agent (UI / slash / tools  setChatMode)
 		if (prev !== mode) {
+			// Убрать устаревшие mode reminders из UI-истории перед новым
+			this.pruneSupersededUiReminders();
 			if (mode === 'plan') {
 				this.append({
 					id: messageId(),
@@ -1269,6 +1323,40 @@ export class ChatSession {
 			}
 		}
 		this.emit();
+	}
+
+	// Убрать устаревшие compact/mode-напоминания из сохранённых UI-сообщений
+	private pruneSupersededUiReminders(): void {
+		const rough = uiMessagesToRoughApi(this.messages);
+		const dropped = dropSupersededReminders(rough);
+		if (!dropped.changed) {
+			return;
+		}
+
+		// Сопоставляем по порядку assistant/user текстов - пересобираем ids из surviving slots
+		const keepTexts = new Set(
+			dropped.messages
+				.filter((m) => m.role === 'assistant' || m.role === 'user')
+				.map((m) => (typeof m.content === 'string' ? m.content : '')),
+		);
+		const markers = [
+			'[Summary of earlier conversation]',
+			'[Сводка более ранней переписки]',
+			'Режим Plan включён.',
+			'Режим Agent включён.',
+		];
+		const isReminder = (content: string): boolean => markers.some((m) => content.trimStart().startsWith(m));
+		this.messages = this.messages.filter((msg) => {
+			if (msg.role !== 'assistant' && msg.role !== 'user') {
+				return true;
+			}
+
+			if (!isReminder(msg.content)) {
+				return true;
+			}
+
+			return keepTexts.has(msg.content);
+		});
 	}
 
 	// Сменить session-модель (не пишется в persistent settings.model)
@@ -1293,6 +1381,72 @@ export class ChatSession {
 		}
 		this.lastTurnDiff = undefined;
 		this.emit();
+	}
+
+	// Открыть файл из чата: если есть снимок до правок агента - vscode.diff, иначе обычный preview документа
+	async openEditedPath(pathHint: string): Promise<void> {
+		const trimmed = pathHint.trim();
+		if (!trimmed) {
+			return;
+		}
+
+		let resolved;
+		try {
+			resolved = await resolveWorkspacePath(trimmed);
+		} catch {
+			return;
+		}
+
+		const relative = resolved.relative.replace(/\\/g, '/');
+		const before = this.findCheckpointBefore(relative);
+		const provider = getSharedDiffProvider();
+		if (before !== undefined && provider) {
+			const fileName = relative.split('/').pop() || relative;
+			await showAgentEditDiff({
+				provider,
+				fileUri: resolved.uri,
+				fileName,
+				original: before,
+			});
+			return;
+		}
+
+		await vscode.window.showTextDocument(resolved.uri, { preview: true });
+	}
+
+	// Текст файла до правок агента (checkpoint текущего хода / undo stack)
+	private findCheckpointBefore(relative: string): string | undefined {
+		const needle = relative.replace(/\\/g, '/').replace(/^\.\//, '');
+		const tryCp = (cp: AgentCheckpoint | undefined): string | undefined => {
+			if (!cp) {
+				return undefined;
+			}
+
+			const entry = cp.peekByRelative(needle);
+			if (!entry) {
+				return undefined;
+			}
+
+			if (entry.kind === 'created') {
+				return '';
+			}
+
+			return entry.content ?? '';
+		};
+
+		const fromLast = tryCp(this.runtime.lastCheckpoint);
+		if (fromLast !== undefined) {
+			return fromLast;
+		}
+
+		for (let i = this.runtime.undoStack.length - 1; i >= 0; i -= 1) {
+			const hit = tryCp(this.runtime.undoStack[i]?.checkpoint);
+			if (hit !== undefined) {
+				return hit;
+			}
+		}
+
+		return undefined;
 	}
 
 	async send(text: string, images?: IncomingImage[]): Promise<void> {
@@ -1531,6 +1685,7 @@ export class ChatSession {
 
 			const excluded = this.messages.filter((m) => excludeMessageIds.has(m.id));
 			this.messages = [...result.messages, ...excluded].slice(-MAX_STORED);
+			this.pruneSupersededUiReminders();
 			this.persist();
 			this.emit();
 			return true;
@@ -1596,6 +1751,7 @@ export class ChatSession {
 				this.exportArchive = cloneMessages(this.messages);
 			}
 			this.messages = result.messages;
+			this.pruneSupersededUiReminders();
 			this.persist();
 			this.append({
 				id: messageId(),
@@ -1910,6 +2066,13 @@ export class ChatSession {
 					planEditsAppendix: planReload.planEditsAppendix,
 					mode: settings.chatMode,
 					sessionAllow: rt.sessionAllow,
+					onBusyDetail: (detail) => {
+						if (!stillActive()) {
+							return;
+						}
+						rt.busyDetail = detail;
+						this.emit();
+					},
 					onAlwaysAllow: (pattern) => {
 						if (pattern && !rt.sessionAllow.includes(pattern)) {
 							rt.sessionAllow.push(pattern);
@@ -1976,6 +2139,14 @@ export class ChatSession {
 						if (paths.length > 0) {
 							void runSessionDiffHook(paths, turnId);
 						}
+					},
+					onContextPrune: ({ chars, messages }) => {
+						if (!stillActive()) {
+							return;
+						}
+
+						this.lastContextPrune = { chars, messages };
+						this.emit();
 					},
 					ui: {
 						append: (message) => {
@@ -2121,21 +2292,11 @@ export class ChatSession {
 		}
 
 		if (snapshotEnabled && checkpoint.size > 0) {
-			const restored = await offerCheckpointRestore(checkpoint);
-			if (restored.length > 0) {
-				rt.writes.clear();
-				rt.lastCheckpoint = undefined;
-				// Пользователь откатил файлы сразу - не держим checkpoint в undo
-				const top = rt.undoStack[rt.undoStack.length - 1];
-				if (top) {
-					top.checkpoint = undefined;
-				}
-			} else {
-				rt.lastCheckpoint = checkpoint;
-				const top = rt.undoStack[rt.undoStack.length - 1];
-				if (top) {
-					top.checkpoint = checkpoint;
-				}
+			// Без диалога «восстановить снимок»: откат - через edit последнего сообщения + revertFiles или /undo
+			rt.lastCheckpoint = checkpoint;
+			const top = rt.undoStack[rt.undoStack.length - 1];
+			if (top) {
+				top.checkpoint = checkpoint;
 			}
 		}
 
@@ -2294,6 +2455,14 @@ export class ChatSession {
 						void runSessionDiffHook(paths, turnId);
 					}
 				},
+				onContextPrune: ({ chars, messages }) => {
+					if (!stillActive()) {
+						return;
+					}
+
+					this.lastContextPrune = { chars, messages };
+					this.emit();
+				},
 				ui: {
 					append: (message) => {
 						if (!stillActive()) {
@@ -2348,10 +2517,8 @@ export class ChatSession {
 		const paused = Boolean(rt.agentPaused);
 
 		if (snapshotEnabled && checkpoint.size > 0) {
-			const restored = await offerCheckpointRestore(checkpoint);
-			if (restored.length > 0) {
-				rt.writes.clear();
-			} else if (turnOk) {
+			// Без диалога offerCheckpointRestore - снимок только для /undo и edit+revertFiles
+			if (turnOk) {
 				rt.lastCheckpoint = checkpoint;
 			}
 		}

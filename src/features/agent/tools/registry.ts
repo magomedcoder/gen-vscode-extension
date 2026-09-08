@@ -6,7 +6,7 @@ export type ToolTag = 'fs' | 'search' | 'shell' | 'ide' | 'mcp' | 'plan' | 'meta
 // Риск для approval / фильтров (этап 2; permissionPolicy пока по имени)
 export type ToolRisk = 'read' | 'write' | 'shell' | 'web' | 'mcp';
 
-export type ToolSource = 'builtin' | 'dynamic';
+export type ToolSource = 'builtin' | 'dynamic' | 'ephemeral';
 
 export interface ToolMeta {
 	tags: ToolTag[];
@@ -24,8 +24,9 @@ interface RegistryEntry {
 const BY_NAME = new Map<string, RegistryEntry>();
 
 /**
- * Регистрация builtin или dynamic tool.
- * Dynamic с тем же именем заменяет предыдущий dynamic; builtin не перекрывается.
+ * Регистрация builtin / dynamic / ephemeral tool.
+ * Dynamic заменяет предыдущий dynamic; ephemeral - предыдущий ephemeral.
+ * Builtin не перекрывается.
  */
 export function registerTool(
 	tool: ToolDefinition,
@@ -34,7 +35,10 @@ export function registerTool(
 ): void {
 	const existing = BY_NAME.get(tool.name);
 	if (existing && existing.tool !== tool) {
-		if (!(source === 'dynamic' && existing.source === 'dynamic')) {
+		const canReplace =
+			(source === 'dynamic' && existing.source === 'dynamic')
+			|| (source === 'ephemeral' && existing.source === 'ephemeral');
+		if (!canReplace) {
 			throw new Error(`Tool already registered: ${tool.name}`);
 		}
 	}
@@ -75,6 +79,25 @@ export function unregisterDynamicTools(): void {
 			BY_NAME.delete(name);
 		}
 	}
+}
+
+// Снять ephemeral tools (конец AgentSession turn)
+export function unregisterEphemeralTools(): void {
+	for (const [name, entry] of [...BY_NAME.entries()]) {
+		if (entry.source === 'ephemeral') {
+			BY_NAME.delete(name);
+		}
+	}
+}
+
+// Имя для ephemeral tools API: [a-z0-9_-]
+export function sanitizeEphemeralToolName(raw: string): string {
+	const cleaned = raw.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, '_')
+		.replace(/^_+|_+$/g, '')
+		.replace(/_+/g, '_');
+	return cleaned.slice(0, 64) || 'ephemeral_tool';
 }
 
 // Только для unit-тестов

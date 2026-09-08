@@ -1,5 +1,6 @@
 import { registerTool } from '../registry';
 import { getActiveEditorTool, getOpenEditorsTool } from './editors';
+import { findReferencesTool } from './findReferences';
 import { getDiagnosticsTool } from './getDiagnostics';
 import { gitStatusTool } from './gitStatus';
 import { lspTool } from './lsp';
@@ -37,5 +38,9 @@ export function registerIdeTools(): void {
 	registerTool(lspTool, { 
 		tags: ['ide'], 
 		risk: 'read' 
+	});
+	registerTool(findReferencesTool, {
+		tags: ['ide'],
+		risk: 'read',
 	});
 }

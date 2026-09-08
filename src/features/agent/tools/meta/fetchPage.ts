@@ -3,6 +3,7 @@ import { AGENT_LIMITS } from '../../policy';
 import { asString, type ToolContext, type ToolDefinition, type ToolResult } from '../../types';
 import { throwIfAborted } from '../../workspacePath';
 import { confirmAlwaysOrSkip, confirmOrSkip, shouldConfirmWrites } from '../confirm';
+import { annotateHtmlWithSourceHints } from '../../../design/designVisual';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -107,7 +108,14 @@ export const fetchPageTool: ToolDefinition = {
 
 			const raw = new TextDecoder('utf-8', { fatal: false }).decode(slice);
 			const contentType = res.headers.get('content-type') ?? '';
-			const body = contentType.includes('html') ? stripScripts(raw) : raw;
+			const stripped = contentType.includes('html') ? stripScripts(raw) : raw;
+			const annotated = contentType.includes('html')
+				? annotateHtmlWithSourceHints(stripped, href)
+				: { 
+					html: stripped, 
+					sourceMapHint: undefined, 
+					note: undefined 
+				};
 
 			return {
 				ok: res.ok,
@@ -119,7 +127,9 @@ export const fetchPageTool: ToolDefinition = {
 					bytes: bytes.byteLength,
 					truncated,
 					local,
-					body,
+					sourceMapHint: annotated.sourceMapHint ?? null,
+					designNote: annotated.note ?? null,
+					body: annotated.html,
 				}, null, 2),
 			};
 		} catch (err) {

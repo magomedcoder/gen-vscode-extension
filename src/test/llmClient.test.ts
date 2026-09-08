@@ -87,7 +87,12 @@ suite('HttpLlmClient', () => {
 			getConfig: () => testSettings(),
 			readApiKey: async () => 'sk-test',
 			sleep: async () => undefined,
-			fetch: async (_url, init) => {
+			fetch: async (url, init) => {
+				const href = String(url);
+				if (href.includes('/props')) {
+					return jsonResponse({}, 404);
+				}
+
 				calls.push(1);
 				const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
 				assert.strictEqual(auth, 'Bearer sk-test');
@@ -118,7 +123,11 @@ suite('HttpLlmClient', () => {
 			getConfig: () => testSettings(),
 			readApiKey: async () => '',
 			sleep: async () => undefined,
-			fetch: async () => {
+			fetch: async (url) => {
+				if (String(url).includes('/props')) {
+					return jsonResponse({}, 404);
+				}
+
 				calls += 1;
 				return jsonResponse({
 					error: {
@@ -133,5 +142,38 @@ suite('HttpLlmClient', () => {
 			(err: unknown) => err instanceof LlmHttpError && err.status === 400,
 		);
 		assert.strictEqual(calls, 1);
+	});
+
+	test('кэширует n_ctx из /props после listModels', async () => {
+		const { clearCachedNCtx, getCachedNCtx } = await import('../core/llm/contextBudget.js');
+		clearCachedNCtx();
+		const client = new HttpLlmClient({
+			getConfig: () => testSettings({ 
+				baseUrl: 'http://llm.test/v1',
+				 model: 'local' 
+				}),
+			readApiKey: async () => '',
+			sleep: async () => undefined,
+			fetch: async (url) => {
+				const href = String(url);
+				if (href.includes('/props')) {
+					return jsonResponse({ 
+						default_generation_settings: { 
+							n_ctx: 8192 
+						} 
+					});
+				}
+
+				return jsonResponse({ 
+					data: [{ 
+						id: 'local' 
+					}] 
+				});
+			},
+		});
+
+		await client.listModels();
+		assert.strictEqual(getCachedNCtx('http://llm.test/v1', 'local'), 8192);
+		clearCachedNCtx();
 	});
 });

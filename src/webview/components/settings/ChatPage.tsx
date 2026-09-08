@@ -32,6 +32,7 @@ export function ChatPage({
 					<option value="agent">{t('settings.chatMode.agent')}</option>
 					<option value="plan">{t('settings.chatMode.plan')}</option>
 					<option value="multitask">{t('settings.chatMode.multitask')}</option>
+					<option value="project">{t('settings.chatMode.project')}</option>
 					<option value="debug">{t('settings.chatMode.debug')}</option>
 					<option value="design">{t('settings.chatMode.design')}</option>
 				</FieldSelect>

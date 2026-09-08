@@ -2,16 +2,11 @@ import { useCallback, useState } from 'react';
 import type { ThinkingDisplay } from '../core/config/types';
 import { ChatHeader } from './components/ChatHeader';
 import { Composer } from './components/Composer';
-import { ConfirmCard } from './components/ConfirmCard';
 import { MessageList } from './components/MessageList';
-import { PendingChangesBar } from './components/PendingChangesBar';
 import { ProjectSetupBanner } from './components/ProjectSetupBanner';
-import { QuestionCard } from './components/QuestionCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { TodoPanel } from './components/TodoPanel';
-import { TurnDiffBanner } from './components/TurnDiffBanner';
 import { t } from './i18n';
-import { collectPendingChanges } from './pendingChanges';
 import { useGenBridge } from './useGenBridge';
 import { vscodeApi } from './vscodeApi';
 
@@ -77,16 +72,18 @@ export function App() {
 		models,
 		modelsStatus,
 		modelsLoading,
+		connectionHealth,
+		connectionHealthLoading,
 		mcpServers,
 		indexStatus,
 		hooks,
 		hooksStatus,
-		externalHooks,
 		agents,
 		agentsStatus,
 		rulesSkills,
 		saveSettings,
 		loadModels,
+		checkConnection,
 		openLogsFolder,
 		refreshMcp,
 		mcpOAuthAuth,
@@ -96,9 +93,6 @@ export function App() {
 		loadHooks,
 		saveHooks,
 		openHooksFile,
-		loadExternalHooks,
-		openExternalHookFile,
-		importExternalHooks,
 		loadAgents,
 		cloneAgentPreset,
 		loadRulesSkills,
@@ -138,16 +132,18 @@ export function App() {
 				models={models}
 				modelsStatus={modelsStatus}
 				modelsLoading={modelsLoading}
+				connectionHealth={connectionHealth}
+				connectionHealthLoading={connectionHealthLoading}
 				mcpServers={mcpServers}
 				indexStatus={indexStatus}
 				hooks={hooks}
 				hooksStatus={hooksStatus}
-				externalHooks={externalHooks}
 				agents={agents}
 				agentsStatus={agentsStatus}
 				rulesSkills={rulesSkills}
 				onSave={saveSettings}
 				onLoadModels={loadModels}
+				onCheckConnection={checkConnection}
 				onOpenLogsFolder={openLogsFolder}
 				onRefreshMcp={refreshMcp}
 				onMcpOAuthAuth={mcpOAuthAuth}
@@ -157,9 +153,6 @@ export function App() {
 				onLoadHooks={loadHooks}
 				onSaveHooks={saveHooks}
 				onOpenHooksFile={openHooksFile}
-				onLoadExternalHooks={loadExternalHooks}
-				onOpenExternalHookFile={openExternalHookFile}
-				onImportExternalHooks={importExternalHooks}
 				onLoadAgents={loadAgents}
 				onCloneAgentPreset={cloneAgentPreset}
 				onLoadRulesSkills={loadRulesSkills}
@@ -171,8 +164,6 @@ export function App() {
 
 	const confirming = Boolean(chat.pendingConfirm) || Boolean(chat.pendingQuestion);
 	const paused = chat.agentPaused;
-	const pendingChanges = collectPendingChanges(chat.messages);
-	const showPendingBar = pendingChanges.hunkCount > 0 && !chat.busy && !confirming;
 	const textSize = chat.chatTextSize ?? 'default';
 	const appClass = textSize === 'default' ? 'app' : `app app--text-${textSize}`;
 
@@ -181,6 +172,10 @@ export function App() {
 			<ChatHeader
 				usage={chat.usage}
 				maxContextTokens={chat.maxContextTokens}
+				estimatedPromptTokens={chat.estimatedPromptTokens}
+				contextBudget={chat.contextBudget}
+				cachedNCtx={chat.cachedNCtx}
+				lastContextPrune={chat.lastContextPrune}
 				sessionId={chat.sessionId}
 				sessions={chat.sessions}
 				toolDetailsExpanded={toolDetailsExpanded}
@@ -199,6 +194,8 @@ export function App() {
 				busy={chat.busy}
 				detailsExpanded={toolDetailsExpanded}
 				thinkingDisplay={thinkingDisplay}
+				pendingConfirm={chat.pendingConfirm}
+				pendingQuestion={chat.pendingQuestion}
 			/>
 			{paused ? (
 				<div className="pause-banner" role="status">
@@ -248,13 +245,7 @@ export function App() {
 					</span>
 				</div>
 			) : null}
-			{chat.pendingConfirm ? <ConfirmCard confirm={chat.pendingConfirm} /> : null}
-			{chat.pendingQuestion ? <QuestionCard question={chat.pendingQuestion} /> : null}
 			<div className="composer-dock">
-				{showPendingBar ? <PendingChangesBar summary={pendingChanges} /> : null}
-				{chat.lastTurnDiff && chat.lastTurnDiff.paths.length > 0 ? (
-					<TurnDiffBanner diff={chat.lastTurnDiff} />
-				) : null}
 				<Composer
 					key={chat.sessionId ?? 'none'}
 					busy={chat.busy || confirming}

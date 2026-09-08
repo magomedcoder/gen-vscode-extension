@@ -2,8 +2,13 @@ import type { ChatMode } from '../../core/config/types';
 import { isReadOnlyApprovalPolicy } from './auth';
 import { getSettings } from '../../core/config/settings';
 
+// Потолок user-edits appendix в system prompt (символы)
+const USER_EDITS_APPENDIX_MAX = 2_000;
+
 export function buildAgentSystemPrompt(options?: {
 	toolsAvailable: boolean;
+	// Native tools API недоступен - модель шлёт <tool_call> в тексте
+	textToolFormat?: boolean;
 	deniedPaths?: readonly string[];
 	userEditsAppendix?: string;
 	planAppendix?: string;
@@ -16,15 +21,22 @@ export function buildAgentSystemPrompt(options?: {
 	planWriteToFile?: boolean;
 	// Shell в Plan: ask | deny
 	planShellPolicy?: 'ask' | 'deny';
-	// Фокус режима: agent (по умолчанию), debug, design, plan, multitask
+	// Фокус режима: agent (по умолчанию), debug, design, plan, multitask, project
 	mode?: ChatMode;
 	/**
 	 * Есть ли `apply_patch` в tool list (model-routed).
 	 * false * подсказки про write_file / apply_workspace_edit без apply_patch.
 	 */
 	includeApplyPatch?: boolean;
+	// Глубина субагента: >0 - без тяжёлых catalogs
+	subagentDepth?: number;
+	// Каталог `.gen/scratch/` (имена файлов)
+	scratchAppendix?: string;
+	// Короткий live-снимок активного редактора (mid-turn)
+	liveEditorAppendix?: string;
 }): string {
 	const toolsAvailable = options?.toolsAvailable ?? true;
+	const textToolFormat = options?.textToolFormat === true;
 	const planWriteToFile = options?.planWriteToFile !== false;
 	const includeApplyPatch = options?.includeApplyPatch !== false;
 	const settings = getSettings();
@@ -35,6 +47,7 @@ export function buildAgentSystemPrompt(options?: {
 		|| options?.mode === 'design'
 		|| options?.mode === 'plan'
 		|| options?.mode === 'multitask'
+		|| options?.mode === 'project'
 			? options.mode
 			: 'agent';
 	const deniedPaths = (options?.deniedPaths ?? []).map((item) => item.trim()).filter((item) => item && !item.startsWith('#'));
@@ -53,7 +66,9 @@ export function buildAgentSystemPrompt(options?: {
 					? 'Ты Gen в режиме Plan - анализ и план без правок файлов. Shell только с подтверждением (или недоступен - см. planShellPolicy).'
 					: mode === 'multitask'
 						? 'Ты Gen в режиме Multitask - координатор. Не правь файлы сам: делегируй через tool task.'
-						: 'Ты Gen - агент-помощник программиста в VS Code.',
+						: mode === 'project'
+							? 'Ты Gen в режиме Project - тимлид команды. Не правь файлы сам: делегируй подзадачи через tool task и синтезируй отчёты.'
+							: 'Ты Gen - агент-помощник программиста в VS Code.',
 		'Отвечай на языке пользователя, кратко и по делу.',
 		'Работай только в рамках текущего workspace; не предлагай действия вне проекта.',
 		'Если дан контекст редактора (файл, выделение), опирайся на него.',
@@ -61,13 +76,13 @@ export function buildAgentSystemPrompt(options?: {
 
 	if (mode === 'debug') {
 		lines.push(
-			`Алгоритм Debug: 1) get_diagnostics и/или find_logs; 2) read_log_tail по подозрительным файлам; 3) при необходимости read_file / search_files / codebase_search по коду из stack trace; 4) предложи гипотезу причины и точечный фикс (${patchHint}).`,
+			`Алгоритм Debug: 1) get_diagnostics и/или find_logs; 2) read_log_tail по подозрительным файлам; 3) при необходимости read_file / grep / glob / codebase_search по коду из stack trace; 4) предложи гипотезу причины и точечный фикс (${patchHint}).`,
 			'Не правь наугад: сначала факты из логов и диагностик. Цитируй ключевые строки ошибок.',
 		);
 	} else if (mode === 'design') {
 		lines.push(
 			`Алгоритм Design: 1) уточни URL preview (часто http://localhost:...); 2) open_browser чтобы показать UI; 3) fetch_page для HTML/текста; 4) опиши проблемы UX и правь код (CSS/разметка) через ${patchHint}.`,
-			'fetch_page не выполняет JS и не кликает по UI - для динамики опирайся на код и описание пользователя. Внешние (не localhost) URL требуют подтверждения.',
+			'fetch_page не выполняет JS и не кликает по UI - для динамики опирайся на код и описание пользователя. Click-to-code (Design visual) не реализован. Внешние (не localhost) URL требуют подтверждения.',
 		);
 	} else if (mode === 'plan') {
 		const shellPolicy = options?.planShellPolicy === 'deny' ? 'deny' : 'ask';
@@ -86,12 +101,20 @@ export function buildAgentSystemPrompt(options?: {
 			'Режим Multitask: ты координатор. Мутирующие tools недоступны - поручай подзадачи через task (explore / general / scout / docs-researcher / code-reviewer / кастомные агенты из `.gen/agents/`).',
 			'Сам читай код, строй план (propose_plan / write_plan), собирай отчёты субагентов и давай итоговый ответ.',
 		);
+	} else if (mode === 'project') {
+		lines.push(
+			'Режим Project (teams): ты тимлид команды агентов. Мутирующие tools недоступны - делегируй работу через tool task (explore / general / scout / docs-researcher / code-reviewer / кастомные агенты из `.gen/agents/`).',
+			'Алгоритм тимлида: 1) уточни цель и разбей на подзадачи; 2) выбери подходящего субагента под каждую; 3) parallel где независимо; 4) после каждого task - синтезируй отчёт в общий план/итог; 5) не оставляй сырые отчёты субагентов без сводки для пользователя.',
+			'Сам: читай код, координируй, держи propose_plan / write_plan / update_plan, дай итоговый ответ. Не правь файлы сам - только через делегирование general (или выход в /agent).',
+			'Слэш: /project включает режим; /agent или /ask - выход. Подсказка: после возврата task всегда синтезируй результат команды.',
+		);
 	}
 
 	if (toolsAvailable) {
 		lines.push(
 			'У тебя есть инструменты. Вызывай их, когда нужны факты о файлах или правки.',
 			'Не выдумывай содержимое файлов - перед любой записью заново read_file / get_active_editor; не опирайся на старый снимок из истории tools.',
+			'Одноразовый анализатор/мигратор: напиши скрипт в `.gen/scratch/` (write_file / edit_file), затем `run_scratch` или `run_command`/`await_shell`. Не eval JS из `.gen/tools`.',
 			`Правки пользователя важнее: не откатывай их, если задача явно не требует. Если файл расходится со снимком агента - полный write_file запрещён, только ${targetedEditHint} по актуальному тексту.`,
 			includeApplyPatch
 				? 'Для нового файла: write_file только если файл короткий. Большой файл: короткая заготовка write_file, дальше apply_patch небольшими фрагментами. Несколько файлов сразу: apply_workspace_edit. Не клади весь большой файл в один write_file: JSON аргументов обрежется.'
@@ -103,7 +126,7 @@ export function buildAgentSystemPrompt(options?: {
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Логи: find_logs, read_log_tail. UI: open_browser, fetch_page.',
 			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). Подтверждения - по approvalPolicy / autoApprove в настройках Безопасность.',
-			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask). Субагенты: task. Кастомные агенты: generate_agent -> `.gen/agents/`.',
+			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask|project). Субагенты: task. Кастомные агенты: generate_agent -> `.gen/agents/`.',
 			planWriteToFile
 				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план пишется в `.gen/plan.md`. Опциональный slug - ещё `.gen/plans/<slug>.md`. write_plan / list_plans для multi-plan. Прогресс: update_plan. Один файл можно править без плана.'
 				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план только в памяти на текущую сессию (запись sticky файла отключена). write_plan всё ещё пишет в `.gen/plans/`. Прогресс: update_plan. Один файл можно править без плана.',
@@ -123,16 +146,28 @@ export function buildAgentSystemPrompt(options?: {
 			lines.push('Сейчас режим с подтверждением: запись, удаление, команды и план пользователь подтверждает в диалоге; если отклонил - предложи другой план.');
 		}
 		lines.push('Когда задача решена, дай итоговый текстовый ответ без лишних tool-вызовов.');
+		if (textToolFormat) {
+			lines.push(
+				'Сервер не принимает native tool_calls в API. Вызывай tools только в тексте, в точности так:',
+				'<tool_call>\n<function=list_dir>\n<parameter=path>\nsrc\n</parameter>\n</function>\n</tool_call>',
+				'Имена tools: list_dir, read_file, write_file, edit_file, apply_patch, apply_workspace_edit, delete_file, create_dir, run_command, run_tests, grep, glob, codebase_search, get_diagnostics, get_active_editor, open_file, propose_plan, write_plan, update_plan, task, ask_question - и другие из описания. Не используй list_directory / run_terminal_cmd / search_replace / search_files.',
+				'Не показывай пользователю сырой XML tool_call как ответ - только вызовы; краткий текст можно до или после блоков.',
+			);
+		}
 	} else {
 		lines.push('Сервер LLM не поддерживает tools в этом запросе - отвечай только текстом, без попыток вызвать инструменты.');
 	}
 
-	const skillsAppendix = options?.skillsAppendix?.trim();
+	const skillsAppendix = (options?.subagentDepth ?? 0) > 0
+		? undefined
+		: options?.skillsAppendix?.trim();
 	if (skillsAppendix) {
 		lines.push(skillsAppendix);
 	}
 
-	const pluginsAppendix = options?.pluginsAppendix?.trim();
+	const pluginsAppendix = (options?.subagentDepth ?? 0) > 0
+		? undefined
+		: options?.pluginsAppendix?.trim();
 	if (pluginsAppendix) {
 		lines.push(pluginsAppendix);
 	}
@@ -152,9 +187,24 @@ export function buildAgentSystemPrompt(options?: {
 		lines.push(genRulesAppendix);
 	}
 
-	const appendix = options?.userEditsAppendix?.trim();
+	let appendix = options?.userEditsAppendix?.trim() ?? '';
+	if (appendix.length > USER_EDITS_APPENDIX_MAX) {
+		appendix = `${appendix.slice(0, USER_EDITS_APPENDIX_MAX)}\n... [user-edits appendix truncated]`;
+	}
 	if (appendix) {
 		lines.push(appendix);
+	}
+
+	const scratchAppendix = (options?.subagentDepth ?? 0) > 0
+		? undefined
+		: options?.scratchAppendix?.trim();
+	if (scratchAppendix) {
+		lines.push(scratchAppendix);
+	}
+
+	const liveEditorAppendix = options?.liveEditorAppendix?.trim();
+	if (liveEditorAppendix) {
+		lines.push(liveEditorAppendix);
 	}
 
 	return lines.join(' ');

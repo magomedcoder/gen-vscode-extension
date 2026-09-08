@@ -1,4 +1,4 @@
-import { getSettings } from '../../core/config/settings';
+import { getSettings, resolveSmallModel } from '../../core/config/settings';
 import type { LlmClient } from '../../core/llm/types';
 import type { ChatUiMessage } from '../chat/protocol';
 
@@ -33,7 +33,7 @@ export async function generateSessionTitle(
 	},
 ): Promise<string | undefined> {
 	const settings = getSettings();
-	const model = settings.smallModel.trim() || undefined;
+	const model = resolveSmallModel(settings);
 	const body = serializeForTitle(messages);
 	if (!body.trim()) {
 		return undefined;

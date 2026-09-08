@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getSettings } from '../../core/config/settings';
+import { getSettings, resolveSmallModel } from '../../core/config/settings';
 import type { LlmClient } from '../../core/llm/types';
 import type { ChatUiMessage } from './protocol';
 
@@ -112,7 +112,7 @@ export async function compactChatMessages(
 
 	const older = turns.slice(0, -keepTurns);
 	const recent = turns.slice(-keepTurns);
-	const model = settings.smallModel.trim() || undefined;
+	const model = resolveSmallModel(settings);
 	const prompt = [
 		'Суммируй предыдущую переписку чата для coding-агента.',
 		'Сохрани: цель задачи, принятые решения, ключевые пути файлов, незавершённые шаги.',

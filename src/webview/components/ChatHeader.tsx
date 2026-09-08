@@ -9,6 +9,10 @@ import { TokenMeter } from './TokenMeter';
 interface ChatHeaderProps {
 	usage?: TokenUsage;
 	maxContextTokens?: number;
+	estimatedPromptTokens?: number;
+	contextBudget?: number;
+	cachedNCtx?: number;
+	lastContextPrune?: { chars: number; messages: number };
 	sessionId?: string;
 	sessions?: SessionSummary[];
 	toolDetailsExpanded?: boolean;
@@ -24,6 +28,10 @@ interface ChatHeaderProps {
 export function ChatHeader({
 	usage,
 	maxContextTokens,
+	estimatedPromptTokens,
+	contextBudget,
+	cachedNCtx,
+	lastContextPrune,
 	sessionId,
 	sessions,
 	toolDetailsExpanded = true,
@@ -216,7 +224,15 @@ export function ChatHeader({
 				) : null}
 			</div>
 			<div className="header__actions">
-				<TokenMeter usage={usage} maxContextTokens={maxContextTokens} compact />
+				<TokenMeter
+					usage={usage}
+					maxContextTokens={maxContextTokens}
+					estimatedPromptTokens={estimatedPromptTokens}
+					contextBudget={contextBudget}
+					cachedNCtx={cachedNCtx}
+					lastContextPrune={lastContextPrune}
+					compact
+				/>
 				<details ref={optsRef} className="header-opts">
 					<summary className="btn btn--secondary header-opts__summary" title={t('chat.header.options')}>
 						<span className="header-opts__summary-text">{modelSummary}</span>

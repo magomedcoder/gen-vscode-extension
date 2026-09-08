@@ -1,20 +1,36 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 
+function pathIsInside(child: string, parent: string): boolean {
+	const rel = path.relative(path.resolve(parent), path.resolve(child));
+	return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 /**
- * Локальные plugins/tools (MVP, без npm и без выполнения JS).
+ * Локальные plugins/tools + npm-каталог с осторожным runtime execute.
  *
  * Конвенция:
- * - Tools:
+ * - Инструменты:
  *   - `.gen/tools/<name>.md` - однофайловое описание (YAML frontmatter: name, description)
  *   - `.gen/tools/<name>/TOOL.md` - пакет в папке
- * - Plugins:
+ * - Плагины:
  *   - `.gen/plugins/<name>/plugin.json` - манифест (обязательная точка обнаружения) { "name"?, "description"?, "instructions"? }
  *   - если `instructions` пуст - тело берётся из соседнего `PLUGIN.md`
- *
- * Агент видит каталог в system prompt и может загрузить тело через tool `plugin` или прочитать файл через `read_file`. JS из плагинов не исполняется.
+ * - npm:
+ *   - `package.json` с полем `gen` или `genAgent` (объект / строка имени; опц. command/args/bin)
+ *   - `.gen/npm-plugins.json` - список `{ "name", "description"?, "package"?, "command"?, "args"?, "bin"? }` или строк
+ *   - execute: только spawn объявленной команды под workspace / node_modules (tool `run_plugin`); без require() в host
  */
 
-export type LocalPluginKind = 'tool' | 'plugin';
+export type LocalPluginKind = 'tool' | 'plugin' | 'npm';
+
+// Объявленный spawn для npm-плагина (пути должны резолвиться под workspace)
+export interface NpmPluginExecutable {
+	command: string;
+	args: string[];
+	// Абсолютный корень пакета для резолва относительных args (под workspace)
+	packageRoot: string;
+}
 
 export interface LocalPluginInfo {
 	kind: LocalPluginKind;
@@ -23,6 +39,8 @@ export interface LocalPluginInfo {
 	// Путь к главному файлу (md или plugin.json) относительно workspace
 	path: string;
 	body: string;
+	// Только kind=npm: объявленная команда для run_plugin
+	executable?: NpmPluginExecutable;
 }
 
 const MAX_BODY_CHARS = 16_000;
@@ -166,7 +184,347 @@ async function readPluginJson(uri: vscode.Uri, seen: Set<string>, out: LocalPlug
 	});
 }
 
-// Обнаружить локальные tools (`.gen/tools`) и plugins (`.gen/plugins`)
+function pushNpmEntry(
+	seen: Set<string>,
+	out: LocalPluginInfo[],
+	entry: {
+		name: string;
+		description?: string;
+		path: string;
+		body?: string;
+		executable?: NpmPluginExecutable;
+	},
+): void {
+	const name = entry.name.trim();
+	const key = `npm:${name.toLowerCase()}`;
+	if (!name || seen.has(key) || out.length >= MAX_ITEMS) {
+		return;
+	}
+
+	seen.add(key);
+	const canRun = Boolean(entry.executable);
+	out.push({
+		kind: 'npm',
+		name,
+		description: (entry.description || name).trim(),
+		path: entry.path,
+		body: truncateBody(
+			entry.body?.trim()
+			|| (canRun
+				? `(npm plugin) run via tool run_plugin; no require() into extension host.`
+				: '(npm plugin catalog only - declare command/args or bin for run_plugin)'),
+		),
+		...(entry.executable ? { executable: entry.executable } : {}),
+	});
+}
+
+interface ParsedGenPluginField {
+	name: string;
+	description?: string;
+	command?: string;
+	args?: string[];
+	bin?: string;
+}
+
+function parseGenPluginField(raw: unknown, pkgName: string): ParsedGenPluginField | undefined {
+	if (typeof raw === 'string' && raw.trim()) {
+		return { name: raw.trim(), description: `npm package ${pkgName}` };
+	}
+
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+		return undefined;
+	}
+
+	const obj = raw as Record<string, unknown>;
+	const name = typeof obj.name === 'string' && obj.name.trim()
+		? obj.name.trim()
+		: pkgName.trim();
+	if (!name) {
+		return undefined;
+	}
+
+	const description = typeof obj.description === 'string' ? obj.description.trim() : undefined;
+	const command = typeof obj.command === 'string' && obj.command.trim()
+		? obj.command.trim()
+		: undefined;
+	const args = Array.isArray(obj.args)
+		? obj.args.filter((a): a is string => typeof a === 'string').map((a) => a.trim()).filter(Boolean)
+		: undefined;
+	const bin = typeof obj.bin === 'string' && obj.bin.trim()
+		? obj.bin.trim()
+		: undefined;
+	return {
+		name,
+		description: description || `npm package ${pkgName}`,
+		...(command ? { command } : {}),
+		...(args && args.length ? { args } : {}),
+		...(bin ? { bin } : {}),
+	};
+}
+
+function workspaceRootFs(folder: vscode.WorkspaceFolder): string {
+	return folder.uri.fsPath;
+}
+
+function assertPathInsideWorkspace(absPath: string, workspaceRoot: string): string {
+	const resolved = path.resolve(absPath);
+	if (!pathIsInside(resolved, workspaceRoot)) {
+		throw new Error(`path outside workspace: ${resolved}`);
+	}
+
+	return resolved;
+}
+
+async function resolveBinFromPackage(
+	packageRoot: string,
+	binName: string | undefined,
+	workspaceRoot: string,
+): Promise<{ command: string; args: string[] } | undefined> {
+	const pkgRaw = await readText(vscode.Uri.file(path.join(packageRoot, 'package.json')));
+	if (pkgRaw === undefined) {
+		return undefined;
+	}
+
+	try {
+		const data = JSON.parse(pkgRaw) as Record<string, unknown>;
+		const binField = data.bin;
+		let scriptRel: string | undefined;
+		if (typeof binField === 'string' && binField.trim()) {
+			scriptRel = binField.trim();
+		} else if (binField && typeof binField === 'object' && !Array.isArray(binField)) {
+			const map = binField as Record<string, unknown>;
+			const preferred = binName?.trim();
+			if (preferred && typeof map[preferred] === 'string') {
+				scriptRel = String(map[preferred]).trim();
+			} else {
+				const first = Object.values(map).find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+				scriptRel = first?.trim();
+			}
+		}
+		if (!scriptRel) {
+			return undefined;
+		}
+
+		const scriptAbs = assertPathInsideWorkspace(path.resolve(packageRoot, scriptRel), workspaceRoot);
+		return { command: 'node', args: [scriptAbs] };
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Собрать spawn-спеку executable. Относительные args резолвятся под packageRoot; все пути к файлам - внутри workspace.
+ * Command: бинарь из PATH (node) или абсолютный/относительный путь под workspace.
+ */
+export function buildNpmPluginExecutable(params: {
+	workspaceRoot: string;
+	packageRoot: string;
+	command?: string;
+	args?: string[];
+}): NpmPluginExecutable {
+	const workspaceRoot = path.resolve(params.workspaceRoot);
+	const packageRoot = assertPathInsideWorkspace(params.packageRoot, workspaceRoot);
+	const commandRaw = (params.command ?? 'node').trim();
+	if (!commandRaw) {
+		throw new Error('empty command');
+	}
+
+	let command = commandRaw;
+	if (command.includes('/') || command.includes('\\') || path.isAbsolute(command)) {
+		command = assertPathInsideWorkspace(
+			path.isAbsolute(command) ? command : path.resolve(packageRoot, command),
+			workspaceRoot,
+		);
+	}
+
+	const args = (params.args ?? []).map((arg) => {
+		const a = arg.trim();
+		if (!a) {
+			return a;
+		}
+
+		// Резолв относительных file-like args относительно корня пакета; флаги без изменений
+		if (a.startsWith('-')) {
+			return a;
+		}
+
+		if (a.includes('/') || a.includes('\\') || /\.\w{1,10}$/.test(a) || path.isAbsolute(a)) {
+			const abs = path.isAbsolute(a) ? a : path.resolve(packageRoot, a);
+			return assertPathInsideWorkspace(abs, workspaceRoot);
+		}
+		return a;
+	});
+
+	return { command, args, packageRoot };
+}
+
+async function discoverNpmPluginsFromPackageJson(
+	folder: vscode.WorkspaceFolder,
+	seen: Set<string>,
+	out: LocalPluginInfo[],
+): Promise<void> {
+	const workspaceRoot = workspaceRootFs(folder);
+	const pkgUri = vscode.Uri.joinPath(folder.uri, 'package.json');
+	const raw = await readText(pkgUri);
+	if (raw === undefined) {
+		return;
+	}
+
+	try {
+		const data = JSON.parse(raw) as Record<string, unknown>;
+		const pkgName = typeof data.name === 'string' ? data.name : 'package';
+		const field = data.gen ?? data.genAgent;
+		const parsed = parseGenPluginField(field, pkgName);
+		if (!parsed) {
+			return;
+		}
+
+		let executable: NpmPluginExecutable | undefined;
+		try {
+			if (parsed.command || parsed.args?.length) {
+				executable = buildNpmPluginExecutable({
+					workspaceRoot,
+					packageRoot: workspaceRoot,
+					command: parsed.command,
+					args: parsed.args,
+				});
+			} else if (parsed.bin || field && typeof field === 'object') {
+				const fromBin = await resolveBinFromPackage(workspaceRoot, parsed.bin, workspaceRoot);
+				if (fromBin) {
+					executable = buildNpmPluginExecutable({
+						workspaceRoot,
+						packageRoot: workspaceRoot,
+						command: fromBin.command,
+						args: fromBin.args,
+					});
+				}
+			}
+		} catch {
+			executable = undefined;
+		}
+
+		pushNpmEntry(seen, out, {
+			name: parsed.name,
+			description: parsed.description,
+			path: 'package.json',
+			body: executable
+				? `Объявлено в package.json (${data.gen ? 'gen' : 'genAgent'}). Запуск: tool run_plugin (spawn, без require).`
+				: `Объявлено в package.json (${data.gen ? 'gen' : 'genAgent'}). Добавь command/args или bin для run_plugin.`,
+			executable,
+		});
+	} catch {}
+}
+
+async function discoverNpmPluginsList(
+	folder: vscode.WorkspaceFolder,
+	seen: Set<string>,
+	out: LocalPluginInfo[],
+): Promise<void> {
+	const workspaceRoot = workspaceRootFs(folder);
+	const listUri = vscode.Uri.joinPath(folder.uri, '.gen', 'npm-plugins.json');
+	const raw = await readText(listUri);
+	if (raw === undefined) {
+		return;
+	}
+
+	try {
+		const data = JSON.parse(raw) as unknown;
+		const items = Array.isArray(data)
+			? data
+			: data && typeof data === 'object' && Array.isArray((data as { plugins?: unknown }).plugins)
+				? (data as { plugins: unknown[] }).plugins
+				: [];
+		for (const item of items) {
+			if (typeof item === 'string' && item.trim()) {
+				const pkgName = item.trim();
+				const packageRoot = path.join(workspaceRoot, 'node_modules', pkgName);
+				let executable: NpmPluginExecutable | undefined;
+				try {
+					const fromBin = await resolveBinFromPackage(packageRoot, undefined, workspaceRoot);
+					if (fromBin) {
+						executable = buildNpmPluginExecutable({
+							workspaceRoot,
+							packageRoot,
+							command: fromBin.command,
+							args: fromBin.args,
+						});
+					}
+				} catch {
+					executable = undefined;
+				}
+				pushNpmEntry(seen, out, {
+					name: pkgName,
+					path: '.gen/npm-plugins.json',
+					executable,
+				});
+				continue;
+			}
+
+			if (!item || typeof item !== 'object' || Array.isArray(item)) {
+				continue;
+			}
+
+			const row = item as Record<string, unknown>;
+			const name = typeof row.name === 'string' ? row.name.trim() : '';
+			if (!name) {
+				continue;
+			}
+
+			const packageName = typeof row.package === 'string' && row.package.trim()
+				? row.package.trim()
+				: name;
+			const description = typeof row.description === 'string'
+				? row.description.trim()
+				: `package ${packageName}`;
+			const packageRoot = path.join(workspaceRoot, 'node_modules', packageName);
+			const command = typeof row.command === 'string' ? row.command.trim() : undefined;
+			const args = Array.isArray(row.args)
+				? row.args.filter((a): a is string => typeof a === 'string')
+				: undefined;
+			const bin = typeof row.bin === 'string' ? row.bin.trim() : undefined;
+
+			let executable: NpmPluginExecutable | undefined;
+			try {
+				if (command || args?.length) {
+					executable = buildNpmPluginExecutable({
+						workspaceRoot,
+						packageRoot,
+						command,
+						args,
+					});
+				} else {
+					const fromBin = await resolveBinFromPackage(packageRoot, bin, workspaceRoot);
+					if (fromBin) {
+						executable = buildNpmPluginExecutable({
+							workspaceRoot,
+							packageRoot,
+							command: fromBin.command,
+							args: fromBin.args,
+						});
+					}
+				}
+			} catch {
+				executable = undefined;
+			}
+
+			pushNpmEntry(seen, out, {
+				name,
+				description,
+				path: '.gen/npm-plugins.json',
+				executable,
+			});
+		}
+	} catch {}
+}
+
+// Резолв executable npm-плагина по имени из каталога (для run_plugin)
+export async function resolveNpmPluginExecutable(name: string): Promise<LocalPluginInfo | undefined> {
+	const items = await discoverLocalPlugins();
+	const key = name.trim().toLowerCase();
+	return items.find((item) => item.kind === 'npm' && item.name.toLowerCase() === key && item.executable);
+}
+
+// Обнаружить локальные tools (`.gen/tools`) и plugins (`.gen/plugins`) + npm catalog
 export async function discoverLocalPlugins(): Promise<LocalPluginInfo[]> {
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	if (!folder) {
@@ -199,16 +557,22 @@ export async function discoverLocalPlugins(): Promise<LocalPluginInfo[]> {
 	for (const uri of pluginUris) {
 		await readPluginJson(uri, seen, out);
 		if (out.length >= MAX_ITEMS) {
-			break;
+			return out.sort(comparePlugins);
 		}
+	}
+
+	await discoverNpmPluginsFromPackageJson(folder, seen, out);
+	if (out.length < MAX_ITEMS) {
+		await discoverNpmPluginsList(folder, seen, out);
 	}
 
 	return out.sort(comparePlugins);
 }
 
 function comparePlugins(a: LocalPluginInfo, b: LocalPluginInfo): number {
+	const order = (k: LocalPluginKind) => (k === 'tool' ? 0 : k === 'plugin' ? 1 : 2);
 	if (a.kind !== b.kind) {
-		return a.kind === 'tool' ? -1 : 1;
+		return order(a.kind) - order(b.kind);
 	}
 
 	return a.name.localeCompare(b.name, 'ru');
@@ -221,11 +585,13 @@ export function formatPluginsCatalog(items: LocalPluginInfo[]): string | undefin
 	}
 
 	const lines = items.map((item) => {
-		const label = item.kind === 'tool' ? 'tool' : 'plugin';
-		return `- [${label}] ${item.name}: ${item.description} (${item.path})`;
+		const label = item.kind === 'tool' ? 'tool' : item.kind === 'plugin' ? 'plugin' : 'npm';
+		const runHint = item.kind === 'npm' && item.executable ? ' [run_plugin]' : '';
+		return `- [${label}] ${item.name}: ${item.description} (${item.path})${runHint}`;
 	});
 	return [
-		'Локальные plugins/tools (только описание; JS не исполняется).',
+		'Локальные plugins/tools (описание; JS не require в host).',
+		'npm с command/args/bin: tool run_plugin (spawn под workspace, с подтверждением shell).',
 		'Tools из `.gen/tools` также доступны как LLM tools по имени (registry).',
 		'Иначе загрузи инструкции через tool plugin по имени или read_file:',
 		...lines,

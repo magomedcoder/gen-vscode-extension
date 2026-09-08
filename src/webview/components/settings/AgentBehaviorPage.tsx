@@ -200,6 +200,12 @@ export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 					parse={parseNumberInput}
 					onChange={(v) => setField('compactReservedTokens', v)}
 				/>
+				<FieldToggle
+					labelKey="settings.midLoopAutoCompact.label"
+					hintKey="settings.midLoopAutoCompact.hint"
+					checked={draft.midLoopAutoCompact}
+					onChange={(v) => setField('midLoopAutoCompact', v)}
+				/>
 			</SettingsSection>
 		</>
 	);

@@ -14,11 +14,13 @@ export type { IndexEngineStatus } from '../index/engineStatus';
 export type { ChatMode, ConfirmChoice, DiffHunkPayload, HunkReviewStatus };
 export type ChatRole = 'user' | 'assistant' | 'error' | 'tool';
 export type PanelScreen = 'chat' | 'settings';
-export type ToolCallStatus = 'pending' | 'ok' | 'error' | 'denied';
+export type ToolCallStatus = 'pending' | 'awaiting_confirm' | 'ok' | 'error' | 'denied';
 export type ConfirmVariant = 'agent' | 'binary';
 
-// Источник внешнего hook-файла (compat discover: hooks.json / settings.json layouts)
-export type ExternalHookKind = | 'hooks-json-user' | 'hooks-json-project' | 'settings-json-user' | 'settings-json-project';
+/**
+ * Design Mode visual click-to-code: см. `features/design/designVisual.ts`.
+ * MVP: tool `design_inspect` + fetch_page source hints; полный click bridge в Simple Browser ещё нет.
+ */
 
 // Снимок admin policy для Settings UI (баннер locked keys)
 export interface AdminPolicyInfo {
@@ -125,6 +127,17 @@ export interface ChatViewState {
 	usage?: TokenUsage;
 	// Лимит контекста для context ring
 	maxContextTokens?: number;
+	// Оценка prompt tokens: server usage.promptTokens если есть, иначе char-estimate
+	estimatedPromptTokens?: number;
+	// Effective prompt budget после n_ctx / reserves
+	contextBudget?: number;
+	// Закэшированный n_ctx сервера (если probe/overflow уже знал)
+	cachedNCtx?: number;
+	// Последний prune context (debug)
+	lastContextPrune?: { 
+		chars: number; 
+		messages: number 
+	};
 	sessionId?: string;
 	sessions?: SessionSummary[];
 	pendingConfirm?: PendingConfirm;
@@ -157,6 +170,7 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'settingsError'; message: string }
 	| { type: 'models'; models: Array<{ id: string; label: string }>; requestId: number }
 	| { type: 'modelsError'; message: string; requestId: number }
+	| { type: 'connectionHealth'; ok: boolean; modelCount: number; message: string; requestId: number }
 	| { type: 'mentionSuggestions'; requestId: number; items: MentionSuggestion[] }
 	| { type: 'usageLedger'; ledger: Record<string, ModelUsage> }
 	| { type: 'activityLedger'; entries: ActivityEntry[] }
@@ -164,14 +178,11 @@ export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
 	| { type: 'indexStatus'; status: IndexEngineStatus }
 	| { type: 'hooksData'; beforeSubmit: string[]; beforeShell: string[]; sessionDiff: string[]; sessionCompacting: string[]; shellEnv: string[]; fileWatcher: string[]; path?: string; error?: string; }
 	| { type: 'hooksSaved'; ok: boolean; error?: string }
-	// Найденные внешние hook-файлы - только discover, без запуска
-	| { type: 'externalHooksData'; files: Array<{ kind: ExternalHookKind; path: string; mappedCommandCount: number; skippedEvents: string[]; error?: string; }>; }
-	| { type: 'externalHooksImported'; ok: boolean; mode: 'merge' | 'replace'; mappedCommandCount: number; skippedEvents: string[]; error?: string; }
 	// Builtin presets + кастомные агенты из `.gen/agents/`
 	| { type: 'agentsData'; presets: AgentPresetInfo[]; custom: AgentCustomInfo[]; error?: string }
 	| { type: 'agentsCloned'; relativePath: string; created: boolean; error?: string }
 	// Кандидаты rules + discovered skills/plugins (read-only UI)
-	| { type: 'rulesSkillsData'; rules: Array<{ label: string; path: string; exists: boolean }>; skills: Array<{ name: string; description: string; path: string }>; plugins: Array<{ kind: 'tool' | 'plugin'; name: string; description: string; path: string }>; }
+	| { type: 'rulesSkillsData'; rules: Array<{ label: string; path: string; exists: boolean }>; skills: Array<{ name: string; description: string; path: string }>; plugins: Array<{ kind: 'tool' | 'plugin' | 'npm'; name: string; description: string; path: string }>; }
 	// Список персон (builtin + `.gen/personas/*.md`) для Settings * Personas
 	| { type: 'personasData'; personas: PersonaOption[] }
 	// Короткий beep в chat webview (завершение хода)
@@ -203,7 +214,7 @@ export interface PersonaOption {
 }
 
 export interface MentionSuggestion {
-	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref';
+	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
 	label: string;
 	insert: string;
 	detail?: string;
@@ -225,6 +236,7 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'openSettings' }
 	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
+	| { type: 'checkConnection'; baseUrl: string; requestId: number }
 	| { type: 'openLogsFolder' }
 	| { type: 'confirmChoice'; id: string; choice: ConfirmChoice }
 	| { type: 'answerQuestion'; id: string; answer: string }
@@ -254,9 +266,6 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'loadHooks' }
 	| { type: 'saveHooks'; beforeSubmit: string[]; beforeShell: string[]; sessionDiff: string[]; sessionCompacting: string[]; shellEnv: string[]; fileWatcher: string[]; }
 	| { type: 'openHooksFile' }
-	| { type: 'loadExternalHooks' }
-	| { type: 'openExternalHookFile'; path: string }
-	| { type: 'importExternalHooks'; path: string; mode: 'merge' | 'replace'; kind: ExternalHookKind }
 	| { type: 'loadAgents' }
 	| { type: 'cloneAgentPreset'; id: string }
 	| { type: 'loadRulesSkills' }

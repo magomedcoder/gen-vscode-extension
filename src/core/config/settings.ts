@@ -10,7 +10,7 @@ import { clearCachedNCtx } from '../llm/contextBudget';
 import { DEFAULT_SETTINGS } from './types';
 import type { ChatMode, ChatTextSize, ChatViewLocation, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
 export type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
-export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode } from './types';
+export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode, resolveSmallModel } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 export { FILE_LAYER_KEYS, getConfigLayersSnapshot, getEffectiveHooksInline, getEffectiveHooksPath, reloadConfigLayers } from './layers';
 export { ADMIN_POLICY_KEYS, getAdminPolicySnapshot, isAdminPolicyActive } from './adminPolicy';
@@ -54,7 +54,7 @@ function normalizeStringList(value: unknown): string[] {
 
 function normalizeChatMode(raw: unknown): ChatMode {
 	const mode = String(raw ?? '');
-	if (mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask') {
+	if (mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask' || mode === 'project') {
 		return mode;
 	}
 
@@ -112,6 +112,15 @@ function normalizeWebSearchBackend(raw: unknown): WebSearchBackend {
 	}
 
 	return 'duckduckgo';
+}
+
+function normalizeLocalEmbeddingsMode(raw: unknown): GenSettings['localEmbeddingsMode'] {
+	const v = String(raw ?? '').trim().toLowerCase();
+	if (v === 'off') {
+		return 'off';
+	}
+
+	return 'trigram';
 }
 
 function normalizeProviderUsePolicy(raw: unknown): ProviderUsePolicy {
@@ -207,7 +216,10 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 						timeoutMs?: number;
 						enabled?: boolean;
 						oauth?: boolean;
+						mcpOAuthIssuer?: string;
+						mcpOAuthClientId?: string;
 						mcpOAuthAuthorizeUrl?: string;
+						mcpOAuthTokenUrl?: string;
 					};
 					const timeoutRaw = row.timeoutMs;
 					const timeoutMs = typeof timeoutRaw === 'number' && Number.isFinite(timeoutRaw)
@@ -231,8 +243,17 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 
 					// oauth: только true сохраняем; false / omit - по умолчанию выкл
 					const oauth = row.oauth === true ? true : undefined;
+					const issuer = typeof row.mcpOAuthIssuer === 'string' && row.mcpOAuthIssuer.trim()
+						? row.mcpOAuthIssuer.trim()
+						: undefined;
+					const clientId = typeof row.mcpOAuthClientId === 'string' && row.mcpOAuthClientId.trim()
+						? row.mcpOAuthClientId.trim()
+						: undefined;
 					const authorizeUrl = typeof row.mcpOAuthAuthorizeUrl === 'string' && row.mcpOAuthAuthorizeUrl.trim()
 						? row.mcpOAuthAuthorizeUrl.trim()
+						: undefined;
+					const tokenUrl = typeof row.mcpOAuthTokenUrl === 'string' && row.mcpOAuthTokenUrl.trim()
+						? row.mcpOAuthTokenUrl.trim()
 						: undefined;
 					return {
 						name: String(row.name ?? '').trim(),
@@ -245,8 +266,13 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 						timeoutMs,
 						enabled: row.enabled !== false,
 						...(oauth ? { oauth } : {}),
+						...(issuer ? { mcpOAuthIssuer: issuer } : {}),
+						...(clientId ? { mcpOAuthClientId: clientId } : {}),
 						...(authorizeUrl ? { 
 							mcpOAuthAuthorizeUrl: authorizeUrl 
+						} : {}),
+						...(tokenUrl ? {
+							mcpOAuthTokenUrl: tokenUrl
 						} : {}),
 					};
 				}).filter((s) => s.name && s.command)
@@ -265,9 +291,11 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		indexForGrep: raw.indexForGrep !== false,
 		embeddingsBaseUrl: String(raw.embeddingsBaseUrl ?? '').trim(),
 		embeddingsModel: String(raw.embeddingsModel ?? DEFAULT_SETTINGS.embeddingsModel).trim() || DEFAULT_SETTINGS.embeddingsModel,
+		localEmbeddingsMode: normalizeLocalEmbeddingsMode(raw.localEmbeddingsMode),
 		compactTailTurns: clamp(Math.floor(asNumber(raw.compactTailTurns, DEFAULT_SETTINGS.compactTailTurns)), 1, 40),
 		compactPruneToolResults: raw.compactPruneToolResults !== false,
 		compactReservedTokens: Math.max(0, Math.floor(asNumber(raw.compactReservedTokens, DEFAULT_SETTINGS.compactReservedTokens))),
+		midLoopAutoCompact: raw.midLoopAutoCompact === true,
 		visionEnabled: raw.visionEnabled === true,
 		attachmentImageMaxBase64: Math.max(10_000, Math.floor(asNumber(raw.attachmentImageMaxBase64, DEFAULT_SETTINGS.attachmentImageMaxBase64))),
 		attachmentImageMaxWidth: Math.max(64, Math.floor(asNumber(raw.attachmentImageMaxWidth, DEFAULT_SETTINGS.attachmentImageMaxWidth))),
@@ -319,7 +347,7 @@ export function setSessionModel(model: string): void {
 }
 
 /**
- * Effective GenSettings.
+ * Эффективные GenSettings.
  *
  * Слои (низкий * высокий): defaults * user JSON * UI (non-default) * project JSON * admin policy.
  * Подробнее: docs/settings*.md и src/config/layers.ts / adminPolicy.ts.

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { IndexEngineStatus } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
-import { FieldTextarea, FieldToggle } from './SettingsFields';
+import { FieldSelect, FieldText, FieldTextarea, FieldToggle } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
 interface IndexingPageProps extends SettingsPageProps {
@@ -29,8 +29,6 @@ function indexEngineModeLabel(mode: IndexEngineStatus['mode']): string {
 	switch (mode) {
 		case 'remote':
 			return t('settings.indexEngine.remote');
-		case 'onnx-gpu':
-			return t('settings.indexEngine.onnxGpu');
 		case 'cpu-trigram':
 		default:
 			return t('settings.indexEngine.cpuTrigram');
@@ -99,6 +97,29 @@ export function IndexingPage({
 				hintKey="settings.indexForGrep.hint"
 				checked={draft.indexForGrep}
 				onChange={(v) => setField('indexForGrep', v)}
+			/>
+			<FieldSelect
+				labelKey="settings.localEmbeddingsMode.label"
+				hintKey="settings.localEmbeddingsMode.hint"
+				value={draft.localEmbeddingsMode}
+				onChange={(v) =>
+					setField('localEmbeddingsMode', v as typeof draft.localEmbeddingsMode)
+				}
+			>
+				<option value="off">{t('settings.localEmbeddingsMode.off')}</option>
+				<option value="trigram">{t('settings.localEmbeddingsMode.trigram')}</option>
+			</FieldSelect>
+			<FieldText
+				labelKey="settings.embeddingsBaseUrl.label"
+				hintKey="settings.embeddingsBaseUrl.hint"
+				value={draft.embeddingsBaseUrl}
+				onChange={(v) => setField('embeddingsBaseUrl', v)}
+			/>
+			<FieldText
+				labelKey="settings.embeddingsModel.label"
+				hintKey="settings.embeddingsModel.hint"
+				value={draft.embeddingsModel}
+				onChange={(v) => setField('embeddingsModel', v)}
 			/>
 			<FieldTextarea
 				labelKey="settings.watcherIgnore.label"

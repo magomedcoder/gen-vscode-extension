@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ThinkingDisplay } from '../../core/config/types';
-import type { ChatUiMessage } from '../../features/chat/protocol';
+import type { ChatUiMessage, PendingConfirm, PendingQuestion } from '../../features/chat/protocol';
 import { t } from '../i18n';
 import { vscodeApi } from '../vscodeApi';
 import { ToolCallCard, type ToolDetailsMode } from './ToolCallCard';
 import { ThinkingBlock } from './ThinkingBlock';
 import { MarkdownMessage } from './MarkdownMessage';
 import { TokenMeter } from './TokenMeter';
+import { ConfirmCard } from './ConfirmCard';
+import { QuestionCard } from './QuestionCard';
 
 interface MessageListProps {
 	messages: ChatUiMessage[];
 	busy: boolean;
 	detailsExpanded?: boolean;
 	thinkingDisplay?: ThinkingDisplay;
+	pendingConfirm?: PendingConfirm;
+	pendingQuestion?: PendingQuestion;
 }
 
 const STICK_THRESHOLD_PX = 80;
@@ -22,6 +26,8 @@ export function MessageList({
 	busy,
 	detailsExpanded = true,
 	thinkingDisplay = 'collapsed',
+	pendingConfirm,
+	pendingQuestion,
 }: MessageListProps) {
 	const detailsMode: ToolDetailsMode = detailsExpanded ? 'full' : 'compact';
 	const listRef = useRef<HTMLDivElement>(null);
@@ -58,7 +64,7 @@ export function MessageList({
 		}
 
 		el.scrollTop = el.scrollHeight;
-	}, [messages]);
+	}, [messages, pendingConfirm, pendingQuestion]);
 
 	const startEdit = (msg: ChatUiMessage) => {
 		setEditingId(msg.id);
@@ -151,7 +157,10 @@ export function MessageList({
 											checked={revertFiles}
 											onChange={(e) => setRevertFiles(e.target.checked)}
 										/>
-										<span>{t('chat.edit.revertFiles')}</span>
+										<span className="msg-edit__revert-text">
+											<span className="msg-edit__revert-label">{t('chat.edit.revertFiles')}</span>
+											<span className="msg-edit__revert-hint">{t('chat.edit.revertFilesHint')}</span>
+										</span>
 									</label>
 									<div className="msg-edit__actions">
 										<button className="btn btn--secondary" type="button" onClick={cancelEdit}>
@@ -221,6 +230,12 @@ export function MessageList({
 					);
 				})
 			)}
+			{pendingConfirm ? (
+				<div className="msg msg--confirm"><ConfirmCard confirm={pendingConfirm} /></div>
+			) : null}
+			{pendingQuestion ? (
+				<div className="msg msg--confirm"><QuestionCard question={pendingQuestion} /></div>
+			) : null}
 		</div>
 	);
 }

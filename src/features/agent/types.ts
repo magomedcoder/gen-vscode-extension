@@ -17,6 +17,9 @@ export interface ToolContext {
 		hint?: string;
 		suggestion?: string;
 		allowAlways?: boolean;
+		variant?: 'agent' | 'binary';
+		applyLabel?: string;
+		rejectLabel?: string;
 	}): Promise<ConfirmChoice>;
 	revealFile?(uri: Uri): Promise<void>;
 	trackMutation?(uri: Uri): void;

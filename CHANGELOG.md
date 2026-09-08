@@ -2,26 +2,35 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## dev (Development version)
+## 0.4.dev (Development version)
+
+- Plugins: `run_plugin` - spawn declared `command`/`args` or `bin` under workspace only (shell confirm; no host `require`); discover `package.json` `gen`/`genAgent` and `.gen/npm-plugins.json` in `list_plugins` (no require/execute)
+- Project polish: «Project lead» badge, stronger team-lead / `/project` prompt, synthesize reminder after `task`
+- Chat mode **project**: team-lead prompt, slash `/project`, mutating tools blocked (like multitask)
+- **Tool confirm UX:** status `awaiting_confirm` on tool card + busy line; pretty JSON args in confirm/card; one central ask before execute; ConfirmCard pinned in composer dock; ask before text-only fallback when server rejects tools
+- **Index/codebase MVP:** `localEmbeddingsMode` (`off`|`trigram`); `embeddingsBaseUrl` / `embeddingsModel`; TS outline -> `.gen/index/outline.json`; tools `find_references`, `design_inspect`; PDF text + up to 3 page PNGs via `pdftoppm`; outline/symbols debounce on watcher
+- Context: n_ctx probe + budget UI + hygiene; Merkle/LSP symbols/`@map`; `edit_file` / scratch / ephemeral / `repo_health`
+- MCP OAuth: OIDC discovery (`mcpOAuthIssuer`), PKCE + code exchange (paste code/URL or UriHandler `/mcp-oauth`); store/refresh optional `refresh_token`; `mcpOAuthTokenUrl` POST refresh
+- `smallModel`: shared `resolveSmallModel` for title agent + compact/summary
 
 ## 0.3.0 (7 September 2026)
 
 - **Context overflow:** parse `exceed_context_size_error` (incl. nested llama.cpp JSON); preflight estimate + shrink; auto-compact before turn; limited retry; `contextOverflowPolicy` on Request settings; clear user-facing errors instead of raw HTTP 400
-- Permissions v2: approval policy UI (`allow` / `ask` / `review` / `deny`), Always + suggested pattern, session allowlist, auto-approve, continue-on-deny, capability toggles (legacy `agentAuthLevel` auto/ask/open migrated into policy / autoApprove)
+- Permissions v2: approval policy UI (`allow` / `ask` / `review` / `deny`), Always + suggested pattern, session allowlist, auto-approve, continue-on-deny, capability toggles
 - Confirm card: **Always** button + pattern hint; provider allow/deny patterns (`providerUsePolicy`)
 - Managed admin policy: lock security keys via `GEN_ADMIN_POLICY` / `/etc/gen/policy.json` (Settings shows a read-only banner)
 - Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
 - **Plan** mode: read-only edits; shell ask-or-deny (`planShellPolicy`); Plan↔Agent handoff banner and reminders
 - Multitask mode + `plan_enter` / `plan_exit` / `switch_mode`; WritePlan artifacts under `.gen/plans/`
 - MCP stdio client: dedicated Settings page (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, per-server cwd/timeout/headers
-- MCP OAuth MVP: paste-token SecretStorage, Auth / Logout / Debug (full OIDC later)
+- MCP OAuth MVP: paste-token SecretStorage, Auth / Logout / Debug
 - Experimental code-mode: opt-in `execute` tool runs JSON steps as MCP calls only (no host JS eval)
 - Skills & rules: `AGENTS.md` / `.genrules`, skills discovery + `skill` tool, `/init`; Settings Rules/Skills page
 - Personas: Chat dropdown + Settings Personas page (`.gen/personas/`); Agents page to clone builtin presets into `.gen/agents/`
-- Local plugins/tools discovery under `.gen/tools` and `.gen/plugins` (catalog + `list_plugins` / `plugin`; no npm/JS runtime yet)
+- Local plugins/tools discovery under `.gen/tools` and `.gen/plugins` (catalog + `list_plugins` / `plugin`)
 - Project scaffold: Enable / `/init` creates `.gen/{agents,commands,plugins,skills,tools,references,plans}`
 - Config layers: user `~/.config/gen/config.json` + project `.gen/config.json`; JSON schemas + VS Code validation
-- Hooks: Settings page for `.gen/hooks.json`; events `beforeSubmit` / `beforeShell` / `session.diff` / `session.compacting` / `shell.env` / `file.watcher`; import external hook files
+- Hooks: Settings page for `.gen/hooks.json`; events `beforeSubmit` / `beforeShell` / `session.diff` / `session.compacting` / `shell.env` / `file.watcher`
 - Subagents: `task` (`explore` / `general`), nesting limit, optional git worktrees + start command after create
 - Tools: `glob`, `grep`, `file_search`, `web_search`, `todo_write` / `todo_read`, `ask_question`, `edit_notebook`, `lsp`, `semantic_search` / `search_docs`
 - Web search backends: DuckDuckGo, Exa, Parallel, or custom HTTP; model-routed patch (GPT keeps `apply_patch`)
@@ -30,8 +39,7 @@
 - Chat UX: multi-session + fork, concurrent tab runs, per-session drafts, AskQuestion / Todo panel, thinking toggle, in-chat model picker, context ring, notify sound
 - Review: pending-changes bar with file tree + per-file Accept/Reject; CodeLens Keep/Undo on hunks; git-sync auto-Keep; edit message + revertFiles
 - Indexing: toggles + engine status (CPU trigram / remote embeddings); optional OTEL spans for LLM calls
-- Connection: local presets for llama.cpp (probe + list models)
-- Settings UI: split screens (Chat / Agent / Indexing / Permissions); grouped nav (Main / More); all sections always visible; local model preset block removed; clearer field toggles
+- Settings UI: split screens (Chat / Agent / Indexing / Permissions); grouped nav (Main / More); all sections always visible; clearer field toggles
 - Usage page: token ledger by model (totals/sort); Quota (OAuth) placeholder
 - Settings search; deep-links to VS Code Settings/Keybindings; sidebar or bottom panel (`chatViewLocation`); light/HC polish
 - LLM: honor `Retry-After` on 429/5xx with visible retry status; parallel read-only tool batches; tool output truncation

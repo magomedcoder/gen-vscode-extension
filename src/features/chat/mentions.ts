@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { buildCodebaseContextPack, collectFileHit, collectFolderHits, packContext } from '../index/contextEngine';
 import type { ContextHit } from '../index/contextEngine';
 import { semanticSearchWorkspace } from '../index/embeddings';
+import { getProjectMap } from '../index/projectMap';
+import { formatSymbolIndexSummary } from '../index/symbolIndex';
 import { getSettings } from '../../core/config/settings';
 import { loadProjectRulesAppendix } from '../project/projectRules';
 import { collectReferenceHits, ensureReferenceCached, formatReferenceSourceBlock } from '../project/references';
@@ -10,7 +12,7 @@ import { ensureTerminalBufferListener, getTerminalBuffers } from './terminalBuff
 import { getSessionPeek } from './sessionStore';
 import type { ChatUiMessage } from './protocol';
 
-export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref';
+export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
 
 export interface ParsedMention {
 	kind: MentionKind;
@@ -28,10 +30,11 @@ export interface ResolvedMentions {
 }
 
 // codebase раньше code - иначе @codebase сматчится как @code + arg "base"
-const MENTION_RE = /@(file|folder|codebase|code|git|branch_diff|rules|link|docs|agent|terminals|past|alias|ref)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
+// symbols раньше symbol* ; map - отдельный kind
+const MENTION_RE = /@(file|folder|codebase|code|git|branch_diff|rules|link|docs|agent|terminals|past|alias|ref|map|symbols)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
 
 // Kinds без аргумента: не глотать следующее слово как arg
-const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'rules', 'terminals']);
+const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'rules', 'terminals', 'map']);
 
 function stripOuterBackticks(value: string): string {
 	const t = value.trim();
@@ -475,6 +478,23 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 			labels.push(mention.arg ? `@codebase ${mention.arg}` : '@codebase');
 			const pack = await buildCodebaseContextPack(mention.arg ?? (cleanText || 'project'));
 			hits.push(...pack.hits);
+			continue;
+		}
+
+		if (mention.kind === 'map') {
+			labels.push('@map');
+			try {
+				const map = await getProjectMap();
+				extraBlocks.push(`[map]\n${map.outline}`.slice(0, 12_000));
+			} catch (err) {
+				extraBlocks.push(`[map] ${err instanceof Error ? err.message : String(err)}`);
+			}
+			continue;
+		}
+
+		if (mention.kind === 'symbols') {
+			labels.push(mention.arg ? `@symbols ${mention.arg}` : '@symbols');
+			extraBlocks.push(await formatSymbolIndexSummary(mention.arg ?? (cleanText || undefined)));
 			continue;
 		}
 

@@ -10,8 +10,11 @@ interface ConnectionPageProps extends SettingsPageProps {
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
+	connectionHealth?: { ok: boolean; message: string };
+	connectionHealthLoading?: boolean;
 	onApiKeyDraft: (value: string) => void;
 	onLoadModels: (baseUrl: string) => void;
+	onCheckConnection?: (baseUrl: string) => void;
 }
 
 export function ConnectionPage({
@@ -22,8 +25,11 @@ export function ConnectionPage({
 	models,
 	modelsStatus,
 	modelsLoading,
+	connectionHealth,
+	connectionHealthLoading = false,
 	onApiKeyDraft,
 	onLoadModels,
+	onCheckConnection,
 }: ConnectionPageProps) {
 	const modelOptions = draft.model && !models.some((item) => item.id === draft.model)
 		? [{ id: draft.model, label: draft.model }, ...models]
@@ -43,6 +49,35 @@ export function ConnectionPage({
 						}
 					}}
 				/>
+
+				<div className="field">
+					<span className="field__label">{t('settings.connection.healthLabel')}</span>
+					<span className="field__hint">{t('settings.connection.healthHint')}</span>
+					<div className="field__row">
+						<button
+							className="btn btn--secondary"
+							type="button"
+							disabled={connectionHealthLoading || !draft.baseUrl.trim()}
+							onClick={() => onCheckConnection?.(draft.baseUrl)}
+						>
+							{connectionHealthLoading
+								? t('settings.connection.healthChecking')
+								: t('settings.connection.healthButton')}
+						</button>
+					</div>
+					{connectionHealth ? (
+						<span
+							className={
+								connectionHealth.ok
+									? 'field__hint field__hint--ok'
+									: 'field__hint field__hint--error'
+							}
+							role="status"
+						>
+							{connectionHealth.message}
+						</span>
+					) : null}
+				</div>
 
 				<FieldText
 					labelKey="settings.apiKey.label"

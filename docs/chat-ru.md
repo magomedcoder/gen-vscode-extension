@@ -73,6 +73,8 @@
 | `@Docs` / `@Docs query`         | Поиск по `docs/` и markdown                                          |
 | `@agent name`                   | Тело `.gen/agents/{name}.md`                                         |
 | `@codebase` / `@codebase query` | Фрагменты из локального индекса + открытые редакторы                 |
+| `@map`                          | Outline карты проекта (`.gen/map`)                                   |
+| `@symbols` / `@symbols query`   | Сводка / поиск по индексу символов (`.gen/index/symbols.json`)       |
 | `@git` / `@git SHA`             | Последние коммиты или `git show` по SHA                              |
 | `@branch_diff`                  | `git status` + `diff --stat`                                         |
 | `@rules`                        | AGENTS.md / `.genrules`                                              |

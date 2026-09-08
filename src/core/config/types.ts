@@ -1,7 +1,7 @@
 import type { ApprovalPolicy } from './approvalTypes';
 import { DEFAULT_APPROVAL_POLICY } from './approvalTypes';
 
-export type ChatMode = 'ask' | 'agent' | 'debug' | 'design' | 'plan' | 'multitask';
+export type ChatMode = 'ask' | 'agent' | 'debug' | 'design' | 'plan' | 'multitask' | 'project';
 export type CommentStyle = 'inline' | 'block';
 export type ChatTextSize = 'compact' | 'default' | 'large';
 // Как показывать reasoning/thinking в чате
@@ -30,7 +30,13 @@ export type ProviderUsePolicy = 'allow' | 'deny';
 
 // Режимы с tool-calling (не «просто чат»)
 export function isAgentLikeMode(mode: ChatMode): boolean {
-	return mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask';
+	return mode === 'agent' || mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask' || mode === 'project';
+}
+
+// Модель для title / compact / summary; пусто - undefined (fallback на основную в client)
+export function resolveSmallModel(settings: Pick<GenSettings, 'smallModel'>): string | undefined {
+	const m = settings.smallModel.trim();
+	return m || undefined;
 }
 
 export interface GenSettings {
@@ -41,7 +47,7 @@ export interface GenSettings {
 	 */
 	smallModel: string;
 	/**
-	 * Режим чата по умолчанию: ask / agent / debug / design / plan / multitask
+	 * Режим чата по умолчанию: ask / agent / debug / design / plan / multitask / project
 	 */
 	chatMode: ChatMode;
 	/**
@@ -236,7 +242,7 @@ export interface GenSettings {
 	sensitivePathPatterns: string[];
 	/**
 	 * Разрешить пути вне workspace folders (external_directory).
-	 * false (default) - deny; true - resolve + approval action `outside`.
+	 * false (по умолчанию) - deny; true - resolve + approval action `outside`.
 	 */
 	allowExternalDirectory: boolean;
 	/**
@@ -309,9 +315,9 @@ export interface GenSettings {
 	 */
 	codeModeEnabled: boolean;
 	/**
-	 * MCP-серверы (stdio): имя, команда, args, env, headers, cwd, timeoutMs, enabled, oauth, mcpOAuthAuthorizeUrl.
+	 * MCP-серверы (stdio): имя, команда, args, env, headers, cwd, timeoutMs, enabled, oauth, mcpOAuth*.
 	 * headers: для stdio * GEN_MCP_HEADER_*; будущий HTTP-транспорт - как HTTP-заголовки.
-	 * oauth: по умолчанию false / omit; MVP - paste-token + optional authorize URL (полный OIDC WIP).
+	 * oauth: по умолчанию false / omit; paste-token + PKCE/discovery (issuer / authorize / token URLs).
 	 */
 	mcpServers: Array<{
 		name: string;
@@ -328,11 +334,17 @@ export interface GenSettings {
 		enabled: boolean;
 		/**
 		 * Запросить OAuth. По умолчанию false / omit.
-		 * При true UI показывает Auth / Logout / Debug (paste-token MVP).
+		 * При true UI показывает Auth / Logout / Debug (paste-token + PKCE code exchange).
 		 */
 		oauth?: boolean;
-		// Placeholder URL для Auth (openExternal). Полный OIDC flow - WIP
+		// OIDC/OAuth issuer для discovery (/.well-known/openid-configuration | oauth-authorization-server)
+		mcpOAuthIssuer?: string;
+		// OAuth client_id (публичный PKCE-клиент; default gen-agent-vscode)
+		mcpOAuthClientId?: string;
+		// Authorize URL (если нет discovery). PKCE code_challenge добавляется при Auth
 		mcpOAuthAuthorizeUrl?: string;
+		// Token URL для code/refresh. Discovery может заполнить
+		mcpOAuthTokenUrl?: string;
 	}>;
 	/**
 	 * Лимит вложенности tool `task` (субагенты).
@@ -388,7 +400,7 @@ export interface GenSettings {
 	indexNewFolders: boolean;
 	/**
 	 * Разрешить codebase_search / semantic_search по индексу.
-	 * grep / search_files / glob работают независимо.
+	 * grep / glob работают независимо.
 	 * default - true
 	 */
 	indexForGrep: boolean;
@@ -400,6 +412,12 @@ export interface GenSettings {
 	 * Модель эмбеддингов.
 	 */
 	embeddingsModel: string;
+	/**
+	 * Локальный offline semantic path:
+	 * - off: только remote embeddings
+	 * - trigram: при недоступном remote - IndexManager trigram (default)
+	 */
+	localEmbeddingsMode: 'off' | 'trigram';
 	/**
 	 * Сколько последних ходов оставлять при /compact.
 	 * min - 1, max - 40, default - 4
@@ -415,6 +433,11 @@ export interface GenSettings {
 	 * default - 0
 	 */
 	compactReservedTokens: number;
+	/**
+	 * Mid-loop soft-stall: при near-budget один раз сжать apiMessages перед shrink.
+	 * default - false (opt-in, выключено по умолчанию)
+	 */
+	midLoopAutoCompact: boolean;
 	/**
 	 * Передавать картинки в chat completions как image_url (OpenAI-compatible multimodal).
 	 * По умолчанию выключено: в сообщение попадает только `[image path]`.
@@ -554,9 +577,11 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	indexForGrep: true,
 	embeddingsBaseUrl: '',
 	embeddingsModel: 'text-embedding-3-small',
+	localEmbeddingsMode: 'trigram',
 	compactTailTurns: 4,
 	compactPruneToolResults: true,
 	compactReservedTokens: 0,
+	midLoopAutoCompact: false,
 	visionEnabled: false,
 	attachmentImageMaxBase64: 400_000,
 	attachmentImageMaxWidth: 2048,

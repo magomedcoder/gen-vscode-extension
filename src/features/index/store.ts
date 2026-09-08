@@ -21,6 +21,10 @@ export async function loadManifest(folderFsPath: string): Promise<IndexManifest>
 			return emptyManifest();
 		}
 
+		if (!parsed.dirDigests || typeof parsed.dirDigests !== 'object') {
+			parsed.dirDigests = {};
+		}
+
 		return parsed;
 	} catch {
 		return emptyManifest();

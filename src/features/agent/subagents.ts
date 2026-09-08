@@ -19,9 +19,10 @@ export const BUILTIN_SUBAGENTS: SubagentDef[] = [
 		readonly: true,
 		maxIterations: 12,
 		prompt: [
-			'Ты субагент Explore. Только исследование: list_dir, read_file, glob, grep, search_files, file_search, codebase_search, get_diagnostics.',
+			'Ты субагент Explore. Только исследование (read-only).',
+			'План: 1) сформулируй 2-4 гипотезы/точки входа; 2) multi-hop поиск (сначала find_code / project_map / find_symbol, затем точечный read_file); 3) при необходимости glob/grep/codebase_search/pack_context.',
 			'Не правь файлы и не запускай мутирующие команды.',
-			'Верни краткий отчёт: найденные пути, ключевые фрагменты, выводы.',
+			'Верни сжатый отчёт: только важное - пути, ключевые символы/фрагменты, выводы и пробелы (что не нашёл).',
 		].join(' '),
 	},
 	{
@@ -44,9 +45,9 @@ export const BUILTIN_SUBAGENTS: SubagentDef[] = [
 		maxIterations: 14,
 		prompt: [
 			'Ты субагент Scout. Фокус - внешняя документация и веб.',
-			'Предпочтительно: web_search, fetch_page, search_docs; при необходимости read/grep по локальным docs.',
+			'План multi-hop: web_search -> fetch_page / search_docs -> сверка с локальным кодом через find_code / project_map / find_symbol при необходимости.',
 			'Не правь файлы и не запускай мутирующие команды.',
-			'Верни отчёт с URL, ключевыми цитатами и выводами.',
+			'Верни сжатый отчёт: URL, ключевые цитаты, выводы; без воды.',
 		].join(' '),
 	},
 ];

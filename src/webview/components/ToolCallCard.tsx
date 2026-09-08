@@ -6,6 +6,10 @@ import { vscodeApi } from '../vscodeApi';
 const RESULT_PREVIEW = 500;
 
 function statusLabel(status: ToolCallUi['status']): string {
+	if (status === 'awaiting_confirm') {
+		return t('chat.tool.status.awaitingConfirm');
+	}
+
 	if (status === 'pending') {
 		return t('chat.tool.status.pending');
 	}
@@ -176,7 +180,7 @@ export type ToolDetailsMode = 'full' | 'compact';
 
 interface ToolCallCardProps {
 	call: ToolCallUi;
-	// Global details preference: compact hides args/result/diff until the card is opened
+	// Глобальная preference деталей: compact скрывает args/result/diff, пока карточка не открыта
 	detailsMode?: ToolDetailsMode;
 }
 
@@ -198,6 +202,7 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 	}, [detailsMode]);
 
 	const open = userOpen ?? modeDefaultOpen;
+	const argsPretty = prettyToolArgs(call.arguments);
 
 	return (
 		<details
@@ -236,9 +241,11 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 				</span>
 				<span className="tool-card__status-row">
 					{call.status === 'pending' ? <PendingToolMeta call={call} /> : null}
+					{call.status === 'awaiting_confirm' ? (<span className="tool-card__awaiting">{t('chat.tool.awaitingConfirmHint')}</span>) : null}
 					<span className="tool-card__status">{statusLabel(call.status)}</span>
 				</span>
 			</summary>
+			{call.status === 'awaiting_confirm' ? (<p className="tool-card__confirm-hint">{t('chat.tool.confirmBelow')}</p>) : null}
 			{showHunks ? (
 				<div className="hunk-list">
 					{pendingCount > 0 ? (
@@ -274,7 +281,7 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 			) : call.diff ? (
 				<DiffLinePreview preview={call.diff} />
 			) : null}
-			{call.arguments && !call.diff && !showHunks ? (<pre className="tool-card__block"><code>{call.arguments}</code></pre>) : null}
+			{argsPretty && !call.diff && !showHunks ? (<pre className="tool-card__block"><code>{argsPretty}</code></pre>) : null}
 			{result ? (<pre className="tool-card__block tool-card__block--result"><code>{shown}</code></pre>) : null}
 			{collapsed.length > RESULT_PREVIEW ? (
 				<button
@@ -299,4 +306,16 @@ export function ToolCallCard({ call, detailsMode = 'full' }: ToolCallCardProps) 
 			) : null}
 		</details>
 	);
+}
+
+function prettyToolArgs(raw: string | undefined): string {
+	if (!raw?.trim()) {
+		return '';
+	}
+	
+	try {
+		return JSON.stringify(JSON.parse(raw), null, 2);
+	} catch {
+		return raw;
+	}
 }

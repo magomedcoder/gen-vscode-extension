@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as vscode from 'vscode';
 import { interpolateConfigString } from '../core/config/interpolate';
 import { getSettings } from '../core/config/settings';
-import { getMcpOAuthDebugInfo, getMcpOAuthTokens } from '../core/stores/mcpOAuthStore';
+import { ensureFreshMcpOAuthTokens, getMcpOAuthDebugInfo } from '../core/stores/mcpOAuthStore';
 import type { McpOAuthDebugInfo } from '../core/stores/mcpOAuthStore';
 
 const EXTENSION_ID = 'magomedcoder.gen-agent-vscode';
@@ -25,18 +25,24 @@ export interface McpServerConfig {
 	enabled: boolean;
 	/**
 	 * Запросить OAuth для сервера. По умолчанию false / omit.
-	 * MVP: paste-token / optional authorize URL; полный OIDC - WIP. stdio без oauth не ломаем.
+	 * Paste-token / PKCE + discovery (issuer) / refresh через mcpOAuthTokenUrl.
 	 */
 	oauth?: boolean;
+	// Issuer для OIDC/OAuth discovery
+	mcpOAuthIssuer?: string;
+	// OAuth client_id для PKCE
+	mcpOAuthClientId?: string;
 	/**
-	 * Опциональный URL авторизации (placeholder для будущего OIDC).
-	 * При Auth открывается через vscode.env.openExternal, если задан.
+	 * URL авторизации (или из discovery).
+	 * При Auth открывается с PKCE code_challenge через vscode.env.openExternal.
 	 */
 	mcpOAuthAuthorizeUrl?: string;
+	// Token endpoint для authorization_code / refresh_token
+	mcpOAuthTokenUrl?: string;
 }
 
 /**
- * Если oauth:true и есть accessToken - Bearer в headers + MCP_OAUTH_TOKEN в env.
+ * Если oauth:true - при необходимости refresh, затем Bearer в headers + MCP_OAUTH_TOKEN в env.
  * Для будущего HTTP-транспорта headers уже готовы; stdio * GEN_MCP_HEADER_*.
  */
 export async function applyMcpOAuthToConfig(cfg: McpServerConfig): Promise<McpServerConfig> {
@@ -44,7 +50,7 @@ export async function applyMcpOAuthToConfig(cfg: McpServerConfig): Promise<McpSe
 		return cfg;
 	}
 
-	const tokens = await getMcpOAuthTokens(cfg.name);
+	const tokens = await ensureFreshMcpOAuthTokens(cfg.name, cfg.mcpOAuthTokenUrl);
 	const accessToken = tokens?.accessToken?.trim();
 	if (!accessToken) {
 		return cfg;

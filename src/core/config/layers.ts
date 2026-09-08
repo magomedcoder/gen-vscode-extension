@@ -14,7 +14,7 @@ import { getGenUserConfigPath } from './userPaths';
  * 2. user: `~/.config/gen/config.json` (XDG / APPDATA - см. userPaths)
  * 3. Gen Settings UI (`globalState`) - только ключи, отличающиеся от defaults
  * 4. project: `<workspace>/.gen/config.json`
- * 5. admin policy (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / ProgramData) - locked keys
+ * 5. admin policy (`GEN_ADMIN_POLICY` / `/etc/gen/policy.json` / ProgramData) - locked-ключи
  *
  * VS Code `contributes.configuration` сейчас только `gen.chatViewLocation` (синхронизируется из effective settings) - не отдельный файл-слой.
  * UI Settings не ломаем: слои аддитивны; project перекрывает user и UI только по ключам, явно заданным в JSON; admin нельзя обойти.
@@ -79,9 +79,11 @@ export const FILE_LAYER_KEYS = [
 	'gitSyncAutoKeep',
 	'embeddingsBaseUrl',
 	'embeddingsModel',
+	'localEmbeddingsMode',
 	'compactTailTurns',
 	'compactPruneToolResults',
 	'compactReservedTokens',
+	'midLoopAutoCompact',
 	'chatMode',
 	'shareMode',
 	'revealOnEdit',
@@ -252,7 +254,7 @@ export function getEffectiveHooksPath(): string | undefined {
 	return snapshot.project.hooksPath ?? snapshot.user.hooksPath;
 }
 
-// Inline hooks: deep-merge user <- project
+// Inline-хуки: deep-merge user <- project
 export function getEffectiveHooksInline(): Record<string, unknown> | undefined {
 	const user = snapshot.user.hooks;
 	const project = snapshot.project.hooks;

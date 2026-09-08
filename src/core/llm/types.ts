@@ -88,8 +88,17 @@ export interface ListModelsParams {
 	signal?: AbortSignal;
 }
 
+// Результат GET /v1/models как health-probe соединения
+export interface ConnectionHealthResult {
+	ok: boolean;
+	modelCount: number;
+	message: string;
+}
+
 export interface LlmClient {
 	complete(params: CompleteParams): Promise<CompleteResult>;
 	listModels(params?: ListModelsParams): Promise<string[]>;
 	listModelOptions(params?: ListModelsParams): Promise<LlmModelOption[]>;
+	// Лёгкий health check: GET /v1/models (тот же probe, что listModelOptions)
+	checkConnectionHealth(params?: ListModelsParams): Promise<ConnectionHealthResult>;
 }

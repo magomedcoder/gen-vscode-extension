@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
-import { showConfirmDialog } from '../../host/ui/confirmDialog';
 import { AGENT_LIMITS } from './policy';
 
-interface CheckpointEntry {
+export interface CheckpointEntry {
 	uri: vscode.Uri;
 	relative: string;
 	kind: 'created' | 'modified';
@@ -20,6 +19,19 @@ export class AgentCheckpoint {
 
 	get size(): number {
 		return this.entries.size;
+	}
+
+	// Снимок до правки по relative path (если есть)
+	peekByRelative(relative: string): CheckpointEntry | undefined {
+		const needle = relative.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+		for (const entry of this.entries.values()) {
+			const key = entry.relative.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+			if (key === needle) {
+				return entry;
+			}
+		}
+
+		return undefined;
 	}
 
 	async remember(uri: vscode.Uri, relative: string, before: string | undefined): Promise<void> {
@@ -91,29 +103,4 @@ export class AgentCheckpoint {
 		this.entries.clear();
 		return restored;
 	}
-}
-
-export async function offerCheckpointRestore(checkpoint: AgentCheckpoint): Promise<string[]> {
-	if (checkpoint.size === 0) {
-		return [];
-	}
-
-	const choice = await showConfirmDialog({
-		title: vscode.l10n.t('agent.checkpointOffer', checkpoint.size),
-		variant: 'binary',
-		applyLabel: vscode.l10n.t('agent.restoreSnapshot'),
-		rejectLabel: vscode.l10n.t('comment.cancel'),
-	});
-	if (choice !== 'apply') {
-		return [];
-	}
-
-	const restored = await checkpoint.restore();
-	if (restored.length === 0) {
-		void vscode.window.showWarningMessage(vscode.l10n.t('agent.restoreFailed'));
-		return [];
-	}
-
-	void vscode.window.showInformationMessage(vscode.l10n.t('agent.restoredFiles', restored.length));
-	return restored;
 }

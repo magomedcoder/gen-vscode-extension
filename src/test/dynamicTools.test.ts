@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import type { ToolDefinition } from '../features/agent/types.js';
 import { registerBuiltins } from '../features/agent/tools/builtins.js';
 import { refreshDynamicTools, sanitizeDynamicToolName } from '../features/agent/tools/dynamicTools.js';
-import { clearToolsForTests, getToolByName, getToolSource, listTools, registerTool, unregisterDynamicTools } from '../features/agent/tools/registry.js';
+import { clearToolsForTests, getToolByName, getToolSource, listTools, registerTool, unregisterDynamicTools, unregisterEphemeralTools } from '../features/agent/tools/registry.js';
 
 function fakeTool(name: string): ToolDefinition {
 	return {
@@ -32,18 +32,56 @@ suite('dynamic tools', () => {
 	});
 
 	test('dynamic заменяет dynamic; builtin не трогает', async () => {
-		registerTool(fakeTool('read_file'), { tags: ['fs'], risk: 'read' }, 'builtin');
-		registerTool(fakeTool('demo'), { tags: ['meta'], risk: 'read' }, 'dynamic');
+		registerTool(fakeTool('read_file'), { 
+			tags: ['fs'], 
+			risk: 'read' 
+		}, 'builtin');
+		registerTool(fakeTool('demo'), { 
+			tags: ['meta'], 
+			risk: 'read' 
+		}, 'dynamic');
 		assert.strictEqual(getToolSource('demo'), 'dynamic');
 
-		registerTool(fakeTool('demo'), { tags: ['meta'], risk: 'read' }, 'dynamic');
+		registerTool(fakeTool('demo'), { 
+			tags: ['meta'], 
+			risk: 'read' 
+		}, 'dynamic');
 		assert.throws(
-			() => registerTool(fakeTool('read_file'), { tags: ['meta'], risk: 'read' }, 'dynamic'),
+			() => registerTool(fakeTool('read_file'), { 
+				tags: ['meta'], 
+				risk: 'read' 
+			}, 'dynamic'),
 			/already registered/,
 		);
 
 		unregisterDynamicTools();
 		assert.strictEqual(getToolByName('demo'), undefined);
+		assert.ok(getToolByName('read_file'));
+	});
+
+	test('ephemeral заменяет ephemeral; builtin не трогает', () => {
+		registerTool(fakeTool('read_file'), { 
+			tags: ['fs'], 
+			risk: 'read' 
+		}, 'builtin');
+		registerTool(fakeTool('tmp'), { 
+			tags: ['meta'], 
+			risk: 'read' 
+		}, 'ephemeral');
+		assert.strictEqual(getToolSource('tmp'), 'ephemeral');
+		registerTool(fakeTool('tmp'), { 
+			tags: ['meta'], 
+			risk: 'read' 
+		}, 'ephemeral');
+		assert.throws(
+			() => registerTool(fakeTool('read_file'), { 
+				tags: ['meta'], 
+				risk: 'read' 
+			}, 'ephemeral'),
+			/already registered/,
+		);
+		unregisterEphemeralTools();
+		assert.strictEqual(getToolByName('tmp'), undefined);
 		assert.ok(getToolByName('read_file'));
 	});
 

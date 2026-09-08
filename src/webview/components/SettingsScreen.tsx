@@ -6,7 +6,7 @@ import type { LlmModelOption } from '../../core/llm/types';
 import { t } from '../i18n';
 import { ChatPage } from './settings/ChatPage';
 import { ConnectionPage } from './settings/ConnectionPage';
-import { HooksPage, type ExternalHookFileRow, type ExternalHookKind, type HooksPageData } from './settings/HooksPage';
+import { HooksPage, type HooksPageData } from './settings/HooksPage';
 import { IndexingPage } from './settings/IndexingPage';
 import { LoggingPage } from './settings/LoggingPage';
 import { McpPage } from './settings/McpPage';
@@ -32,16 +32,21 @@ interface SettingsScreenProps {
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
+	connectionHealth?: { 
+		ok: boolean;
+		message: string
+	};
+	connectionHealthLoading?: boolean;
 	mcpServers?: McpServerStatus[];
 	indexStatus?: IndexEngineStatus;
 	hooks?: HooksPageData;
 	hooksStatus?: string;
-	externalHooks?: ExternalHookFileRow[];
 	agents?: AgentsPageData;
 	agentsStatus?: string;
 	rulesSkills?: RulesSkillsPageData;
 	onSave: (settings: GenSettings, api?: { apiKey?: string }) => void;
 	onLoadModels: (baseUrl: string) => void;
+	onCheckConnection?: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
 	onRefreshMcp?: () => void;
 	onMcpOAuthAuth?: (serverName: string) => void;
@@ -58,9 +63,6 @@ interface SettingsScreenProps {
 		fileWatcher: string[];
 	}) => void;
 	onOpenHooksFile?: () => void;
-	onLoadExternalHooks?: () => void;
-	onOpenExternalHookFile?: (path: string) => void;
-	onImportExternalHooks?: (path: string, mode: 'merge' | 'replace', kind: ExternalHookKind) => void;
 	onLoadAgents?: () => void;
 	onCloneAgentPreset?: (id: string) => void;
 	onLoadRulesSkills?: () => void;
@@ -98,16 +100,18 @@ export function SettingsScreen({
 	models,
 	modelsStatus,
 	modelsLoading,
+	connectionHealth,
+	connectionHealthLoading = false,
 	mcpServers = [],
 	indexStatus,
 	hooks,
 	hooksStatus,
-	externalHooks,
 	agents,
 	agentsStatus,
 	rulesSkills,
 	onSave,
 	onLoadModels,
+	onCheckConnection,
 	onOpenLogsFolder,
 	onRefreshMcp,
 	onMcpOAuthAuth,
@@ -117,9 +121,6 @@ export function SettingsScreen({
 	onLoadHooks,
 	onSaveHooks,
 	onOpenHooksFile,
-	onLoadExternalHooks,
-	onOpenExternalHookFile,
-	onImportExternalHooks,
 	onLoadAgents,
 	onCloneAgentPreset,
 	onLoadRulesSkills,
@@ -244,8 +245,11 @@ export function SettingsScreen({
 									models={models}
 									modelsStatus={modelsStatus}
 									modelsLoading={modelsLoading}
+									connectionHealth={connectionHealth}
+									connectionHealthLoading={connectionHealthLoading}
 									onApiKeyDraft={setApiKeyDraft}
 									onLoadModels={onLoadModels}
+									onCheckConnection={onCheckConnection}
 								/>
 								<RequestPage draft={draft} setField={setField} />
 							</>
@@ -298,13 +302,9 @@ export function SettingsScreen({
 								<HooksPage
 									hooks={hooks}
 									hooksStatus={hooksStatus}
-									externalHooks={externalHooks}
 									onLoadHooks={onLoadHooks}
 									onSaveHooks={onSaveHooks}
 									onOpenHooksFile={onOpenHooksFile}
-									onLoadExternalHooks={onLoadExternalHooks}
-									onOpenExternalHookFile={onOpenExternalHookFile}
-									onImportExternalHooks={onImportExternalHooks}
 								/>
 							</>
 						) : null}

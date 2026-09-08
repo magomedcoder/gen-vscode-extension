@@ -5,7 +5,7 @@ export interface LlmModelOption {
 	label: string;
 }
 
-const MODEL_FILE_EXT = /\.(gguf|bin|model|mlmodel|onnx|pt|pth|safetensors)$/i;
+const MODEL_FILE_EXT = /\.(gguf|bin|model|mlmodel|pt|pth|safetensors)$/i;
 
 export function modelBasename(id: string): string {
 	const base = path.basename(id.replace(/\\/g, path.sep));

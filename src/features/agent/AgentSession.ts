@@ -14,7 +14,10 @@ import { loadProjectRulesAppendix } from '../project/projectRules';
 import { discoverSkills, formatSkillsCatalog } from '../project/skills';
 import { discoverLocalPlugins, formatPluginsCatalog } from '../project/plugins';
 import { refreshDynamicTools } from './tools/dynamicTools';
+import { unregisterEphemeralTools } from './tools/registry';
 import { formatPersonaAppendix, resolvePersona } from '../project/personas';
+import { formatScratchCatalog } from '../project/scratchCatalog';
+import { getLiveEditorAppendix } from '../chat/editorContext';
 import { recordUsage } from '../../core/stores/usageStore';
 import { activityKindFromTool, recordActivity, summarizeToolActivity } from '../../core/stores/activityStore';
 import { redactSecrets } from './secrets';
@@ -29,9 +32,10 @@ import { sanitizeToolArgumentsForApi, type ToolContext, type ToolResult } from '
 import type { AgentWriteTracker } from './userEdits';
 import { confirmOrSkip } from './tools/confirm';
 import { buildUserContentWithImages, type ImageAttachment } from '../chat/attachments';
-import { completeWithContextGuard, shrinkApiMessages } from '../chat/fitContext';
+import { completeWithContextGuard, softCompactApiMessages, shrinkApiMessages, dropSupersededReminders, type ShrinkStats } from '../chat/fitContext';
 import { estimateChatMessagesTokens } from '../../core/llm/estimateTokens';
 import { getCachedNCtx, getEffectiveContextBudget, isNearContextBudget } from '../../core/llm/contextBudget';
+import { extractTextToolCalls, stripTextToolCallsForDisplay } from './textToolCalls';
 
 // Уникальные пути из успешного mutating tool (path или hunks)
 function collectTurnDiffPaths(toolResult: ToolResult, into: Set<string>): void {
@@ -101,7 +105,7 @@ function doomArgsFingerprint(name: string, rawArgs: string): string {
 }
 
 function normalizeAgentMode(mode: ChatMode | undefined): ChatMode {
-	if (mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask') {
+	if (mode === 'debug' || mode === 'design' || mode === 'plan' || mode === 'multitask' || mode === 'project') {
 		return mode;
 	}
 
@@ -109,7 +113,7 @@ function normalizeAgentMode(mode: ChatMode | undefined): ChatMode {
 }
 
 function isReadonlyMode(mode: ChatMode): boolean {
-	return mode === 'plan' || mode === 'multitask';
+	return mode === 'plan' || mode === 'multitask' || mode === 'project';
 }
 
 function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
@@ -157,7 +161,8 @@ function historyToApiMessages(history: ChatUiMessage[]): ChatMessage[] {
 		}
 	}
 
-	return out;
+	// Убрать устаревшие compact/mode reminders из API-истории
+	return dropSupersededReminders(out).messages;
 }
 
 function parseTimeoutMsFromArgs(name: string, rawArgs: string): number | undefined {
@@ -177,7 +182,7 @@ function parseTimeoutMsFromArgs(name: string, rawArgs: string): number | undefin
 	return undefined;
 }
 
-const SHELL_UI_TOOLS = new Set(['run_command', 'run_tests', 'await_shell']);
+const SHELL_UI_TOOLS = new Set(['run_command', 'run_tests', 'await_shell', 'run_scratch']);
 
 // Достаёт cwd/exit из текста shellExec / await_shell (строки `cwd:` и `exit:`)
 function parseShellMetaFromResult(toolName: string, resultText: string): Pick<ToolCallUi, 'cwd' | 'exitCode'> {
@@ -268,8 +273,12 @@ export class AgentSession {
 		onToolStart?: (toolCallId: string, controller: AbortController) => void;
 		// Завершение tool - снять AbortController
 		onToolEnd?: (toolCallId: string) => void;
+		// Строка статуса над композером (ожидание confirm и т.п.)
+		onBusyDetail?: (detail: string | undefined) => void;
 		// Файлы, изменённые за этот run (session diff / UI-баннер)
 		onTurnDiff?: (info: { turnId: string; paths: string[] }) => void;
+		// Счётчики context prune для UI/debug
+		onContextPrune?: (info: { chars: number; messages: number }) => void;
 	}): Promise<void> {
 		const settings = getSettings();
 		const maxIterations = params.maxIterationsOverride ?? settings.agentMaxIterations;
@@ -310,6 +319,7 @@ export class AgentSession {
 			?? '';
 		const skillsAppendix = depth === 0 ? (formatSkillsCatalog(await discoverSkills()) ?? '') : '';
 		const pluginsAppendix = depth === 0 ? (formatPluginsCatalog(await discoverLocalPlugins()) ?? '') : '';
+		const scratchAppendix = depth === 0 ? ((await formatScratchCatalog()) ?? '') : '';
 		if (depth === 0) {
 			await refreshDynamicTools();
 		}
@@ -326,10 +336,12 @@ export class AgentSession {
 			params.subagentSystem?.trim() ?? '',
 		].filter(Boolean).join('\n\n');
 
-		const buildSystem = (toolsAvailable: boolean, mode: ChatMode) => [
+		let liveEditorAppendix = getLiveEditorAppendix() ?? '';
+		const buildSystem = (toolsAvailable: boolean, mode: ChatMode, textToolFormat = false) => [
 			customSystem,
 			buildAgentSystemPrompt({
 				toolsAvailable,
+				textToolFormat,
 				deniedPaths: settings.deniedPaths,
 				userEditsAppendix,
 				planAppendix,
@@ -337,10 +349,13 @@ export class AgentSession {
 				genRulesAppendix,
 				skillsAppendix,
 				pluginsAppendix,
+				scratchAppendix,
+				liveEditorAppendix,
 				planWriteToFile: settings.planWriteToFile,
 				planShellPolicy: settings.planShellPolicy,
 				mode,
 				includeApplyPatch: includeApplyPatchForModel(settings.model, settings.modelRoutedPatch),
+				subagentDepth: depth,
 			}),
 		].filter(Boolean).join('\n\n');
 
@@ -460,12 +475,33 @@ export class AgentSession {
 		// Doom loop: одинаковый tool+args падает 3 раза подряд -> confirm на следующий вызов
 		let doomKey = '';
 		let doomFails = 0;
+		let midLoopCompactDone = false;
+		// API без tools: парсим <tool_call> из content и исполняем локально
+		let textToolFallback = false;
+
+		const reportPrune = (info: ShrinkStats): void => {
+			if (info.prunedChars <= 0 && info.prunedMessages <= 0) {
+				return;
+			}
+
+			params.onContextPrune?.({
+				chars: info.prunedChars,
+				messages: info.prunedMessages,
+			});
+		};
 
 		try {
 		for (let iteration = 0; unlimited || iteration < maxIterations; iteration += 1) {
 			if (params.signal.aborted) {
 				throw toAbortError();
 			}
+
+			// Live context mid-turn: короткий appendix активного редактора (если shareMode=auto)
+			liveEditorAppendix = getLiveEditorAppendix() ?? '';
+			apiMessages[0] = {
+				role: 'system',
+				content: buildSystem(toolsEnabled || textToolFallback, agentMode, textToolFallback),
+			};
 
 			const toolOpts = {
 				readonly: params.readonlySubagent === true || isReadonlyMode(agentMode),
@@ -490,10 +526,22 @@ export class AgentSession {
 				getCachedNCtx(settingsNow.baseUrl, settingsNow.model),
 			);
 			if (isNearContextBudget(estimateChatMessagesTokens(apiMessages), budget)) {
+				// Opt-in soft-stall: один mid-loop compact до shrink
+				if (settingsNow.midLoopAutoCompact && !midLoopCompactDone) {
+					midLoopCompactDone = true;
+					const soft = softCompactApiMessages(apiMessages, settingsNow);
+					if (soft.changed) {
+						apiMessages.length = 0;
+						apiMessages.push(...soft.messages);
+						reportPrune(soft);
+					}
+				}
+
 				const shrunk = shrinkApiMessages(apiMessages, budget, settingsNow);
 				if (shrunk.changed) {
 					apiMessages.length = 0;
 					apiMessages.push(...shrunk.messages);
+					reportPrune(shrunk);
 				}
 			}
 
@@ -513,7 +561,7 @@ export class AgentSession {
 					onDelta: (chunk) => {
 						streamed += chunk;
 						params.ui.update(assistantId, {
-							content: streamed
+							content: stripTextToolCallsForDisplay(streamed),
 						});
 					},
 					onThinkingDelta: (chunk) => {
@@ -532,27 +580,65 @@ export class AgentSession {
 						delayMs: 0,
 					});
 					params.ui.update(assistantId, {
-						content: streamed || detail,
+						content: stripTextToolCallsForDisplay(streamed || detail),
 					});
 				},
+				onPrune: reportPrune,
 				signal: params.signal,
 			});
 
 			if (result.toolsFallback && toolsEnabled) {
+				if (params.confirm) {
+					params.onBusyDetail?.(vscode.l10n.t('chat.busy.awaitingToolsFallback'));
+					let choice: 'apply' | 'skip' | 'abort' | 'always' = 'apply';
+					try {
+						choice = await params.confirm({
+							title: vscode.l10n.t('agent.toolsUnsupportedConfirm'),
+							detail: vscode.l10n.t('agent.toolsUnsupportedDetail'),
+							hint: vscode.l10n.t('confirm.panelHint'),
+							variant: 'binary',
+							applyLabel: vscode.l10n.t('agent.toolsUnsupportedContinue'),
+							rejectLabel: vscode.l10n.t('agent.confirmStop'),
+						});
+					} finally {
+						params.onBusyDetail?.(undefined);
+					}
+					if (choice !== 'apply' && choice !== 'always') {
+						params.ui.append({
+							id: messageId(),
+							role: 'error',
+							content: vscode.l10n.t('agent.toolsUnsupportedStopped'),
+						});
+						const stoppedExtracted = extractTextToolCalls((result.content || streamed).trim());
+						params.ui.update(assistantId, {
+							content: stoppedExtracted.content || vscode.l10n.t('agent.toolsUnsupportedStopped'),
+							thinking: (result.thinking || streamedThinking).trim() || undefined,
+							usage: result.usage,
+						});
+						return;
+					}
+				}
+				// Native tools в API нет - дальше текстовые <tool_call> из content.
 				toolsEnabled = false;
+				textToolFallback = true;
 				apiMessages[0] = {
 					role: 'system',
-					content: buildSystem(false, agentMode),
+					content: buildSystem(true, agentMode, true),
 				};
 				params.ui.append({
 					id: messageId(),
-					role: 'error',
+					role: 'assistant',
 					content: vscode.l10n.t('agent.toolsUnsupported'),
 				});
 			}
 
-			const toolCalls = result.toolCalls ?? [];
-			const content = (result.content || streamed).trim();
+			const rawContent = (result.content || streamed).trim();
+			const extracted = extractTextToolCalls(rawContent);
+			let toolCalls = result.toolCalls ?? [];
+			if (toolCalls.length === 0 && extracted.toolCalls.length > 0) {
+				toolCalls = extracted.toolCalls;
+			}
+			const content = extracted.content;
 			const thinking = (result.thinking || streamedThinking).trim() || undefined;
 			params.ui.update(assistantId, {
 				content,
@@ -707,12 +793,43 @@ export class AgentSession {
 				};
 
 				try {
+					const confirmForTool: ToolContext['confirm'] = params.confirm
+						? async (req) => {
+							liveCalls[i] = {
+								...liveCalls[i]!,
+								status: 'awaiting_confirm',
+							};
+							params.ui.update(assistantId, {
+								toolCalls: liveCalls.map((c) => ({ ...c })),
+							});
+							params.onBusyDetail?.(
+								vscode.l10n.t('chat.busy.awaitingConfirm', call.function.name),
+							);
+							try {
+								return await params.confirm!(req);
+							} finally {
+								params.onBusyDetail?.(undefined);
+								if (liveCalls[i]?.status === 'awaiting_confirm') {
+									liveCalls[i] = {
+										...liveCalls[i]!,
+										status: 'pending',
+										startedAt: Date.now(),
+									};
+									params.ui.update(assistantId, {
+										toolCalls: liveCalls.map((c) => ({ ...c })),
+									});
+								}
+							}
+						}
+						: undefined;
+
 					const toolResult = await executeAgentTool(
 						call.function.name,
 						call.function.arguments,
-						{ 
+						{
 							...toolCtxBase,
-							signal: toolAbort.signal
+							confirm: confirmForTool ?? toolCtxBase.confirm,
+							signal: toolAbort.signal,
 						},
 					);
 					const lengthHint = !toolResult.ok && result.finishReason === 'length'
@@ -891,6 +1008,9 @@ export class AgentSession {
 		});
 		} finally {
 			todos.clear();
+			if (depth === 0) {
+				unregisterEphemeralTools();
+			}
 			params.onTurnDiff?.({
 				turnId,
 				paths: [...turnDiffPaths],

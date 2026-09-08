@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import type { ExternalHookKind } from '../../../features/chat/protocol';
 import { t } from '../../i18n';
 import { SettingsSection } from './SettingsSection';
 
@@ -9,15 +8,6 @@ const EXAMPLE_SESSION_DIFF = ['echo "session.diff: $GEN_HOOK_TURN_ID" && echo "$
 const EXAMPLE_SESSION_COMPACTING = ['echo "session.compacting"'];
 const EXAMPLE_SHELL_ENV = ['echo \'{"env":{"GEN_EXAMPLE":"1","GEN_HOOK_CWD_ECHO":"\'"$GEN_HOOK_CWD"\'"}}\''];
 const EXAMPLE_FILE_WATCHER = ['echo "file.watcher: $GEN_HOOK_FILE_EVENT $GEN_HOOK_PATH"'];
-
-export type { ExternalHookKind };
-export interface ExternalHookFileRow {
-	kind: ExternalHookKind;
-	path: string;
-	mappedCommandCount: number;
-	skippedEvents: string[];
-	error?: string;
-}
 
 export interface HooksPageData {
 	beforeSubmit: string[];
@@ -42,13 +32,9 @@ export type HooksSavePayload = {
 interface HooksPageProps {
 	hooks?: HooksPageData;
 	hooksStatus?: string;
-	externalHooks?: ExternalHookFileRow[];
 	onLoadHooks?: () => void;
 	onSaveHooks?: (payload: HooksSavePayload) => void;
 	onOpenHooksFile?: () => void;
-	onLoadExternalHooks?: () => void;
-	onOpenExternalHookFile?: (path: string) => void;
-	onImportExternalHooks?: (path: string, mode: 'merge' | 'replace', kind: ExternalHookKind) => void;
 }
 
 function linesToList(raw: string): string[] {
@@ -59,29 +45,12 @@ function listToLines(list: string[]): string {
 	return list.join('\n');
 }
 
-function kindLabel(kind: ExternalHookKind): string {
-	switch (kind) {
-		case 'hooks-json-user':
-			return t('settings.hooks.external.kind.hooksJsonUser');
-		case 'hooks-json-project':
-			return t('settings.hooks.external.kind.hooksJsonProject');
-		case 'settings-json-user':
-			return t('settings.hooks.external.kind.settingsJsonUser');
-		case 'settings-json-project':
-			return t('settings.hooks.external.kind.settingsJsonProject');
-	}
-}
-
 export function HooksPage({
 	hooks,
 	hooksStatus,
-	externalHooks,
 	onLoadHooks,
 	onSaveHooks,
 	onOpenHooksFile,
-	onLoadExternalHooks,
-	onOpenExternalHookFile,
-	onImportExternalHooks,
 }: HooksPageProps) {
 	const [beforeSubmitText, setBeforeSubmitText] = useState('');
 	const [beforeShellText, setBeforeShellText] = useState('');
@@ -92,8 +61,7 @@ export function HooksPage({
 
 	useEffect(() => {
 		onLoadHooks?.();
-		onLoadExternalHooks?.();
-	}, [onLoadHooks, onLoadExternalHooks]);
+	}, [onLoadHooks]);
 
 	useEffect(() => {
 		if (!hooks) {
@@ -127,30 +95,11 @@ export function HooksPage({
 		setFileWatcherText(listToLines(EXAMPLE_FILE_WATCHER));
 	};
 
-	const onImport = (file: ExternalHookFileRow, mode: 'merge' | 'replace') => {
-		if (mode === 'replace') {
-			const ok = window.confirm(t('settings.hooks.external.replaceConfirm', file.path));
-			if (!ok) {
-				return;
-			}
-		} else {
-			const ok = window.confirm(t('settings.hooks.external.mergeConfirm', file.path));
-			if (!ok) {
-				return;
-			}
-		}
-		onImportExternalHooks?.(file.path, mode, file.kind);
-	};
-
 	const statusIsError = Boolean(
 		hooksStatus
 		&& hooksStatus !== t('settings.hooks.saved')
-		&& hooksStatus !== t('settings.hooks.saving')
-		&& hooksStatus !== t('settings.hooks.external.importing')
-		&& !/^(Imported |Импортировано )/.test(hooksStatus),
+		&& hooksStatus !== t('settings.hooks.saving'),
 	);
-
-	const externalList = externalHooks ?? [];
 
 	return (
 		<>
@@ -175,70 +124,6 @@ export function HooksPage({
 					{t('settings.hooks.insertExample')}
 				</button>
 			</div>
-			</SettingsSection>
-
-			<SettingsSection titleKey="settings.section.hooks.external" hintKey="settings.hooks.external.hint" defaultOpen={false}>
-			<div className="settings__actions">
-				<button
-					className="btn btn--secondary"
-					type="button"
-					onClick={() => onLoadExternalHooks?.()}
-				>
-					{t('settings.hooks.external.reload')}
-				</button>
-			</div>
-			{externalList.length === 0 ? (
-				<span className="field__hint">{t('settings.hooks.external.empty')}</span>
-			) : (
-				<div className="mcp-list">
-					{externalList.map((file) => (
-						<div key={`${file.kind}:${file.path}`} className="mcp-card">
-							<div className="mcp-card__header">
-								<div className="mcp-card__title-row">
-									<span className="mcp-card__name">{kindLabel(file.kind)}</span>
-									<span className="mcp-card__badge mcp-card__badge--ok">
-										{t('settings.hooks.external.mappedCount', file.mappedCommandCount)}
-									</span>
-								</div>
-								<div className="settings__actions">
-									<button
-										className="btn btn--secondary"
-										type="button"
-										onClick={() => onOpenExternalHookFile?.(file.path)}
-									>
-										{t('settings.hooks.external.open')}
-									</button>
-									<button
-										className="btn btn--secondary"
-										type="button"
-										disabled={Boolean(file.error) || file.mappedCommandCount === 0}
-										onClick={() => onImport(file, 'merge')}
-									>
-										{t('settings.hooks.external.importMerge')}
-									</button>
-									<button
-										className="btn btn--secondary"
-										type="button"
-										disabled={Boolean(file.error) || file.mappedCommandCount === 0}
-										onClick={() => onImport(file, 'replace')}
-									>
-										{t('settings.hooks.external.importReplace')}
-									</button>
-								</div>
-							</div>
-							<span className="mcp-card__command">{file.path}</span>
-							{file.error ? (
-								<span className="field__hint field__hint--error">{file.error}</span>
-							) : null}
-							{file.skippedEvents.length > 0 ? (
-								<span className="field__hint">
-									{t('settings.hooks.external.skipped', file.skippedEvents.join(', '))}
-								</span>
-							) : null}
-						</div>
-					))}
-				</div>
-			)}
 			</SettingsSection>
 
 			<SettingsSection titleKey="settings.section.hooks.commands" hintKey="settings.section.hooks.commandsHint" defaultOpen={false}>

@@ -12,12 +12,14 @@ import type { ToolContext, ToolResult } from '../types';
 import { includeApplyPatchForModel } from '../modelRoutedPatch';
 import { executeSubjectFromArgs, mcpCallSubjectFromArgs } from './mcp/execute';
 import { getToolByName, listTools } from './registry';
+import { confirmAlwaysOrSkip } from './confirm';
+import { formatToolConfirmDetail } from './toolConfirmFormat';
 import type { TodoStore } from '../todoStore';
 import type { ShellSession } from '../shellSession';
 import type { TaskToolContext } from './shell/taskShell';
 import type { ChatMode } from '../../../core/config/types';
 
-// Side-effect: register all builtin tools
+// Side-effect: регистрация всех builtin tools
 import './builtins';
 
 export type ExtendedToolContext = ToolContext & TaskToolContext & {
@@ -55,11 +57,11 @@ export function getAgentLlmTools(mode?: string, opts?: {
 	const modelId = opts?.modelId ?? settings.model;
 	const keepApplyPatch = includeApplyPatchForModel(modelId, settings.modelRoutedPatch);
 	const filtered = listTools().filter((tool) => {
-		if (!settings.enableFileReading && ['read_file', 'glob', 'grep', 'search_files', 'file_search', 'list_dir'].includes(tool.name)) {
+		if (!settings.enableFileReading && ['read_file', 'glob', 'grep', 'file_search', 'find_code', 'list_dir'].includes(tool.name)) {
 			return false;
 		}
 
-		if (!settings.enableTerminal && ['run_command', 'run_tests', 'await_shell'].includes(tool.name)) {
+		if (!settings.enableTerminal && ['run_command', 'run_tests', 'await_shell', 'run_scratch', 'run_plugin'].includes(tool.name)) {
 			return false;
 		}
 
@@ -76,7 +78,7 @@ export function getAgentLlmTools(mode?: string, opts?: {
 			return false;
 		}
 
-		if ((mode === 'plan' || mode === 'multitask') && isMutatingTool(tool.name)) {
+		if ((mode === 'plan' || mode === 'multitask' || mode === 'project') && isMutatingTool(tool.name)) {
 			return false;
 		}
 
@@ -84,7 +86,7 @@ export function getAgentLlmTools(mode?: string, opts?: {
 			return false;
 		}
 
-		const shellTool = ['run_command', 'run_tests', 'await_shell'].includes(tool.name);
+		const shellTool = ['run_command', 'run_tests', 'await_shell', 'run_scratch', 'run_plugin'].includes(tool.name);
 		// Plan + planShellPolicy=ask: shell в списке; confirm принудительный в executeAgentTool
 		const planShellAsk = mode === 'plan' && settings.planShellPolicy === 'ask' && shellTool;
 		if (opts?.readonly && (shellTool || ['open_browser', 'call_mcp_tool', 'execute'].includes(tool.name))) {
@@ -221,7 +223,7 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 
 	// external_directory: путь вне workspace -> action `outside` или deny
 	// Исключение: cwd субагента в git worktree (может быть sibling вне workspace folders)
-	if (pathLike && (action === 'edits' || action === 'delete' || name === 'read_file' || name === 'list_dir' || name === 'open_file' || name === 'create_dir' || name === 'apply_patch' || name === 'apply_workspace_edit' || name === 'write_file' || name === 'delete_file' || name === 'edit_notebook')) {
+	if (pathLike && (action === 'edits' || action === 'delete' || name === 'read_file' || name === 'list_dir' || name === 'open_file' || name === 'create_dir' || name === 'apply_patch' || name === 'apply_workspace_edit' || name === 'write_file' || name === 'edit_file' || name === 'delete_file' || name === 'edit_notebook' || name === 'run_scratch')) {
 		const agentRoot = getAgentRoot();
 		const insideAgentRoot = Boolean(agentRoot && subject && (pathIsInside(subject, agentRoot) || !subject.includes('/') && !subject.includes('\\')));
 		const outside = !insideAgentRoot && isOutsideWorkspaceInput(subject, workspaceFoldersFs());
@@ -257,7 +259,7 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 	// permission.task / субагенты: чуть строже (не наследовать sessionAllow, не auto-skip confirm)
 	const nestedStrict = (ext.subagentDepth ?? 0) > 0;
 
-	// Здесь только центральный deny / session-allow; once/always UX остаётся в confirm-хелперах tools
+	// Здесь центральный deny / session-allow; ask -> карточка ниже (до execute)
 	if (action) {
 		let decision = evaluateApproval(action, subject, settings.approvalPolicy, nestedStrict ? undefined : ext.sessionAllow);
 		if (sensitiveWrite && decision === 'allow') {
@@ -295,6 +297,27 @@ export async function executeAgentTool(name: string, rawArguments: string, ctx: 
 		ext.forceConfirm = true;
 		ext.skipConfirm = false;
 	} else {
+		ext.forceConfirm = false;
+	}
+
+	// Центральный ask: одна карточка в чате до execute
+	if (action && (!ext.skipConfirm || ext.forceConfirm)) {
+		const denied = await confirmAlwaysOrSkip(
+			ext,
+			vscode.l10n.t('agent.confirm.toolAsk', name),
+			formatToolConfirmDetail(subject, rawArguments, name),
+		);
+		if (denied) {
+			logAgentTool({
+				name,
+				status: 'denied',
+				ms: Date.now() - started,
+				detail: denied.content,
+			});
+			return denied;
+		}
+		// Инструмент не должен показывать вторую карточку
+		ext.skipConfirm = true;
 		ext.forceConfirm = false;
 	}
 
