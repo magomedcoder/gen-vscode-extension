@@ -119,6 +119,36 @@ export function ConnectionPage({
 					</div>
 					{modelsStatus ? <span className="field__hint">{modelsStatus}</span> : null}
 				</label>
+
+				<label className="field">
+					<span className="field__label">{t('settings.planModel.label')}</span>
+					<select
+						className="field__input"
+						value={draft.planModel}
+						onChange={(e) => setField('planModel', e.target.value)}
+					>
+						<option value="">{t('settings.planModel.empty')}</option>
+						{modelOptions.map((item) => (
+							<option key={`plan-${item.id}`} value={item.id}>{item.label}</option>
+						))}
+					</select>
+					<span className="field__hint">{t('settings.planModel.hint')}</span>
+				</label>
+
+				<label className="field">
+					<span className="field__label">{t('settings.actModel.label')}</span>
+					<select
+						className="field__input"
+						value={draft.actModel}
+						onChange={(e) => setField('actModel', e.target.value)}
+					>
+						<option value="">{t('settings.actModel.empty')}</option>
+						{modelOptions.map((item) => (
+							<option key={`act-${item.id}`} value={item.id}>{item.label}</option>
+						))}
+					</select>
+					<span className="field__hint">{t('settings.actModel.hint')}</span>
+				</label>
 			</SettingsSection>
 
 			<SettingsSection titleKey="settings.section.connection.auth" hintKey="settings.section.connection.authHint" defaultOpen={false}>

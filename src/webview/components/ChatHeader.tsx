@@ -13,6 +13,15 @@ interface ChatHeaderProps {
 	contextBudget?: number;
 	cachedNCtx?: number;
 	lastContextPrune?: { chars: number; messages: number };
+	nearBudget?: boolean;
+	nCtxWarn?: boolean;
+	contextBreakdown?: {
+		history: number;
+		mentions: number;
+		system: number;
+		user: number;
+	};
+	mentionsTruncated?: boolean;
 	sessionId?: string;
 	sessions?: SessionSummary[];
 	toolDetailsExpanded?: boolean;
@@ -32,6 +41,10 @@ export function ChatHeader({
 	contextBudget,
 	cachedNCtx,
 	lastContextPrune,
+	nearBudget,
+	nCtxWarn,
+	contextBreakdown,
+	mentionsTruncated,
 	sessionId,
 	sessions,
 	toolDetailsExpanded = true,
@@ -231,6 +244,10 @@ export function ChatHeader({
 					contextBudget={contextBudget}
 					cachedNCtx={cachedNCtx}
 					lastContextPrune={lastContextPrune}
+					nearBudget={nearBudget}
+					nCtxWarn={nCtxWarn}
+					contextBreakdown={contextBreakdown}
+					mentionsTruncated={mentionsTruncated}
 					compact
 				/>
 				<details ref={optsRef} className="header-opts">

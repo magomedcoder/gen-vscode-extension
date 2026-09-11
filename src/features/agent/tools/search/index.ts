@@ -4,6 +4,7 @@ import { fileSearchTool } from './fileSearchWeb';
 import { findCodeTool } from './findCode';
 import { findSymbolTool } from './findSymbol';
 import { globTool, grepTool } from './globGrep';
+import { listCodeDefinitionNamesTool } from './listCodeDefinitionNames';
 import { packContextTool } from './packContext';
 import { projectMapTool } from './projectMap';
 import { searchDocsTool, semanticSearchTool } from './semanticSearch';
@@ -29,6 +30,10 @@ export function registerSearchTools(): void {
 	registerTool(findSymbolTool, {
 		tags: ['search'],
 		risk: 'read'
+	});
+	registerTool(listCodeDefinitionNamesTool, {
+		tags: ['search'],
+		risk: 'read',
 	});
 	registerTool(codebaseSearchTool, { 
 		tags: ['search'], 

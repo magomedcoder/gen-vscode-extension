@@ -126,7 +126,7 @@ export function buildAgentSystemPrompt(options?: {
 			'После правок проверяй get_diagnostics. git_status - только чтение, без commit/push.',
 			'Логи: find_logs, read_log_tail. UI: open_browser, fetch_page.',
 			'Тесты: run_tests (если в проекте находится команда test) или run_command. Команды без allowlist языков; запрещены rm, curl, install, git push, eval (-e / -c с кодом). Подтверждения - по approvalPolicy / autoApprove в настройках Безопасность.',
-			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask|project). Субагенты: task. Кастомные агенты: generate_agent -> `.gen/agents/`.',
+			'Режимы: plan_enter / plan_exit / switch_mode (ask|agent|debug|design|plan|multitask|project). Субагенты: task (prompts[] = параллельный read-only research). Handoff: new_task. Обзор модуля: list_code_definition_names. Deep planning: /deep-planning. Кастомные агенты: generate_agent -> `.gen/agents/`.',
 			planWriteToFile
 				? 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план пишется в `.gen/plan.md`. Опциональный slug - ещё `.gen/plans/<slug>.md`. write_plan / list_plans для multi-plan. Прогресс: update_plan. Один файл можно править без плана.'
 				: 'Если задача трогает больше одного файла или это составная цель: propose_plan (шаги с path) - план только в памяти на текущую сессию (запись sticky файла отключена). write_plan всё ещё пишет в `.gen/plans/`. Прогресс: update_plan. Один файл можно править без плана.',

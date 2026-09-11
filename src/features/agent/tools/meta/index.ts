@@ -6,6 +6,7 @@ import { fetchPageTool } from './fetchPage';
 import { findLogsTool } from './findLogs';
 import { generateAgentTool } from './generateAgent';
 import { getWorkspaceInfoTool } from './getWorkspaceInfo';
+import { newTaskTool } from './newTask';
 import { openBrowserTool } from './openBrowser';
 import { listPluginsTool, pluginTool, runPluginTool } from './plugins';
 import { readLogTailTool } from './readLogTail';
@@ -58,6 +59,10 @@ export function registerMetaTools(): void {
 	registerTool(taskTool, { 
 		tags: ['meta'], 
 		risk: 'read' 
+	});
+	registerTool(newTaskTool, {
+		tags: ['meta'],
+		risk: 'read',
 	});
 	registerTool(generateAgentTool, { 
 		tags: ['meta'], 

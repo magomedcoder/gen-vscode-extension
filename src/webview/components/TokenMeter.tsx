@@ -6,17 +6,22 @@ interface TokenMeterProps {
 	usage?: TokenUsage;
 	maxContextTokens?: number;
 	compact?: boolean;
-	// Оценка prompt (fitContext)
 	estimatedPromptTokens?: number;
-	// Эффективный budget
 	contextBudget?: number;
-	// Кэш серверного n_ctx
 	cachedNCtx?: number;
-	// Последние счётчики prune (debug)
 	lastContextPrune?: { 
 		chars: number; 
 		messages: number 
 	};
+	nearBudget?: boolean;
+	nCtxWarn?: boolean;
+	contextBreakdown?: {
+		history: number;
+		mentions: number;
+		system: number;
+		user: number;
+	};
+	mentionsTruncated?: boolean;
 }
 
 export function TokenMeter({
@@ -27,6 +32,10 @@ export function TokenMeter({
 	contextBudget,
 	cachedNCtx,
 	lastContextPrune,
+	nearBudget,
+	nCtxWarn,
+	contextBreakdown,
+	mentionsTruncated,
 }: TokenMeterProps) {
 	const hasUsage = Boolean(usage && usage.totalTokens > 0);
 	const hasBudgetHint = typeof estimatedPromptTokens === 'number'
@@ -37,7 +46,9 @@ export function TokenMeter({
 		return null;
 	}
 
-	const limit = maxContextTokens && maxContextTokens > 0 ? maxContextTokens : undefined;
+	const limit = (typeof contextBudget === 'number' && contextBudget > 0)
+		? contextBudget
+		: (maxContextTokens && maxContextTokens > 0 ? maxContextTokens : undefined);
 	const used = usage?.totalTokens ?? estimatedPromptTokens ?? 0;
 	const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : undefined;
 
@@ -58,11 +69,23 @@ export function TokenMeter({
 		budgetBits.push(`−${lastContextPrune.messages}msg`);
 	}
 
+	if (contextBreakdown) {
+		budgetBits.push(
+			`h${formatTokenCount(contextBreakdown.history)}/m${formatTokenCount(contextBreakdown.mentions)}/u${formatTokenCount(contextBreakdown.user)}`,
+		);
+	}
+
 	const budgetText = budgetBits.length > 0 ? budgetBits.toString() : undefined;
+	const titleParts = [
+		budgetText,
+		nCtxWarn ? t('chat.tokens.nCtxWarn') : '',
+		mentionsTruncated ? t('chat.tokens.mentionsTruncated') : '',
+		nearBudget ? t('chat.tokens.nearBudget') : '',
+	].filter(Boolean);
 
 	if (compact) {
 		return (
-			<span className="token-meter-wrap">
+			<span className={`token-meter-wrap${nearBudget ? ' token-meter-wrap--near' : ''}${nCtxWarn ? ' token-meter-wrap--warn' : ''}`}>
 				{hasUsage && limit ? (
 					<span
 						className="token-meter token-meter--ring"
@@ -76,7 +99,7 @@ export function TokenMeter({
 				{budgetText ? (
 					<span
 						className="token-meter token-meter--budget"
-						title={t('chat.tokens.budgetTitle', budgetText)}
+						title={titleParts.join('\n') || t('chat.tokens.budgetTitle', budgetText)}
 					>
 						{budgetText}
 					</span>

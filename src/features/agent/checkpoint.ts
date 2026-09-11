@@ -21,6 +21,10 @@ export class AgentCheckpoint {
 		return this.entries.size;
 	}
 
+	listRelatives(): string[] {
+		return [...this.entries.values()].map((e) => e.relative.replace(/\\/g, '/'));
+	}
+
 	// Снимок до правки по relative path (если есть)
 	peekByRelative(relative: string): CheckpointEntry | undefined {
 		const needle = relative.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();

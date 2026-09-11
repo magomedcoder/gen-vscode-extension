@@ -158,6 +158,7 @@ export function App() {
 				onLoadRulesSkills={loadRulesSkills}
 				onLoadPersonas={loadPersonas}
 				onOpenProjectPath={openProjectPath}
+				cachedNCtx={chat.cachedNCtx}
 			/>
 		);
 	}
@@ -176,6 +177,10 @@ export function App() {
 				contextBudget={chat.contextBudget}
 				cachedNCtx={chat.cachedNCtx}
 				lastContextPrune={chat.lastContextPrune}
+				nearBudget={chat.nearBudget}
+				nCtxWarn={chat.nCtxWarn}
+				contextBreakdown={chat.contextBreakdown}
+				mentionsTruncated={chat.mentionsTruncated}
 				sessionId={chat.sessionId}
 				sessions={chat.sessions}
 				toolDetailsExpanded={toolDetailsExpanded}
@@ -188,6 +193,25 @@ export function App() {
 				onLoadModels={handleLoadChatModels}
 			/>
 			<ProjectSetupBanner project={chat.project} />
+			{chat.nCtxWarn ? (
+				<div className="pause-banner pause-banner--warn" role="status">
+					<span className="pause-banner__text">{t('chat.tokens.nCtxWarnBanner')}</span>
+				</div>
+			) : null}
+			{chat.nearBudget && !chat.nCtxWarn ? (
+				<div className="pause-banner pause-banner--near" role="status">
+					<span className="pause-banner__text">{t('chat.tokens.nearBudgetBanner')}</span>
+					<span className="pause-banner__actions">
+						<button
+							type="button"
+							className="btn btn--secondary"
+							onClick={() => vscodeApi.postMessage({ type: 'send', text: '/compact' })}
+						>
+							{t('chat.contextOverflow.compactAction')}
+						</button>
+					</span>
+				</div>
+			) : null}
 			{chat.todos && chat.todos.length > 0 ? <TodoPanel todos={chat.todos} /> : null}
 			<MessageList
 				messages={chat.messages}
@@ -197,6 +221,27 @@ export function App() {
 				pendingConfirm={chat.pendingConfirm}
 				pendingQuestion={chat.pendingQuestion}
 			/>
+			{(() => {
+				const lastErr = [...chat.messages].reverse().find((m) => m.role === 'error');
+				const overflowHint = lastErr?.content && /\/compact|context overflow|переполнен|prompt слишком большой|context budget/i.test(lastErr.content);
+				if (!overflowHint || chat.busy) {
+					return null;
+				}
+				return (
+					<div className="pause-banner pause-banner--warn" role="status">
+						<span className="pause-banner__text">{t('chat.contextOverflow.actionHint')}</span>
+						<span className="pause-banner__actions">
+							<button
+								type="button"
+								className="btn"
+								onClick={() => vscodeApi.postMessage({ type: 'send', text: '/compact' })}
+							>
+								{t('chat.contextOverflow.compactAction')}
+							</button>
+						</span>
+					</div>
+				);
+			})()}
 			{paused ? (
 				<div className="pause-banner" role="status">
 					<span className="pause-banner__text">

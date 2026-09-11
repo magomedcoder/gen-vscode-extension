@@ -36,6 +36,53 @@ export function PermissionsPage({ draft, setField }: SettingsPageProps) {
 
 	return (
 		<>
+			<SettingsSection titleKey="settings.section.permissions.presets" hintKey="settings.section.permissions.presetsHint">
+				<div className="field__row" style={{ flexWrap: 'wrap', gap: 8 }}>
+					<button
+						className="btn btn--secondary"
+						type="button"
+						onClick={() => {
+							const next = { ...draft.approvalPolicy };
+							for (const action of APPROVAL_ACTIONS) {
+								next[action] = { ...next[action], mode: 'ask' };
+							}
+							setField('approvalPolicy', next);
+						}}
+					>
+						{t('settings.approvalPreset.askAll')}
+					</button>
+					<button
+						className="btn btn--secondary"
+						type="button"
+						onClick={() => {
+							const next = { ...draft.approvalPolicy };
+							for (const action of ['edits', 'mcp', 'web', 'skill', 'task'] as ApprovalActionType[]) {
+								next[action] = { ...next[action], mode: 'allow' };
+							}
+							next.shell = { ...next.shell, mode: 'ask' };
+							next.delete = { ...next.delete, mode: 'ask' };
+							next.outside = { ...next.outside, mode: 'ask' };
+							setField('approvalPolicy', next);
+						}}
+					>
+						{t('settings.approvalPreset.dev')}
+					</button>
+					<button
+						className="btn btn--secondary"
+						type="button"
+						onClick={() => {
+							const next = { ...draft.approvalPolicy };
+							for (const action of APPROVAL_ACTIONS) {
+								next[action] = { ...next[action], mode: action === 'delete' ? 'deny' : 'allow' };
+							}
+							setField('approvalPolicy', next);
+						}}
+					>
+						{t('settings.approvalPreset.allowMost')}
+					</button>
+				</div>
+			</SettingsSection>
+
 			<SettingsSection titleKey="settings.section.permissions.policy" hintKey="settings.section.permissions.policyHint">
 				{APPROVAL_ACTIONS.map((action) => {
 					const rule = draft.approvalPolicy[action];

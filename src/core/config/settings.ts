@@ -10,7 +10,7 @@ import { clearCachedNCtx } from '../llm/contextBudget';
 import { DEFAULT_SETTINGS } from './types';
 import type { ChatMode, ChatTextSize, ChatViewLocation, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
 export type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
-export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode, resolveSmallModel } from './types';
+export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode, resolveModeModel, resolveSmallModel } from './types';
 export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
 export { FILE_LAYER_KEYS, getConfigLayersSnapshot, getEffectiveHooksInline, getEffectiveHooksPath, reloadConfigLayers } from './layers';
 export { ADMIN_POLICY_KEYS, getAdminPolicySnapshot, isAdminPolicyActive } from './adminPolicy';
@@ -144,6 +144,8 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		baseUrl,
 		model: String(raw.model ?? '').trim(),
 		smallModel: String(raw.smallModel ?? '').trim(),
+		planModel: String(raw.planModel ?? '').trim(),
+		actModel: String(raw.actModel ?? '').trim(),
 		chatMode,
 		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 0, 40),
 		approvalPolicy: normalizeApprovalPolicy(raw.approvalPolicy),
@@ -157,6 +159,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		usernameDisplay: String(raw.usernameDisplay ?? '').trim(),
 		watcherIgnore: normalizeStringList(raw.watcherIgnore),
 		revealOnEdit: normalizeRevealOnEdit(raw.revealOnEdit),
+		backgroundEditMode: raw.backgroundEditMode !== false,
 		notifyOnComplete: raw.notifyOnComplete === true,
 		notifySoundOnComplete: raw.notifySoundOnComplete === true,
 		enableFileReading: raw.enableFileReading !== false,
@@ -202,6 +205,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		otelEnabled: raw.otelEnabled === true,
 		otelEndpoint: String(raw.otelEndpoint ?? '').trim(),
 		toolOutputMaxChars: Math.max(1000, Math.floor(asNumber(raw.toolOutputMaxChars, DEFAULT_SETTINGS.toolOutputMaxChars))),
+		toolOutputModelMaxChars: Math.max(400, Math.floor(asNumber(raw.toolOutputModelMaxChars, DEFAULT_SETTINGS.toolOutputModelMaxChars))),
 		codeModeEnabled: raw.codeModeEnabled === true,
 		mcpServers: Array.isArray(raw.mcpServers)
 			? raw.mcpServers.filter((s): s is NonNullable<typeof s> => Boolean(s && typeof s === 'object'))
@@ -295,7 +299,8 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		compactTailTurns: clamp(Math.floor(asNumber(raw.compactTailTurns, DEFAULT_SETTINGS.compactTailTurns)), 1, 40),
 		compactPruneToolResults: raw.compactPruneToolResults !== false,
 		compactReservedTokens: Math.max(0, Math.floor(asNumber(raw.compactReservedTokens, DEFAULT_SETTINGS.compactReservedTokens))),
-		midLoopAutoCompact: raw.midLoopAutoCompact === true,
+		midLoopAutoCompact: raw.midLoopAutoCompact !== false,
+		llmAutoCompact: raw.llmAutoCompact === true,
 		visionEnabled: raw.visionEnabled === true,
 		attachmentImageMaxBase64: Math.max(10_000, Math.floor(asNumber(raw.attachmentImageMaxBase64, DEFAULT_SETTINGS.attachmentImageMaxBase64))),
 		attachmentImageMaxWidth: Math.max(64, Math.floor(asNumber(raw.attachmentImageMaxWidth, DEFAULT_SETTINGS.attachmentImageMaxWidth))),

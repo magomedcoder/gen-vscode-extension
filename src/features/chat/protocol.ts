@@ -133,6 +133,18 @@ export interface ChatViewState {
 	contextBudget?: number;
 	// Закэшированный n_ctx сервера (если probe/overflow уже знал)
 	cachedNCtx?: number;
+	// ~80% budget - soft warning
+	nearBudget?: boolean;
+	// maxContextTokens > cachedNCtx
+	nCtxWarn?: boolean;
+	contextBreakdown?: {
+		history: number;
+		mentions: number;
+		system: number;
+		user: number;
+	};
+	mentionsTruncated?: boolean;
+	mentionsTruncatedKinds?: string[];
 	// Последний prune context (debug)
 	lastContextPrune?: { 
 		chars: number; 
@@ -214,7 +226,7 @@ export interface PersonaOption {
 }
 
 export interface MentionSuggestion {
-	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
+	kind: 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'git_changes' | 'branch_diff' | 'problems' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
 	label: string;
 	insert: string;
 	detail?: string;

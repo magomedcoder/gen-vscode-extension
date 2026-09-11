@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getSettings } from '../../core/config/settings';
 import type { ChatMode } from '../../core/config/types';
+import { resolveModeModel } from '../../core/config/types';
 import type { ChatMessage, LlmClient, LlmRetryInfo, LlmToolCall } from '../../core/llm/types';
 import type { ChatUiMessage, ToolCallStatus, ToolCallUi } from '../chat/protocol';
 import { pathFromToolArguments } from './diff';
@@ -279,8 +280,22 @@ export class AgentSession {
 		onTurnDiff?: (info: { turnId: string; paths: string[] }) => void;
 		// Счётчики context prune для UI/debug
 		onContextPrune?: (info: { chars: number; messages: number }) => void;
+		createNewTask?: (params: {
+			title?: string;
+			prompt: string;
+			mode?: ChatMode;
+			autoStart?: boolean;
+		}) => Promise<{ sessionId: string; title: string }>;
+		onSubagentJob?: (event: {
+			id: string;
+			status: 'running' | 'done' | 'error' | 'aborted';
+			subagent: string;
+			promptPreview: string;
+			detail?: string;
+		}) => void;
 	}): Promise<void> {
 		const settings = getSettings();
+		const modeModel = resolveModeModel(settings) || settings.model;
 		const maxIterations = params.maxIterationsOverride ?? settings.agentMaxIterations;
 		const unlimited = !params.maxIterationsOverride && maxIterations === 0;
 		let toolsEnabled = true;
@@ -354,7 +369,7 @@ export class AgentSession {
 				planWriteToFile: settings.planWriteToFile,
 				planShellPolicy: settings.planShellPolicy,
 				mode,
-				includeApplyPatch: includeApplyPatchForModel(settings.model, settings.modelRoutedPatch),
+				includeApplyPatch: includeApplyPatchForModel(modeModel, settings.modelRoutedPatch),
 				subagentDepth: depth,
 			}),
 		].filter(Boolean).join('\n\n');
@@ -416,6 +431,8 @@ export class AgentSession {
 					content: buildSystem(toolsEnabled, agentMode),
 				};
 			},
+			createNewTask: params.createNewTask,
+			onSubagentJob: params.onSubagentJob,
 			runSubagent: async ({ type, prompt, signal, cwd }) => {
 				const def = await resolveSubagent(type);
 				const child = new AgentSession(this.client);
@@ -508,7 +525,7 @@ export class AgentSession {
 				disableTask: depth > 0,
 				// субагенты не режем primaryTools
 				primary: depth === 0,
-				modelId: settings.model,
+				modelId: modeModel,
 			};
 
 			const assistantId = messageId();
@@ -523,7 +540,7 @@ export class AgentSession {
 			const settingsNow = getSettings();
 			const budget = getEffectiveContextBudget(
 				settingsNow,
-				getCachedNCtx(settingsNow.baseUrl, settingsNow.model),
+				getCachedNCtx(settingsNow.baseUrl, modeModel || settingsNow.model),
 			);
 			if (isNearContextBudget(estimateChatMessagesTokens(apiMessages), budget)) {
 				// Opt-in soft-stall: один mid-loop compact до shrink
@@ -555,6 +572,7 @@ export class AgentSession {
 				},
 				complete: (messages) => this.client.complete({
 					messages,
+					model: modeModel || undefined,
 					signal: params.signal,
 					tools: toolsEnabled ? getAgentLlmTools(agentMode, toolOpts) : undefined,
 					toolChoice: toolsEnabled ? 'auto' : 'none',
@@ -647,7 +665,7 @@ export class AgentSession {
 			});
 			if (result.usage) {
 				recordUsage(
-					settings.model,
+					modeModel,
 					result.usage.promptTokens ?? 0,
 					result.usage.completionTokens ?? 0,
 				);

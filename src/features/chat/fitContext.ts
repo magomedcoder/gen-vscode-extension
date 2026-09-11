@@ -6,7 +6,7 @@ import { estimateChatMessagesTokens } from '../../core/llm/estimateTokens';
 import type { ChatContentPart, ChatMessage, CompleteResult, LlmClient } from '../../core/llm/types';
 import * as vscode from 'vscode';
 
-export const MAX_CONTEXT_OVERFLOW_RETRIES = 2;
+export const MAX_CONTEXT_OVERFLOW_RETRIES = 1;
 
 // Сколько последних tool-сообщений оставлять с обычным cap (остальные -> digest)
 export const DEFAULT_RECENT_TOOL_KEEP = 4;
@@ -20,7 +20,7 @@ const COMPACT_SUMMARY_MARKERS = [
 	'[Сводка более ранней переписки]',
 ];
 
-// Напоминания Plan↔Agent - оставляем только последнее
+// Напоминания Plan<->Agent - оставляем только последнее
 const MODE_REMINDER_MARKERS = [
 	'Режим Plan включён.',
 	'Режим Agent включён.',
@@ -226,13 +226,18 @@ export function recentToolKeepCount(settings: GenSettings): number {
 
 // Короткий digest вместо полного tool body
 export function pruneToolToDigest(content: string): string {
-	const n = content.length;
-	if (n <= TOOL_DIGEST_PREVIEW_CHARS + 40) {
-		return content;
+	const raw = content ?? '';
+	if (raw.startsWith('[pruned tool result]')) {
+		return raw;
 	}
 
-	const preview = content.slice(0, TOOL_DIGEST_PREVIEW_CHARS).replace(/\s+/g, ' ').trimEnd();
-	return `${preview}...\n[pruned tool result] (was ${n} chars)`;
+	const n = raw.length;
+	if (n <= TOOL_DIGEST_PREVIEW_CHARS + 40) {
+		return raw;
+	}
+
+	const preview = raw.slice(0, TOOL_DIGEST_PREVIEW_CHARS).replace(/\s+/g, ' ').trimEnd();
+	return `${preview}...\n[pruned tool result] (was ${n} chars; compacted)`;
 }
 
 // Digest со ссылкой на более ранний тот же tool/path
@@ -471,7 +476,10 @@ export function shrinkApiMessages(
 	current = scratchPruned.messages;
 	changed = changed || scratchPruned.changed;
 
-	const toolCap = Math.max(400, Math.min(settings.toolOutputMaxChars || 12_000, 4_000));
+	const toolCap = Math.max(
+		400,
+		Math.min(settings.toolOutputModelMaxChars || settings.toolOutputMaxChars || 2_000, 4_000),
+	);
 	const keepRecentTools = recentToolKeepCount(settings);
 
 	const applyUserAssistantCaps = (cap: number): void => {

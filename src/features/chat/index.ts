@@ -6,6 +6,7 @@ import { CHAT_VIEW_ID, CHAT_VIEW_SIDEBAR_ID } from './ids';
 import { getSettings } from '../../core/config/settings';
 import { setConfirmHost } from '../../host/ui/confirmDialog';
 import { ensureTerminalBufferListener } from './terminalBuffer';
+import { listAgentWorktrees, removeAgentWorktree } from '../agent/worktree';
 
 export function registerChat(context: vscode.ExtensionContext): vscode.Disposable {
 	// Одна сессия / один provider на panel + sidebar
@@ -32,7 +33,79 @@ export function registerChat(context: vscode.ExtensionContext): vscode.Disposabl
 			await focusChatView('sidebar');
 		}),
 		vscode.commands.registerCommand('gen.addSelectionToChat', async () => {
-			await provider.addSelectionToChat();
+			await provider.getSession().addSelectionToChat();
+		}),
+		vscode.commands.registerCommand('gen.addToChat', async () => {
+			await provider.getSession().addSelectionToChat();
+		}),
+		vscode.commands.registerCommand('gen.explainSelection', async () => {
+			await provider.getSession().explainSelection();
+		}),
+		vscode.commands.registerCommand('gen.improveSelection', async () => {
+			await provider.getSession().improveSelection();
+		}),
+		vscode.commands.registerCommand('gen.addTerminalToChat', async () => {
+			await provider.getSession().addTerminalSelectionToChat();
+		}),
+		vscode.commands.registerCommand('gen.notebook.addCell', async () => {
+			await provider.getSession().addNotebookCellToChat('add');
+		}),
+		vscode.commands.registerCommand('gen.notebook.explainCell', async () => {
+			await provider.getSession().addNotebookCellToChat('explain');
+		}),
+		vscode.commands.registerCommand('gen.notebook.improveCell', async () => {
+			await provider.getSession().addNotebookCellToChat('improve');
+		}),
+		vscode.commands.registerCommand('gen.notebook.generateCell', async () => {
+			await provider.getSession().addNotebookCellToChat('generate');
+		}),
+		vscode.commands.registerCommand('gen.manageWorktrees', async () => {
+			const items = await listAgentWorktrees();
+			if (!items.length) {
+				void vscode.window.showInformationMessage(vscode.l10n.t('chat.worktrees.empty'));
+				return;
+			}
+			const picked = await vscode.window.showQuickPick(
+				items.map((w) => ({
+					label: w.slug || w.path,
+					description: w.branch || '',
+					detail: w.path,
+					path: w.path,
+				})),
+				{
+					title: vscode.l10n.t('chat.worktrees.title')
+				},
+			);
+			if (!picked) {
+				return;
+			}
+			const action = await vscode.window.showQuickPick(
+				[
+					{
+						label: vscode.l10n.t('chat.worktrees.open'),
+						id: 'open' as const
+					},
+					{
+						label: vscode.l10n.t('chat.worktrees.remove'),
+						id: 'remove' as const
+					},
+				],
+				{ title: picked.label },
+			);
+			if (!action) {
+				return;
+			}
+
+			if (action.id === 'open') {
+				const uri = vscode.Uri.file(picked.path);
+				await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: false });
+				return;
+			}
+			
+			const ok = await removeAgentWorktree(picked.path);
+			void vscode.window.showInformationMessage(
+				ok ? vscode.l10n.t('chat.worktrees.removed') : vscode.l10n.t('chat.worktrees.removeFailed'),
+			);
 		}),
 	);
 

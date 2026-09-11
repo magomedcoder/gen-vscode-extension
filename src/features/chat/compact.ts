@@ -114,9 +114,14 @@ export async function compactChatMessages(
 	const recent = turns.slice(-keepTurns);
 	const model = resolveSmallModel(settings);
 	const prompt = [
-		'Суммируй предыдущую переписку чата для coding-агента.',
-		'Сохрани: цель задачи, принятые решения, ключевые пути файлов, незавершённые шаги.',
-		'Пиши кратко, на языке пользователя, без воды.',
+		'Суммируй предыдущую переписку для coding-агента. Ответь СТРОГО структурой:',
+		'## Goal',
+		'## Decisions',
+		'## Files / paths',
+		'## Done',
+		'## Next step',
+		'## Open questions',
+		'Сохраняй точные пути и идентификаторы. Кратко, на языке пользователя, без воды.',
 		...(reservedTokens > 0
 			? [`Уложи summary примерно в ${reservedTokens} токенов (короче при необходимости).`]
 			: []),
@@ -128,7 +133,7 @@ export async function compactChatMessages(
 		messages: [
 			{
 				role: 'system',
-				content: 'Ты сжимаешь историю чата. Ответь только текстом summary.',
+				content: 'Ты агент сжатия контекста. Не продолжай задачу пользователя. Выведи только structured summary в запрошенном формате.',
 			},
 			{
 				role: 'user',

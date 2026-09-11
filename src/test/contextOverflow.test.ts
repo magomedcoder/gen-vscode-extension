@@ -508,4 +508,65 @@ suite('completeWithContextGuard retry', () => {
 		assert.ok(statuses.length >= 1);
 		clearCachedNCtx();
 	});
+
+	test('overflow: максимум одна reactive retry, потом fail', async () => {
+		clearCachedNCtx();
+		const overflowBody = [
+			'HTTP error 400: ',
+			'{"error":{"code":400,"message":"request (9000 tokens) exceeds the available ',
+			'context size (8192 tokens), try increasing it","type":"exceed_context_size_error",',
+			'"n_prompt_tokens":9000,"n_ctx":8192}}',
+		].join('');
+
+		let calls = 0;
+		let stored: ChatMessage[] = [
+			{ role: 'system', content: 'sys' },
+			{ role: 'user', content: 'hello '.repeat(2_000) },
+			{ role: 'assistant', content: 'a'.repeat(8_000) },
+			{ role: 'user', content: 'continue '.repeat(500) },
+		];
+
+		const fakeClient = {} as LlmClient;
+		await assert.rejects(
+			async () => completeWithContextGuard({
+				client: fakeClient,
+				settings: {
+					...DEFAULT_SETTINGS,
+					baseUrl: 'http://127.0.0.1:18081',
+					model: 'local-test',
+					contextOverflowPolicy: 'auto_compact_retry',
+					maxContextTokens: 128_000,
+					maxTokens: 512,
+					compactReservedTokens: 0,
+					toolOutputModelMaxChars: 2_000,
+					maxInputChars: 8000,
+					compactTailTurns: 4,
+				},
+				getMessages: () => stored,
+				setMessages: (next) => {
+					stored = next;
+				},
+				complete: async (): Promise<CompleteResult> => {
+					calls += 1;
+					throw new LlmHttpError(overflowBody, 400);
+				},
+			}),
+		);
+		assert.strictEqual(calls, 2);
+		clearCachedNCtx();
+	});
+});
+
+suite('defaults: llmAutoCompact off', () => {
+	test('DEFAULT_SETTINGS.llmAutoCompact === false', () => {
+		assert.strictEqual(DEFAULT_SETTINGS.llmAutoCompact, false);
+	});
+
+	test('DEFAULT_SETTINGS.midLoopAutoCompact === true', () => {
+		assert.strictEqual(DEFAULT_SETTINGS.midLoopAutoCompact, true);
+	});
+
+	test('DEFAULT_SETTINGS.toolOutputModelMaxChars === 2000', () => {
+		assert.strictEqual(DEFAULT_SETTINGS.toolOutputModelMaxChars, 2_000);
+	});
 });

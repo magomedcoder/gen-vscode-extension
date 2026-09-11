@@ -434,6 +434,23 @@ body {
 	font-size: 12px;
 }
 
+.pause-banner--warn {
+	border-color: var(--vscode-inputValidation-warningBorder, #cca700);
+}
+
+.pause-banner--near {
+	border-color: var(--vscode-charts-orange, #d18616);
+}
+
+.token-meter-wrap--near .token-meter--budget,
+.token-meter-wrap--warn .token-meter--budget {
+	color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.field__hint--warn {
+	color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
 .pause-banner__text {
 	flex: 1;
 	min-width: 0;

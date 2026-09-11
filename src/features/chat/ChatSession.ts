@@ -14,9 +14,10 @@ import { getSharedDiffProvider, showAgentEditDiff } from '../../host/preview/sho
 import { resolveBangCommands } from './bangCommand';
 import { compactChatMessages } from './compact';
 import { completeWithContextGuard, resolveContextBudget, dropSupersededReminders } from './fitContext';
-import { estimateChatMessagesTokens } from '../../core/llm/estimateTokens';
+import { computeMentionBudgetTokens, fitMentionsToBudget, weightForKind, type ContextBlock } from './fitMentionsBudget';
+import { estimateChatMessagesTokens, estimateTextTokens } from '../../core/llm/estimateTokens';
 import type { ChatMessage } from '../../core/llm/types';
-import { getCachedNCtx } from '../../core/llm/contextBudget';
+import { getCachedNCtx, isNearContextBudget } from '../../core/llm/contextBudget';
 import { resolveMentions } from './mentions';
 import { buildChatCompletionMessages } from './buildChatCompletionMessages';
 import { injectImagePathMarkers, saveImageAttachments } from './attachments';
@@ -95,7 +96,8 @@ function lastServerPromptTokens(messages: readonly ChatUiMessage[]): number | un
  * НИКОГДА vscode.diff / showAgentEditDiff - diff только через openEditedPath (клик по пути).
  */
 async function revealAgentFile(uri: vscode.Uri): Promise<void> {
-	const mode = getSettings().revealOnEdit;
+	const settings = getSettings();
+	const mode = settings.backgroundEditMode ? 'never' : settings.revealOnEdit;
 	if (mode === 'never') {
 		return;
 	}
@@ -138,6 +140,14 @@ export class ChatSession {
 		chars: number; 
 		messages: number 
 	};
+	private lastContextBreakdown?: {
+		history: number;
+		mentions: number;
+		system: number;
+		user: number;
+	};
+	private lastMentionsTruncated = false;
+	private lastMentionsTruncatedKinds: string[] = [];
 
 	private get messages(): ChatUiMessage[] {
 		return this.runtime.messages;
@@ -314,6 +324,11 @@ export class ChatSession {
 		const serverPromptTokens = lastServerPromptTokens(this.messages);
 		const estimatedPromptTokens = serverPromptTokens
 			?? estimateChatMessagesTokens(uiMessagesToRoughApi(this.messages));
+		const nearBudget = typeof estimatedPromptTokens === 'number'
+			&& isNearContextBudget(estimatedPromptTokens, contextBudget);
+		const nCtxWarn = typeof cachedNCtx === 'number'
+			&& cachedNCtx > 0
+			&& settings.maxContextTokens > cachedNCtx;
 		return {
 			messages: this.messages,
 			busy: Boolean(this.inflight),
@@ -326,6 +341,11 @@ export class ChatSession {
 			contextBudget,
 			cachedNCtx,
 			lastContextPrune: this.lastContextPrune,
+			nearBudget,
+			nCtxWarn,
+			contextBreakdown: this.lastContextBreakdown,
+			mentionsTruncated: this.lastMentionsTruncated,
+			mentionsTruncatedKinds: this.lastMentionsTruncatedKinds,
 			sessionId: this.sessions.getCurrentSessionId(),
 			sessions: this.listSessionsWithBusy(),
 			customSlashCommands,
@@ -1304,7 +1324,7 @@ export class ChatSession {
 			this.dismissedPlanHandoffKey = undefined;
 		}
 
-		// Синтетические напоминания Plan ↔ Agent (UI / slash / tools  setChatMode)
+		// Синтетические напоминания Plan <-> Agent (UI / slash / tools  setChatMode)
 		if (prev !== mode) {
 			// Убрать устаревшие mode reminders из UI-истории перед новым
 			this.pruneSupersededUiReminders();
@@ -1517,7 +1537,24 @@ export class ChatSession {
 			}
 
 			if (slash.command === 'undo') {
-				await this.runUndo();
+				const scope = slash.rest.trim().toLowerCase();
+				if (scope === 'files' || scope === 'file') {
+					await this.runUndo({ files: true, task: false });
+				} else if (scope === 'task' || scope === 'messages') {
+					await this.runUndo({ files: false, task: true });
+				} else {
+					await this.runUndo({ files: true, task: true });
+				}
+				return;
+			}
+
+			if (slash.command === 'deep-planning' || slash.command === 'deep_planning') {
+				await this.runDeepPlanning(slash.rest);
+				return;
+			}
+
+			if (slash.command === 'compare' || slash.command === 'restore-compare') {
+				await this.compareLastCheckpoint();
 				return;
 			}
 
@@ -1544,10 +1581,12 @@ export class ChatSession {
 				const settings = getSettings();
 				const model = settings.model.trim() || '-';
 				const small = settings.smallModel.trim() || '-';
+				const plan = settings.planModel.trim() || model;
+				const act = settings.actModel.trim() || model;
 				this.append({
 					id: messageId(),
 					role: 'assistant',
-					content: vscode.l10n.t('chat.slash.models.info', model, small),
+					content: vscode.l10n.t('chat.slash.models.info', model, small) + `\nplan: ${plan}\nact: ${act}`,
 				});
 				return;
 			}
@@ -1633,20 +1672,22 @@ export class ChatSession {
 	}
 
 	/**
-	 * Preflight: если история не влезает в budget и policy=auto - сжатие без slash /compact.
-	 * Возвращает true, если messages изменились.
+	 * Preflight: rule-based path всегда; LLM compact только если llmAutoCompact=true
+	 * и после оценки history всё ещё over budget.
 	 */
 	private async maybeAutoCompactBeforeTurn(
 		signal: AbortSignal,
 		excludeMessageIds: ReadonlySet<string> = new Set(),
 	): Promise<boolean> {
 		const settings = getSettings();
-		if (settings.contextOverflowPolicy !== 'auto_compact_retry') {
-			return false;
+		if (settings.contextOverflowPolicy === 'fail_fast' || settings.contextOverflowPolicy === 'ask') {
+			// ask/fail_fast: не авто-LLM; free shrink сделает completeWithContextGuard / mid-loop
+			if (!settings.llmAutoCompact) {
+				return false;
+			}
 		}
 
 		const source = this.messages.filter((m) => !excludeMessageIds.has(m.id));
-		// Грубая оценка UI*API: content lengths
 		const rough: ChatMessage[] = source.filter((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'tool')
 			.map((m) => {
 				if (m.role === 'tool') {
@@ -1666,9 +1707,23 @@ export class ChatSession {
 			return false;
 		}
 
+		// Default: без LLM - completeWithContextGuard/shrink на следующем шаге
+		if (!settings.llmAutoCompact) {
+			return false;
+		}
+
 		this.busyDetail = vscode.l10n.t('chat.contextOverflow.compacting');
 		this.emit();
 		try {
+			// Undo boundary до LLM compact
+			this.undoStack.push({
+				messages: cloneMessages(this.messages),
+				checkpoint: this.lastCheckpoint,
+			});
+			if (this.undoStack.length > MAX_TURN_HISTORY) {
+				this.undoStack.shift();
+			}
+
 			const result = await compactChatMessages(source, this.client, {
 				signal,
 				keepTurns: settings.compactTailTurns,
@@ -1676,6 +1731,11 @@ export class ChatSession {
 				reservedTokens: settings.compactReservedTokens,
 			});
 			if (!result.compacted) {
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: result.reason ?? vscode.l10n.t('chat.compact.llmFailed'),
+				});
 				return false;
 			}
 
@@ -1689,10 +1749,107 @@ export class ChatSession {
 			this.persist();
 			this.emit();
 			return true;
+		} catch (err) {
+			if (err instanceof Error && err.name === 'AbortError') {
+				throw err;
+			}
+
+			this.append({
+				id: messageId(),
+				role: 'error',
+				content: vscode.l10n.t(
+					'chat.compact.llmFailed',
+					err instanceof Error ? err.message : String(err),
+				),
+			});
+			return false;
 		} finally {
 			this.busyDetail = undefined;
 			this.emit();
 		}
+	}
+
+	// Собрать и ужать @/bang/editor контекст под mentionBudget
+	private fitTurnAttachments(input: {
+		editorCtx?: string;
+		alwaysOn?: string;
+		mentionsBlocks?: Array<{ kind: string; text: string }>;
+		mentionsContext?: string;
+		mentionsLabels?: string[];
+		bangsContext?: string;
+		llmUserText: string;
+		historyMessages: ChatUiMessage[];
+	}): { mergedContext?: string; truncated: boolean; kinds: string[] } {
+		const settings = getSettings();
+		const turnBudget = resolveContextBudget(settings);
+		const historyTokens = estimateChatMessagesTokens(uiMessagesToRoughApi(input.historyMessages));
+		const lastUserTokens = estimateTextTokens(input.llmUserText);
+		const mentionBudget = computeMentionBudgetTokens({
+			turnBudget,
+			historyTokens,
+			lastUserTokens,
+			systemReserveTokens: 500,
+		});
+
+		const blocks: ContextBlock[] = [];
+		if (input.editorCtx?.trim()) {
+			blocks.push({
+				kind: '@editor',
+				text: input.editorCtx,
+				weight: weightForKind('editor')
+			});
+		}
+
+		if (input.alwaysOn?.trim()) {
+			blocks.push({
+				kind: 'always-on',
+				text: input.alwaysOn,
+				weight: weightForKind('always')
+			});
+		}
+
+		if (input.mentionsBlocks?.length) {
+			for (const b of input.mentionsBlocks) {
+				if (!b.text.trim()) {
+					continue;
+				}
+				blocks.push({
+					kind: b.kind,
+					text: b.text,
+					weight: weightForKind(b.kind)
+				});
+			}
+		} else if (input.mentionsContext?.trim()) {
+			const label = input.mentionsLabels?.[0] ?? '@mentions';
+			blocks.push({
+				kind: label,
+				text: input.mentionsContext,
+				weight: weightForKind(label)
+			});
+		}
+
+		if (input.bangsContext?.trim()) {
+			blocks.push({
+				kind: '!command',
+				text: input.bangsContext,
+				weight: weightForKind('bang')
+			});
+		}
+
+		const fitted = fitMentionsToBudget(blocks, mentionBudget);
+		this.lastMentionsTruncated = fitted.truncated;
+		this.lastMentionsTruncatedKinds = fitted.truncatedKinds;
+		this.lastContextBreakdown = {
+			history: historyTokens,
+			mentions: fitted.tokensUsed,
+			system: 500,
+			user: lastUserTokens,
+		};
+		return {
+			mergedContext: fitted.contextText || undefined,
+			truncated: fitted.truncated,
+			kinds: fitted.truncatedKinds,
+		};
 	}
 
 	private async runCompact(): Promise<void> {
@@ -1731,6 +1888,23 @@ export class ChatSession {
 			}
 
 			const settings = getSettings();
+			const turns = this.messages.filter((m) => m.role === 'user').length;
+			const keep = settings.compactTailTurns;
+			const dropApprox = Math.max(0, turns - keep);
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.compact.preview', dropApprox, keep),
+			});
+
+			this.undoStack.push({
+				messages: cloneMessages(this.messages),
+				checkpoint: this.lastCheckpoint,
+			});
+			if (this.undoStack.length > MAX_TURN_HISTORY) {
+				this.undoStack.shift();
+			}
+
 			const result = await compactChatMessages(this.messages, this.client, {
 				signal: controller.signal,
 				keepTurns: settings.compactTailTurns,
@@ -1775,7 +1949,7 @@ export class ChatSession {
 		}
 	}
 
-	private async runUndo(): Promise<void> {
+	private async runUndo(opts: { files: boolean; task: boolean } = { files: true, task: true }): Promise<void> {
 		if (this.inflight) {
 			return;
 		}
@@ -1783,11 +1957,11 @@ export class ChatSession {
 		const entry = this.undoStack.pop();
 		if (!entry) {
 			// Fallback: старое поведение без стека (один lastCheckpoint)
-			if (this.lastCheckpoint && this.lastCheckpoint.size > 0) {
+			if (opts.files && this.lastCheckpoint && this.lastCheckpoint.size > 0) {
 				const restored = await this.lastCheckpoint.restore();
 				this.lastCheckpoint = undefined;
 				this.writes.clear();
-				const trimmed = this.trimLastUserTurn();
+				const trimmed = opts.task ? this.trimLastUserTurn() : false;
 				this.append({
 					id: messageId(),
 					role: 'assistant',
@@ -1800,14 +1974,22 @@ export class ChatSession {
 				return;
 			}
 
-			const trimmed = this.trimLastUserTurn();
-			this.append({
-				id: messageId(),
-				role: 'assistant',
-				content: trimmed
-					? vscode.l10n.t('chat.slash.undo.trimmed')
-					: vscode.l10n.t('chat.slash.undo.empty'),
-			});
+			if (opts.task) {
+				const trimmed = this.trimLastUserTurn();
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: trimmed
+						? vscode.l10n.t('chat.slash.undo.trimmed')
+						: vscode.l10n.t('chat.slash.undo.empty'),
+				});
+			} else {
+				this.append({
+					id: messageId(),
+					role: 'assistant',
+					content: vscode.l10n.t('chat.slash.undo.empty'),
+				});
+			}
 			return;
 		}
 
@@ -1820,13 +2002,15 @@ export class ChatSession {
 		}
 
 		let restoredFiles = 0;
-		if (entry.checkpoint && entry.checkpoint.size > 0) {
+		if (opts.files && entry.checkpoint && entry.checkpoint.size > 0) {
 			const paths = await entry.checkpoint.restore();
 			restoredFiles = paths.length;
 			this.writes.clear();
 		}
 
-		this.messages = cloneMessages(entry.messages);
+		if (opts.task) {
+			this.messages = cloneMessages(entry.messages);
+		}
 		this.lastCheckpoint = undefined;
 		this.persist();
 		this.emit();
@@ -1835,7 +2019,9 @@ export class ChatSession {
 			role: 'assistant',
 			content: restoredFiles > 0
 				? vscode.l10n.t('chat.slash.undo.restored', restoredFiles)
-				: vscode.l10n.t('chat.slash.undo.trimmed'),
+				: opts.task
+					? vscode.l10n.t('chat.slash.undo.trimmed')
+					: vscode.l10n.t('chat.slash.undo.empty'),
 		});
 	}
 
@@ -2013,8 +2199,28 @@ export class ChatSession {
 		const bangs = await resolveBangCommands(mentions.cleanText || trimmed, controller.signal);
 		const editorCtx = getEditorChatContext();
 		const alwaysOn = await getAlwaysOnWorkspaceContext();
-		const mergedContext = [editorCtx, alwaysOn, mentions.contextText, bangs.contextText].filter(Boolean).join('\n\n') || undefined;
 		const llmUserText = bangs.cleanText || mentions.cleanText || trimmed;
+		const fitted = this.fitTurnAttachments({
+			editorCtx,
+			alwaysOn,
+			mentionsBlocks: mentions.blocks,
+			mentionsContext: mentions.contextText,
+			mentionsLabels: mentions.labels,
+			bangsContext: bangs.contextText,
+			llmUserText,
+			historyMessages: historyBeforeUser,
+		});
+		const mergedContext = fitted.mergedContext;
+		if (fitted.truncated) {
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t(
+					'chat.context.mentionsTruncated',
+					fitted.kinds.join(', ') || 'attachments',
+				),
+			}, runSessionId);
+		}
 		let turnOk = false;
 
 		const stillActive = () => rt.clearSeq === clearSeqAtStart;
@@ -2093,6 +2299,26 @@ export class ChatSession {
 						this.emit();
 					},
 					setChatMode: (mode) => this.setMode(mode),
+					createNewTask: async (params) => this.createNewTaskHandoff(params),
+					onSubagentJob: (event) => {
+						if (!stillActive()) {
+							return;
+						}
+						const status =
+							event.status === 'running'
+								? `research ${event.subagent}: ${event.promptPreview.slice(0, 80)}...`
+								: event.status === 'done'
+									? undefined
+									: `research ${event.status}: ${event.subagent}`;
+						if (event.status === 'running') {
+							rt.busyDetail = status;
+						} else if (event.status === 'done' || event.status === 'aborted') {
+							rt.busyDetail = undefined;
+						} else if (event.detail) {
+							rt.busyDetail = status;
+						}
+						this.emit();
+					},
 					onRetry,
 					onPaused: (info) => {
 						if (!stillActive()) {
@@ -2408,6 +2634,18 @@ export class ChatSession {
 					this.emit();
 				},
 				setChatMode: (mode) => this.setMode(mode),
+				createNewTask: async (params) => this.createNewTaskHandoff(params),
+				onSubagentJob: (event) => {
+					if (!stillActive()) {
+						return;
+					}
+					if (event.status === 'running') {
+						rt.busyDetail = `research ${event.subagent}: ${event.promptPreview.slice(0, 80)}...`;
+					} else if (event.status === 'done' || event.status === 'aborted') {
+						rt.busyDetail = undefined;
+					}
+					this.emit();
+				},
 				onRetry,
 				onPaused: (info) => {
 					if (!stillActive()) {
@@ -2683,15 +2921,234 @@ export class ChatSession {
 		if (!editor || editor.selection.isEmpty) {
 			return;
 		}
-		
+
 		const doc = editor.document;
 		const text = doc.getText(editor.selection);
 		const rel = vscode.workspace.asRelativePath(doc.uri);
 		const start = editor.selection.start.line + 1;
 		const end = editor.selection.end.line + 1;
-		const mention = `@file ${rel}`;
-		const block = `${mention}\n\`\`\`\n${text.slice(0, 8000)}\n\`\`\`\n(lines ${start}-${end})`;
+		await this.addToChat({
+			text,
+			label: `@file ${rel}`,
+			meta: `lines ${start}-${end}`,
+			send: true,
+		});
+	}
+
+	// Единая точка «Add to Gen» из editor / terminal / notebook
+	async addToChat(params: {
+		text: string;
+		label?: string;
+		meta?: string;
+		send?: boolean;
+		prefix?: string;
+	}): Promise<void> {
+		const body = params.text.trim();
+		if (!body) {
+			return;
+		}
+		
+		const mention = params.label?.trim() || '@code';
+		const meta = params.meta ? `\n(${params.meta})` : '';
+		const prefix = params.prefix?.trim() ? `${params.prefix.trim()}\n\n` : '';
+		const block = `${prefix}${mention}\n\`\`\`\n${body.slice(0, 8000)}\n\`\`\`${meta}`;
 		await focusChatView();
-		await this.send(block);
+		if (params.send !== false) {
+			await this.send(block);
+		} else {
+			this.sessions.setDraft(block);
+			this.emit();
+		}
+	}
+
+	async explainSelection(): Promise<void> {
+		await this.runSelectionPrompt('Дайте четкое объяснение следующего кода: его назначение, ключевая логика и граничные случаи');
+	}
+
+	async improveSelection(): Promise<void> {
+		await this.runSelectionPrompt('Улучшите приведенный ниже код с точки зрения ясности, корректности и удобства сопровождения. Предложите конкретный патч.');
+	}
+
+	private async runSelectionPrompt(instruction: string): Promise<void> {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.selection.isEmpty) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('chat.addToChat.needSelection'));
+			return;
+		}
+		const doc = editor.document;
+		const text = doc.getText(editor.selection);
+		const rel = vscode.workspace.asRelativePath(doc.uri);
+		const start = editor.selection.start.line + 1;
+		const end = editor.selection.end.line + 1;
+		await this.addToChat({
+			text,
+			label: `@file ${rel}`,
+			meta: `lines ${start}-${end}`,
+			prefix: instruction,
+			send: true,
+		});
+	}
+
+	async addTerminalSelectionToChat(): Promise<void> {
+		const term = vscode.window.activeTerminal;
+		if (!term) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('chat.addToChat.needTerminal'));
+			return;
+		}
+
+		// VS Code не всегда отдаёт selection API; берём буфер терминала
+		const { getTerminalBuffers, ensureTerminalBufferListener } = await import('./terminalBuffer');
+		ensureTerminalBufferListener();
+		const buffers = getTerminalBuffers();
+		const hit = buffers.find((t) => t.name === term.name) ?? buffers[0];
+		const text = (hit?.text ?? '').trim().slice(-4000);
+		if (!text) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('chat.addToChat.needTerminalText'));
+			return;
+		}
+
+		await this.addToChat({
+			text,
+			label: `@terminals`,
+			meta: term.name,
+			send: true,
+		});
+	}
+
+	async addNotebookCellToChat(mode: 'add' | 'explain' | 'improve' | 'generate'): Promise<void> {
+		const editor = vscode.window.activeNotebookEditor;
+		if (!editor) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('chat.addToChat.needNotebook'));
+			return;
+		}
+
+		const cell = editor.notebook.cellAt(editor.selections[0]?.start ?? 0);
+		const text = cell.document.getText().trim();
+		const path = vscode.workspace.asRelativePath(editor.notebook.uri);
+		const prefixes: Record<typeof mode, string> = {
+			add: '',
+			explain: 'Объясни эту ячейку notebook:',
+			improve: 'Улучши эту ячейку notebook (ясность и корректность):',
+			generate: 'Сгенерируй или дополни код для этой ячейки notebook по контексту:',
+		};
+		await this.addToChat({
+			text: text || '(empty cell)',
+			label: `@file ${path}`,
+			meta: `cell ${cell.index}`,
+			prefix: prefixes[mode] || undefined,
+			send: true,
+		});
+	}
+
+	async createNewTaskHandoff(params: {
+		title?: string;
+		prompt: string;
+		mode?: import('../../core/config/types').ChatMode;
+		autoStart?: boolean;
+	}): Promise<{ sessionId: string; title: string }> {
+		if (!this.canCreateTab()) {
+			this.notifyMaxTabs();
+			throw new Error(vscode.l10n.t('chat.session.maxTabs', getSettings().maxTabCount));
+		}
+
+		this.persist();
+		const created = this.sessions.createSession(params.title?.trim() || undefined);
+		this.activateRuntime(created.id);
+		if (params.mode) {
+			await this.setMode(params.mode);
+		}
+
+		this.emit();
+		if (params.autoStart !== false) {
+			void this.send(params.prompt);
+		} else {
+			this.sessions.setDraft(params.prompt);
+			this.emit();
+		}
+
+		return { 
+			sessionId: created.id,
+			title: created.title
+		};
+	}
+
+	private async runDeepPlanning(goal: string): Promise<void> {
+		const text = goal.trim() || 'Изучи кодовую базу и составь выполнимый план реализации.';
+		await this.setMode('plan');
+		const prompt = [
+			'# Глубокое планирование',
+			text,
+			'',
+			'Следуй протоколу:',
+			'1. Если у цели несколько областей - вызови task с subagent_type=explore и prompts[] для параллельного read-only исследования.',
+			'2. При необходимости используй list_code_definition_names / find_symbol / grep, чтобы понять структуру.',
+			'3. Вызови propose_plan с конкретными шагами и путями.',
+			'4. После одобрения плана скажи пользователю, что можно нажать Run (Plan→Act) или вызвать new_task, чтобы продолжить в новой вкладке.',
+		].join('\n');
+		await this.send(prompt);
+	}
+
+	private async compareLastCheckpoint(): Promise<void> {
+		const cp = this.lastCheckpoint ?? this.undoStack[this.undoStack.length - 1]?.checkpoint;
+		if (!cp || cp.size <= 0) {
+			this.append({
+				id: messageId(),
+				role: 'assistant',
+				content: vscode.l10n.t('chat.slash.compare.empty'),
+			});
+			return;
+		}
+
+		const choice = await vscode.window.showQuickPick(
+			[
+				{ label: vscode.l10n.t('chat.slash.undo.files'), description: 'files', id: 'files' as const },
+				{ label: vscode.l10n.t('chat.slash.undo.task'), description: 'task', id: 'task' as const },
+				{ label: vscode.l10n.t('chat.slash.undo.both'), description: 'files+task', id: 'both' as const },
+				{ label: vscode.l10n.t('chat.slash.compare.open'), description: 'diff', id: 'compare' as const },
+			],
+			{ title: vscode.l10n.t('chat.slash.restore.title') },
+		);
+		if (!choice) {
+			return;
+		}
+
+		if (choice.id === 'files') {
+			await this.runUndo({
+				files: true,
+				task: false
+			});
+			return;
+		}
+
+		if (choice.id === 'task') {
+			await this.runUndo({
+				files: false,
+				task: true
+			});
+			return;
+		}
+
+		if (choice.id === 'both') {
+			await this.runUndo({
+				files: true,
+				task: true
+			});
+			return;
+		}
+
+		const rels = cp.listRelatives();
+		const picked = rels.length === 1
+			? rels[0]
+			: (await vscode.window.showQuickPick(rels, { title: vscode.l10n.t('chat.slash.compare.pickFile') }));
+		if (picked) {
+			await this.openEditedPath(picked);
+			return;
+		}
+
+		this.append({
+			id: messageId(),
+			role: 'assistant',
+			content: vscode.l10n.t('chat.slash.compare.pickFile'),
+		});
 	}
 }

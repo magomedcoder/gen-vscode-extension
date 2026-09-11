@@ -250,3 +250,66 @@ export function shouldUseWorktree(useWorktreeArg: unknown): boolean {
 	
 	return getSettings().worktreesEnabled === true;
 }
+
+export interface AgentWorktreeInfo {
+	path: string;
+	slug: string;
+	branch?: string;
+}
+
+// Список worktree под `.gen/worktrees/` (+ git worktree list если есть)
+export async function listAgentWorktrees(): Promise<AgentWorktreeInfo[]> {
+	const root = defaultWorkspaceCwd();
+	const dir = path.join(root, WORKTREES_DIR_RELATIVE);
+	const out: AgentWorktreeInfo[] = [];
+	try {
+		const entries = await fs.readdir(dir, { withFileTypes: true });
+		for (const e of entries) {
+			if (!e.isDirectory()) {
+				continue;
+			}
+
+			const full = path.join(dir, e.name);
+			let branch: string | undefined;
+			try {
+				branch = (await git(full, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim() || undefined;
+			} catch {
+				branch = undefined;
+			}
+			out.push({
+				path: full,
+				slug: e.name,
+				branch
+			});
+		}
+	} catch {}
+
+	return out;
+}
+
+export async function removeAgentWorktree(worktreePath: string): Promise<boolean> {
+	const root = defaultWorkspaceCwd();
+	const normalized = path.resolve(worktreePath);
+	const base = path.resolve(path.join(root, WORKTREES_DIR_RELATIVE));
+	if (!normalized.startsWith(base + path.sep) && normalized !== base) {
+		return false;
+	}
+
+	try {
+		await git(root, ['worktree', 'remove', '--force', normalized]);
+		return true;
+	} catch {
+		try {
+			await fs.rm(normalized, {
+				recursive: true,
+				force: true
+			});
+			try {
+				await git(root, ['worktree', 'prune']);
+			} catch {}
+			return true;
+		} catch {
+			return false;
+		}
+	}
+}

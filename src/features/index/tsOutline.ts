@@ -123,15 +123,21 @@ export async function findInOutlineIndex(
 	query: string,
 	maxResults: number,
 ): Promise<OutlineEntry[]> {
-	const folder = vscode.workspace.workspaceFolders?.[0];
-	if (!folder) {
+	const folders = vscode.workspace.workspaceFolders ?? [];
+	if (!folders.length) {
 		return [];
 	}
 
-	const doc = await loadOutlineIndex(folder.uri.fsPath);
-	if (!doc?.entries.length) {
+	const merged: OutlineEntry[] = [];
+	for (const folder of folders) {
+		const doc = await loadOutlineIndex(folder.uri.fsPath);
+		if (doc?.entries.length) {
+			merged.push(...doc.entries);
+		}
+	}
+	if (!merged.length) {
 		return [];
 	}
 
-	return searchOutlineEntries(query, doc.entries, maxResults);
+	return searchOutlineEntries(query, merged, maxResults);
 }

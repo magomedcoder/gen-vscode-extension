@@ -4,7 +4,15 @@ import { parseNumberInput } from './parseNumber';
 import { FieldNumber, FieldSelect, FieldText, FieldToggle } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
-export function RequestPage({ draft, setField }: SettingsPageProps) {
+interface RequestPageProps extends SettingsPageProps {
+	cachedNCtx?: number;
+}
+
+export function RequestPage({ draft, setField, cachedNCtx }: RequestPageProps) {
+	const nCtxWarn = typeof cachedNCtx === 'number'
+		&& cachedNCtx > 0
+		&& draft.maxContextTokens > cachedNCtx;
+
 	return (
 		<>
 			<SettingsSection titleKey="settings.section.request.model" hintKey="settings.section.request.modelHint">
@@ -34,6 +42,12 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 					parse={parseNumberInput}
 					onChange={(v) => setField('maxContextTokens', v)}
 				/>
+				{nCtxWarn ? (
+					<p className="field__hint field__hint--warn" role="status">
+						{t('settings.maxContextTokens.nCtxWarn', cachedNCtx!, draft.maxContextTokens)}
+					</p>
+				) : null}
+				<p className="field__hint">{t('settings.maxContextTokens.nCtxRecommend')}</p>
 				<FieldSelect
 					labelKey="settings.contextOverflowPolicy.label"
 					hintKey="settings.contextOverflowPolicy.hint"
@@ -51,6 +65,15 @@ export function RequestPage({ draft, setField }: SettingsPageProps) {
 					step={100}
 					parse={parseNumberInput}
 					onChange={(v) => setField('maxInputChars', v)}
+				/>
+				<FieldNumber
+					labelKey="settings.toolOutputModelMaxChars.label"
+					hintKey="settings.toolOutputModelMaxChars.hint"
+					value={draft.toolOutputModelMaxChars}
+					min={400}
+					step={100}
+					parse={parseNumberInput}
+					onChange={(v) => setField('toolOutputModelMaxChars', v)}
 				/>
 			</SettingsSection>
 

@@ -127,7 +127,7 @@ function buildVirtualUri(side: 'original' | 'commented' | 'before', stamp: numbe
 }
 
 /**
- * Diff «до правок агента» ↔ текущий файл при открытии изменённого файла.
+ * Diff «до правок агента» <-> текущий файл при открытии изменённого файла.
  * Left = виртуальный снимок; right = живой URI на диске.
  */
 export async function showAgentEditDiff(params: {

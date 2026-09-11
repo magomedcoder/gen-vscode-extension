@@ -86,6 +86,16 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
 		detailKey: 'chat.slash.undo',
 	},
 	{
+		id: 'deep-planning',
+		name: 'deep-planning',
+		detailKey: 'chat.slash.deepPlanning',
+	},
+	{
+		id: 'compare',
+		name: 'compare',
+		detailKey: 'chat.slash.compare',
+	},
+	{
 		id: 'redo',
 		name: 'redo',
 		detailKey: 'chat.slash.redo',

@@ -2,8 +2,17 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
-## 0.4.dev (Development version)
+## 0.4.0 (11 September 2026)
 
+- **Context / compact (prod path):** mention token budgets + per-kind eviction (`@codebase` first); preflight trim before complete; tool model-path cap `toolOutputModelMaxChars` (default 2000); overflow **one** shrink+retry; `midLoopAutoCompact` default on (rule-based); `llmAutoCompact` default **off**; `/compact` preview + undo; near-budget / n_ctx warn banners + `/compact` CTA; budget breakdown in header
+- **Parallel research:** `task` accepts `prompts[]` (+ `max_parallel`) for read-only fan-out; busy status while research runs; aggregate JSON results
+- **Tools:** `list_code_definition_names` (outline top-level defs, multi-root); `new_task` handoff to a new chat tab
+- **Mentions:** `@problems`, `@git-changes` (staged/unstaged pack); outline search across all workspace folders
+- **IDE:** Explain / Improve selection; Add to Gen from editor / terminal / notebook cells; unified `gen.addToChat`
+- **Plan <-> Act:** settings `planModel` / `actModel`; `/deep-planning`; Plan->Act handoff unchanged + model routing by mode
+- **Checkpoints:** `/undo files|task` restore modes; `/compare` QuickPick (Files / Task / both / open diff); `backgroundEditMode` setting
+- **Permissions:** quick approval presets (Ask all / Dev / Allow most)
+- **Worktrees:** command `Gen: Manage worktrees` (list / open / remove under `.gen/worktrees/`)
 - Plugins: `run_plugin` - spawn declared `command`/`args` or `bin` under workspace only (shell confirm; no host `require`); discover `package.json` `gen`/`genAgent` and `.gen/npm-plugins.json` in `list_plugins` (no require/execute)
 - Project polish: «Project lead» badge, stronger team-lead / `/project` prompt, synthesize reminder after `task`
 - Chat mode **project**: team-lead prompt, slash `/project`, mutating tools blocked (like multitask)
@@ -20,7 +29,7 @@
 - Confirm card: **Always** button + pattern hint; provider allow/deny patterns (`providerUsePolicy`)
 - Managed admin policy: lock security keys via `GEN_ADMIN_POLICY` / `/etc/gen/policy.json` (Settings shows a read-only banner)
 - Slash modes: `/debug` `/design` `/plan` `/ask` `/agent`; also `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
-- **Plan** mode: read-only edits; shell ask-or-deny (`planShellPolicy`); Plan↔Agent handoff banner and reminders
+- **Plan** mode: read-only edits; shell ask-or-deny (`planShellPolicy`); Plan<->Agent handoff banner and reminders
 - Multitask mode + `plan_enter` / `plan_exit` / `switch_mode`; WritePlan artifacts under `.gen/plans/`
 - MCP stdio client: dedicated Settings page (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, per-server cwd/timeout/headers
 - MCP OAuth MVP: paste-token SecretStorage, Auth / Logout / Debug

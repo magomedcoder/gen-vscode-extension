@@ -44,6 +44,12 @@ export type ExtendedToolContext = ToolContext & TaskToolContext & {
 	subagentDepth?: number;
 	// Смена режима чата из tools plan_enter / plan_exit / switch_mode
 	setChatMode?: (mode: ChatMode) => void | Promise<void>;
+	createNewTask?(params: {
+		title?: string;
+		prompt: string;
+		mode?: ChatMode;
+		autoStart?: boolean;
+	}): Promise<{ sessionId: string; title: string }>;
 };
 
 export function getAgentLlmTools(mode?: string, opts?: {

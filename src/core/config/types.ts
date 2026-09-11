@@ -39,6 +39,25 @@ export function resolveSmallModel(settings: Pick<GenSettings, 'smallModel'>): st
 	return m || undefined;
 }
 
+// Модель для текущего режима: planModel в Plan, actModel в agent-like, иначе model
+export function resolveModeModel(
+	settings: Pick<GenSettings, 'model' | 'planModel' | 'actModel' | 'chatMode'>,
+): string {
+	if (settings.chatMode === 'plan') {
+		const p = settings.planModel.trim();
+		if (p) {
+			return p;
+		}
+	} else if (settings.chatMode !== 'ask') {
+		const a = settings.actModel.trim();
+		if (a) {
+			return a;
+		}
+	}
+
+	return settings.model.trim();
+}
+
 export interface GenSettings {
 	baseUrl: string;
 	model: string;
@@ -46,6 +65,14 @@ export interface GenSettings {
 	 * Дешёвая модель для title / summary / compaction (пусто - как основная)
 	 */
 	smallModel: string;
+	/**
+	 * Модель для режима Plan (пусто - как model)
+	 */
+	planModel: string;
+	/**
+	 * Модель для Agent / Act и прочих agent-like режимов (пусто - как model)
+	 */
+	actModel: string;
 	/**
 	 * Режим чата по умолчанию: ask / agent / debug / design / plan / multitask / project
 	 */
@@ -111,6 +138,11 @@ export interface GenSettings {
 	 * default - never
 	 */
 	revealOnEdit: RevealOnEdit;
+	/**
+	 * Фоновые правки: не открывать/фокусировать редактор (эквивалент revealOnEdit=never).
+	 * default - true
+	 */
+	backgroundEditMode: boolean;
 	/**
 	 * Показать vscode notification, когда ход агента завершён.
 	 */
@@ -306,9 +338,14 @@ export interface GenSettings {
 	 */
 	otelEndpoint: string;
 	/**
-	 * Максимум символов в ответе одного tool (обрезка хвоста).
+	 * Максимум символов в ответе одного tool (обрезка хвоста) - UI/хранение.
 	 */
 	toolOutputMaxChars: number;
+	/**
+	 * Макс. символов tool output в model path при shrink/prune (отдельно от UI card).
+	 * default - 2000
+	 */
+	toolOutputModelMaxChars: number;
 	/**
 	 * Experimental code-mode: tool `execute` (JSON-шаги * MCP tools).
 	 * По умолчанию выключено. Не исполняет произвольный JS на хосте.
@@ -434,10 +471,15 @@ export interface GenSettings {
 	 */
 	compactReservedTokens: number;
 	/**
-	 * Mid-loop soft-stall: при near-budget один раз сжать apiMessages перед shrink.
-	 * default - false (opt-in, выключено по умолчанию)
+	 * Mid-loop soft-stall: при near-budget один раз сжать apiMessages перед shrink (rule-based, без LLM).
+	 * default - true
 	 */
 	midLoopAutoCompact: boolean;
+	/**
+	 * LLM auto-compact перед turn, если после rule-based path всё ещё over budget.
+	 * default - false (ручной /compact всегда доступен)
+	 */
+	llmAutoCompact: boolean;
 	/**
 	 * Передавать картинки в chat completions как image_url (OpenAI-compatible multimodal).
 	 * По умолчанию выключено: в сообщение попадает только `[image path]`.
@@ -510,6 +552,8 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	baseUrl: '',
 	model: '',
 	smallModel: '',
+	planModel: '',
+	actModel: '',
 	chatMode: 'ask',
 	agentMaxIterations: 40,
 	approvalPolicy: structuredClone(DEFAULT_APPROVAL_POLICY),
@@ -523,6 +567,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	usernameDisplay: '',
 	watcherIgnore: [],
 	revealOnEdit: 'never',
+	backgroundEditMode: true,
 	notifyOnComplete: false,
 	notifySoundOnComplete: false,
 	enableFileReading: true,
@@ -561,6 +606,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	otelEnabled: false,
 	otelEndpoint: '',
 	toolOutputMaxChars: 12_000,
+	toolOutputModelMaxChars: 2_000,
 	codeModeEnabled: false,
 	mcpServers: [],
 	subagentDepth: 2,
@@ -581,7 +627,8 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	compactTailTurns: 4,
 	compactPruneToolResults: true,
 	compactReservedTokens: 0,
-	midLoopAutoCompact: false,
+	midLoopAutoCompact: true,
+	llmAutoCompact: false,
 	visionEnabled: false,
 	attachmentImageMaxBase64: 400_000,
 	attachmentImageMaxWidth: 2048,

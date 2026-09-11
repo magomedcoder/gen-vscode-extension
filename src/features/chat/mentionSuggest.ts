@@ -92,6 +92,18 @@ function kindTemplates(): Array<{
 			detail: vscode.l10n.t('chat.mention.detail.branchDiff'),
 		},
 		{
+			kind: 'git_changes',
+			label: '@git-changes',
+			insert: '@git-changes',
+			detail: vscode.l10n.t('chat.mention.detail.gitChanges'),
+		},
+		{
+			kind: 'problems',
+			label: '@problems',
+			insert: '@problems',
+			detail: vscode.l10n.t('chat.mention.detail.problems'),
+		},
+		{
 			kind: 'rules',
 			label: '@rules',
 			insert: '@rules',
@@ -118,7 +130,7 @@ function kindTemplates(): Array<{
 	];
 }
 
-const KIND_NAMES: MentionKind[] = ['file', 'folder', 'codebase', 'map', 'symbols', 'code', 'docs', 'agent', 'alias', 'ref', 'git', 'branch_diff', 'rules', 'link', 'terminals', 'past'];
+const KIND_NAMES: MentionKind[] = ['file', 'folder', 'codebase', 'map', 'symbols', 'code', 'docs', 'agent', 'alias', 'ref', 'git', 'git_changes', 'branch_diff', 'problems', 'rules', 'link', 'terminals', 'past'];
 
 async function suggestReferenceAliases(prefix: string): Promise<MentionSuggestion[]> {
 	const isRef = prefix.startsWith('ref');
@@ -173,9 +185,9 @@ export async function suggestMentions(query: string): Promise<MentionSuggestion[
 
 	if (!prefix || KIND_NAMES.some((k) => k.startsWith(prefix) || prefix.startsWith(k))) {
 		const kindHits = kindTemplates().filter((k) => k.kind.startsWith(prefix) || prefix.length === 0 || prefix.startsWith(k.kind));
-		if (!prefix.includes(' ') && !/[./]/.test(prefix) || kindHits.some((k) => k.kind === 'branch_diff' || k.kind === 'rules' || k.kind === 'code' || k.kind === 'terminals' || k.kind === 'past' || k.kind === 'alias' || k.kind === 'ref')) {
+		if (!prefix.includes(' ') && !/[./]/.test(prefix) || kindHits.some((k) => k.kind === 'branch_diff' || k.kind === 'git_changes' || k.kind === 'problems' || k.kind === 'rules' || k.kind === 'code' || k.kind === 'terminals' || k.kind === 'past' || k.kind === 'alias' || k.kind === 'ref')) {
 			if (!prefix.includes('/') && !prefix.includes('.')) {
-				const hits = kindTemplates().filter((k) => !prefix || k.kind.startsWith(prefix) || k.kind.includes(prefix) || (prefix === 'doc' && k.kind === 'docs'));
+				const hits = kindTemplates().filter((k) => !prefix || k.kind.startsWith(prefix) || k.kind.includes(prefix) || k.label.toLowerCase().includes(prefix) || (prefix === 'doc' && k.kind === 'docs') || (prefix.startsWith('git') && (k.kind === 'git' || k.kind === 'git_changes')));
 				// @past / @alias / @ref - сразу список значений, не только шаблон kind
 				if (hits.length && !prefix.includes(' ') && prefix !== 'past' && prefix !== 'alias' && prefix !== 'ref') {
 					return hits.map((k) => ({

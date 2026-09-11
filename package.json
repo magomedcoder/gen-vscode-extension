@@ -53,6 +53,51 @@
         "category": "%extension.category%"
       },
       {
+        "command": "gen.addToChat",
+        "title": "%command.addToChat.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.explainSelection",
+        "title": "%command.explainSelection.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.improveSelection",
+        "title": "%command.improveSelection.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.addTerminalToChat",
+        "title": "%command.addTerminalToChat.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.notebook.addCell",
+        "title": "%command.notebook.addCell.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.notebook.explainCell",
+        "title": "%command.notebook.explainCell.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.notebook.improveCell",
+        "title": "%command.notebook.improveCell.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.notebook.generateCell",
+        "title": "%command.notebook.generateCell.title%",
+        "category": "%extension.category%"
+      },
+      {
+        "command": "gen.manageWorktrees",
+        "title": "%command.manageWorktrees.title%",
+        "category": "%extension.category%"
+      },
+      {
         "command": "gen.hunk.accept",
         "title": "%command.hunkAccept.title%",
         "category": "%extension.category%"
@@ -151,14 +196,53 @@
       ],
       "editor/context": [
         {
-          "command": "gen.commentSelection",
+          "command": "gen.addToChat",
+          "when": "editorHasSelection && editorTextFocus",
+          "group": "gen@0"
+        },
+        {
+          "command": "gen.explainSelection",
           "when": "editorHasSelection && editorTextFocus",
           "group": "gen@1"
         },
         {
+          "command": "gen.improveSelection",
+          "when": "editorHasSelection && editorTextFocus",
+          "group": "gen@2"
+        },
+        {
+          "command": "gen.commentSelection",
+          "when": "editorHasSelection && editorTextFocus",
+          "group": "gen@3"
+        },
+        {
           "command": "gen.commentFile",
           "when": "editorTextFocus",
+          "group": "gen@4"
+        }
+      ],
+      "terminal/context": [
+        {
+          "command": "gen.addTerminalToChat",
+          "group": "gen@1"
+        }
+      ],
+      "notebook/cell/title": [
+        {
+          "command": "gen.notebook.addCell",
+          "group": "gen@1"
+        },
+        {
+          "command": "gen.notebook.explainCell",
           "group": "gen@2"
+        },
+        {
+          "command": "gen.notebook.improveCell",
+          "group": "gen@3"
+        },
+        {
+          "command": "gen.notebook.generateCell",
+          "group": "gen@4"
         }
       ]
     },

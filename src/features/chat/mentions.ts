@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
 import * as vscode from 'vscode';
 import { buildCodebaseContextPack, collectFileHit, collectFolderHits, packContext } from '../index/contextEngine';
-import type { ContextHit } from '../index/contextEngine';
 import { semanticSearchWorkspace } from '../index/embeddings';
 import { getProjectMap } from '../index/projectMap';
 import { formatSymbolIndexSummary } from '../index/symbolIndex';
@@ -12,7 +11,7 @@ import { ensureTerminalBufferListener, getTerminalBuffers } from './terminalBuff
 import { getSessionPeek } from './sessionStore';
 import type { ChatUiMessage } from './protocol';
 
-export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
+export type MentionKind = 'file' | 'folder' | 'codebase' | 'code' | 'git' | 'branch_diff' | 'git_changes' | 'problems' | 'rules' | 'link' | 'docs' | 'agent' | 'terminals' | 'past' | 'alias' | 'ref' | 'map' | 'symbols';
 
 export interface ParsedMention {
 	kind: MentionKind;
@@ -22,19 +21,26 @@ export interface ParsedMention {
 	end: number;
 }
 
+export interface MentionContextBlock {
+	kind: string;
+	text: string;
+}
+
 export interface ResolvedMentions {
 	cleanText: string;
 	mentions: ParsedMention[];
 	contextText: string;
 	labels: string[];
+	/** Per-mention блоки для eviction по budget (тяжёлые kinds первыми) */
+	blocks: MentionContextBlock[];
 }
 
 // codebase раньше code - иначе @codebase сматчится как @code + arg "base"
-// symbols раньше symbol* ; map - отдельный kind
-const MENTION_RE = /@(file|folder|codebase|code|git|branch_diff|rules|link|docs|agent|terminals|past|alias|ref|map|symbols)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
+// git_changes раньше git ; problems - argless
+const MENTION_RE = /@(file|folder|codebase|code|git-changes|git_changes|git|branch_diff|problems|rules|link|docs|agent|terminals|past|alias|ref|map|symbols)(?:\s+`([^`]+)`|:`([^`]+)`|:([^\s`]+)|(?:\s+)([^\s@]+))?/gi;
 
 // Kinds без аргумента: не глотать следующее слово как arg
-const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'rules', 'terminals', 'map']);
+const ARGLESS_MENTION_KINDS = new Set<MentionKind>(['code', 'git', 'branch_diff', 'git_changes', 'problems', 'rules', 'terminals', 'map']);
 
 function stripOuterBackticks(value: string): string {
 	const t = value.trim();
@@ -46,20 +52,85 @@ function stripOuterBackticks(value: string): string {
 }
 
 function git(args: string[]): Promise<string> {
-	const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!root) {
+	const folders = vscode.workspace.workspaceFolders ?? [];
+	if (!folders.length) {
 		return Promise.resolve('');
 	}
 
-	return new Promise((resolve) => {
-		const c = spawn('git', args, { cwd: root });
-		let o = '';
-		c.stdout.on('data', (d) => {
-			o += String(d);
+	const tryFolder = (root: string): Promise<string> =>
+		new Promise((resolve) => {
+			const c = spawn('git', args, { cwd: root });
+			let o = '';
+			c.stdout.on('data', (d) => {
+				o += String(d);
+			});
+			c.on('error', () => resolve(''));
+			c.on('close', (code) => resolve(code === 0 || o.trim() ? o.trim() : ''));
 		});
-		c.on('error', () => resolve(''));
-		c.on('close', () => resolve(o.trim()));
-	});
+
+	return (async () => {
+		for (const folder of folders) {
+			const out = await tryFolder(folder.uri.fsPath);
+			if (out) {
+				return out;
+			}
+		}
+		return '';
+	})();
+}
+
+const DIAG_SEVERITY: Record<number, string> = {
+	[vscode.DiagnosticSeverity.Error]: 'error',
+	[vscode.DiagnosticSeverity.Warning]: 'warning',
+	[vscode.DiagnosticSeverity.Information]: 'info',
+	[vscode.DiagnosticSeverity.Hint]: 'hint',
+};
+
+async function resolveProblemsContext(): Promise<string> {
+	const cap = 80;
+	const items: string[] = [];
+	let total = 0;
+	for (const [uri, diags] of vscode.languages.getDiagnostics()) {
+		const file = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+		for (const diag of diags) {
+			total += 1;
+			if (items.length >= cap) {
+				continue;
+			}
+
+			const sev = DIAG_SEVERITY[diag.severity] ?? String(diag.severity);
+			items.push(
+				`${sev} ${file}:${diag.range.start.line + 1}:${diag.range.start.character + 1} ${diag.source ? `[${diag.source}] ` : ''}${diag.message}`,
+			);
+		}
+	}
+
+	if (!items.length) {
+		return '[problems] нет диагностик';
+	}
+
+	const more = total > items.length ? `\n... +${total - items.length} ещё` : '';
+	return `[problems ${items.length}/${total}]\n${items.join('\n')}${more}`.slice(0, 12_000);
+}
+
+async function resolveGitChangesContext(): Promise<string> {
+	const status = await git(['status', '-sb']);
+	const unstaged = await git(['diff', '--stat']);
+	const unstagedPatch = await git(['diff', '--', '.']);
+	const staged = await git(['diff', '--cached', '--stat']);
+	const stagedPatch = await git(['diff', '--cached', '--', '.']);
+	const parts = [
+		status && `status:\n${status}`,
+		staged && `staged (--cached):\n${staged}`,
+		stagedPatch && `staged patch:\n${stagedPatch.slice(0, 6_000)}`,
+		unstaged && `unstaged:\n${unstaged}`,
+		unstagedPatch && `unstaged patch:\n${unstagedPatch.slice(0, 6_000)}`,
+	].filter(Boolean);
+	if (!parts.length) {
+		return '[git-changes] нет изменений или не git-репозиторий';
+	}
+
+	return `[git-changes]\n${parts.join('\n\n')}`.slice(0, 14_000);
 }
 
 function slugifyAgentName(name: string): string {
@@ -380,7 +451,10 @@ function resolvePastChat(arg?: string): string {
 export function parseMentions(text: string): ParsedMention[] {
 	const out: ParsedMention[] = [];
 	for (const match of text.matchAll(MENTION_RE)) {
-		const kind = match[1]!.toLowerCase() as MentionKind;
+		let kind = match[1]!.toLowerCase() as MentionKind | 'git-changes';
+		if (kind === 'git-changes') {
+			kind = 'git_changes';
+		}
 		const rawMatch = match[0];
 		const start = match.index ?? 0;
 		let arg = (match[2] ?? match[3] ?? match[4] ?? match[5] ?? '').trim() || undefined;
@@ -388,7 +462,7 @@ export function parseMentions(text: string): ParsedMention[] {
 
 		// kinds без arg: не съедать следующее слово (`@terminals что` * только @terminals)
 		if (ARGLESS_MENTION_KINDS.has(kind) && arg && !rawMatch.includes('`') && !rawMatch.includes(':')) {
-			const kindOnly = `@${kind}`;
+			const kindOnly = kind === 'git_changes' ? '@git-changes' : `@${kind}`;
 			arg = undefined;
 			end = start + kindOnly.length;
 			out.push({
@@ -439,13 +513,21 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 			mentions: [],
 			contextText: '',
 			labels: [],
+			blocks: [],
 		};
 	}
 
 	const cleanText = stripMentions(text, mentions);
-	const hits: ContextHit[] = [];
 	const labels: string[] = [];
-	const extraBlocks: string[] = [];
+	const blocks: MentionContextBlock[] = [];
+
+	const pushBlock = (kind: string, text: string | undefined) => {
+		const trimmed = text?.trim();
+		if (!trimmed) {
+			return;
+		}
+		blocks.push({ kind, text: trimmed });
+	};
 
 	for (const mention of mentions) {
 		if (mention.kind === 'file') {
@@ -454,10 +536,11 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 				continue;
 			}
 
-			labels.push(`@file ${mention.arg}`);
+			const label = `@file ${mention.arg}`;
+			labels.push(label);
 			const hit = await collectFileHit(mention.arg.replace(/\\/g, '/'));
 			if (hit) {
-				hits.push(hit);
+				pushBlock(label, packContext([hit], 24_000).text);
 			}
 
 			continue;
@@ -469,15 +552,18 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 				continue;
 			}
 
-			labels.push(`@folder ${mention.arg}`);
-			hits.push(...await collectFolderHits(mention.arg.replace(/\\/g, '/')));
+			const label = `@folder ${mention.arg}`;
+			labels.push(label);
+			const folderHits = await collectFolderHits(mention.arg.replace(/\\/g, '/'));
+			pushBlock(label, packContext(folderHits, 24_000).text);
 			continue;
 		}
 
 		if (mention.kind === 'codebase') {
-			labels.push(mention.arg ? `@codebase ${mention.arg}` : '@codebase');
+			const label = mention.arg ? `@codebase ${mention.arg}` : '@codebase';
+			labels.push(label);
 			const pack = await buildCodebaseContextPack(mention.arg ?? (cleanText || 'project'));
-			hits.push(...pack.hits);
+			pushBlock(label, pack.text);
 			continue;
 		}
 
@@ -485,45 +571,49 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 			labels.push('@map');
 			try {
 				const map = await getProjectMap();
-				extraBlocks.push(`[map]\n${map.outline}`.slice(0, 12_000));
+				pushBlock('@map', `[map]\n${map.outline}`.slice(0, 12_000));
 			} catch (err) {
-				extraBlocks.push(`[map] ${err instanceof Error ? err.message : String(err)}`);
+				pushBlock('@map', `[map] ${err instanceof Error ? err.message : String(err)}`);
 			}
 			continue;
 		}
 
 		if (mention.kind === 'symbols') {
-			labels.push(mention.arg ? `@symbols ${mention.arg}` : '@symbols');
-			extraBlocks.push(await formatSymbolIndexSummary(mention.arg ?? (cleanText || undefined)));
+			const label = mention.arg ? `@symbols ${mention.arg}` : '@symbols';
+			labels.push(label);
+			pushBlock(label, await formatSymbolIndexSummary(mention.arg ?? (cleanText || undefined)));
 			continue;
 		}
 
 		if (mention.kind === 'code') {
 			labels.push('@code');
-			extraBlocks.push(await resolveCodeContext());
+			pushBlock('@code', await resolveCodeContext());
 			continue;
 		}
 
 		if (mention.kind === 'docs') {
-			labels.push(mention.arg ? `@Docs ${mention.arg}` : '@Docs');
-			extraBlocks.push(await resolveDocsContext(mention.arg ?? cleanText));
+			const label = mention.arg ? `@Docs ${mention.arg}` : '@Docs';
+			labels.push(label);
+			pushBlock(label, await resolveDocsContext(mention.arg ?? cleanText));
 			continue;
 		}
 
 		if (mention.kind === 'agent') {
-			labels.push(mention.arg ? `@agent ${mention.arg}` : '@agent(?)');
-			extraBlocks.push(await resolveAgentContext(mention.arg));
+			const label = mention.arg ? `@agent ${mention.arg}` : '@agent(?)';
+			labels.push(label);
+			pushBlock(label, await resolveAgentContext(mention.arg));
 			continue;
 		}
 
 		if (mention.kind === 'git') {
 			const sha = mention.arg?.trim();
-			labels.push(sha ? `@git ${sha}` : '@git');
+			const label = sha ? `@git ${sha}` : '@git';
+			labels.push(label);
 			const log = sha
 				? await git(['show', '--stat', '--oneline', '-s', sha])
 				: await git(['log', '-5', '--oneline']);
 			if (log) {
-				extraBlocks.push(`[git]\n${log.slice(0, 4000)}`);
+				pushBlock(label, `[git]\n${log.slice(0, 4000)}`);
 			}
 
 			continue;
@@ -533,32 +623,42 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 			labels.push('@branch_diff');
 			const diff = await git(['diff', '--stat', 'HEAD']);
 			const status = await git(['status', '-sb']);
-			extraBlocks.push(`[branch_diff]\n${status}\n${diff}`.slice(0, 6000));
+			pushBlock('@branch_diff', `[branch_diff]\n${status}\n${diff}`.slice(0, 6000));
+			continue;
+		}
+
+		if (mention.kind === 'git_changes') {
+			labels.push('@git-changes');
+			pushBlock('@git-changes', await resolveGitChangesContext());
+			continue;
+		}
+
+		if (mention.kind === 'problems') {
+			labels.push('@problems');
+			pushBlock('@problems', await resolveProblemsContext());
 			continue;
 		}
 
 		if (mention.kind === 'rules') {
 			labels.push('@rules');
 			const rules = await loadProjectRulesAppendix();
-			if (rules) {
-				extraBlocks.push(rules);
-			}
-
+			pushBlock('@rules', rules);
 			continue;
 		}
 
 		if (mention.kind === 'link') {
 			const url = mention.arg?.trim();
-			labels.push(url ? `@link ${url}` : '@link(?)');
+			const label = url ? `@link ${url}` : '@link(?)';
+			labels.push(label);
 			if (url) {
 				try {
 					const res = await fetch(url.startsWith('http') ? url : `https://${url}`, {
 						signal: AbortSignal.timeout(10_000),
 					});
 					const body = (await res.text()).slice(0, 8000);
-					extraBlocks.push(`[link ${url}]\n${body}`);
+					pushBlock(label, `[link ${url}]\n${body}`);
 				} catch (err) {
-					extraBlocks.push(`[link ${url}] error: ${err instanceof Error ? err.message : String(err)}`);
+					pushBlock(label, `[link ${url}] error: ${err instanceof Error ? err.message : String(err)}`);
 				}
 			}
 
@@ -567,43 +667,48 @@ export async function resolveMentions(text: string): Promise<ResolvedMentions> {
 
 		if (mention.kind === 'terminals') {
 			labels.push('@terminals');
-			extraBlocks.push(resolveTerminalsContext());
+			pushBlock('@terminals', resolveTerminalsContext());
 			continue;
 		}
 
 		if (mention.kind === 'past') {
-			labels.push(mention.arg ? `@past ${mention.arg}` : '@past');
-			extraBlocks.push(resolvePastChat(mention.arg));
+			const label = mention.arg ? `@past ${mention.arg}` : '@past';
+			labels.push(label);
+			pushBlock(label, resolvePastChat(mention.arg));
 			continue;
 		}
 
 		if (mention.kind === 'alias' || mention.kind === 'ref') {
 			const name = mention.arg?.trim();
 			const tag = mention.kind === 'ref' ? '@ref' : '@alias';
-			labels.push(name ? `${tag} ${name}` : `${tag}(?)`);
+			const label = name ? `${tag} ${name}` : `${tag}(?)`;
+			labels.push(label);
 			if (!name) {
-				extraBlocks.push(`[alias] укажи имя: @alias name или @ref:name`);
+				pushBlock(label, `[alias] укажи имя: @alias name или @ref:name`);
 				continue;
 			}
 
 			const resolved = await ensureReferenceCached(name);
 			if ('error' in resolved) {
-				extraBlocks.push(`[alias ${name}] ${resolved.error}`);
+				pushBlock(label, `[alias ${name}] ${resolved.error}`);
 				continue;
 			}
 
-			extraBlocks.push(formatReferenceSourceBlock(resolved));
-			hits.push(...await collectReferenceHits(resolved));
+			const refParts = [
+				formatReferenceSourceBlock(resolved),
+				packContext(await collectReferenceHits(resolved), 24_000).text,
+			].filter(Boolean);
+			pushBlock(label, refParts.join('\n\n'));
 		}
 	}
 
-	const pack = packContext(hits, 24_000);
-	const contextText = [pack.text, ...extraBlocks].filter(Boolean).join('\n\n');
+	const contextText = blocks.map((b) => b.text).filter(Boolean).join('\n\n');
 
 	return {
 		cleanText,
 		mentions,
 		contextText,
 		labels,
+		blocks,
 	};
 }

@@ -93,11 +93,18 @@ export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 					hintKey="settings.revealOnEdit.hint"
 					value={draft.revealOnEdit}
 					onChange={(v) => setField('revealOnEdit', v as RevealOnEdit)}
+					disabled={draft.backgroundEditMode}
 				>
 					<option value="never">{t('settings.revealOnEdit.never')}</option>
 					<option value="preview">{t('settings.revealOnEdit.preview')}</option>
 					<option value="focus">{t('settings.revealOnEdit.focus')}</option>
 				</FieldSelect>
+				<FieldToggle
+					labelKey="settings.backgroundEditMode.label"
+					hintKey="settings.backgroundEditMode.hint"
+					checked={draft.backgroundEditMode}
+					onChange={(v) => setField('backgroundEditMode', v)}
+				/>
 				<FieldToggle
 					labelKey="settings.modelRoutedPatch.label"
 					hintKey="settings.modelRoutedPatch.hint"
@@ -172,6 +179,7 @@ export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 					placeholder="npm install"
 					disabled={!draft.worktreesEnabled}
 				/>
+				<p className="field__hint">{t('settings.worktrees.manageHint')}</p>
 			</SettingsSection>
 
 			<SettingsSection titleKey="settings.section.agent.compact" defaultOpen={false}>
@@ -205,6 +213,12 @@ export function AgentBehaviorPage({ draft, setField }: SettingsPageProps) {
 					hintKey="settings.midLoopAutoCompact.hint"
 					checked={draft.midLoopAutoCompact}
 					onChange={(v) => setField('midLoopAutoCompact', v)}
+				/>
+				<FieldToggle
+					labelKey="settings.llmAutoCompact.label"
+					hintKey="settings.llmAutoCompact.hint"
+					checked={draft.llmAutoCompact}
+					onChange={(v) => setField('llmAutoCompact', v)}
 				/>
 			</SettingsSection>
 		</>

@@ -182,6 +182,8 @@
 		},
 		"baseUrl": { "type": "string" },
 		"smallModel": { "type": "string" },
+		"planModel": { "type": "string" },
+		"actModel": { "type": "string" },
 		"temperature": {
 			"type": "number",
 			"minimum": 0,
@@ -247,6 +249,11 @@
 			"type": "integer",
 			"minimum": 0
 		},
+		"toolOutputModelMaxChars": {
+			"type": "integer",
+			"minimum": 400,
+			"description": "Max chars of each tool result in the model prompt path (default 2000)"
+		},
 		"gitSyncAutoKeep": { "type": "boolean" },
 		"embeddingsBaseUrl": { "type": "string" },
 		"embeddingsModel": { "type": "string" },
@@ -267,7 +274,11 @@
 		},
 		"midLoopAutoCompact": {
 			"type": "boolean",
-			"description": "When near context budget mid-loop, soft-compact api messages once before shrink (default false)"
+			"description": "When near context budget mid-loop, soft-compact api messages once before shrink (default true; rule-based only)"
+		},
+		"llmAutoCompact": {
+			"type": "boolean",
+			"description": "Opt-in: after rule-based shrink, run LLM summary on smallModel if still over budget (default false)"
 		},
 		"chatMode": {
 			"type": "string",
@@ -281,6 +292,7 @@
 			"type": "string",
 			"enum": ["never", "preview", "focus"]
 		},
+		"backgroundEditMode": { "type": "boolean" },
 		"notifyOnComplete": { "type": "boolean" },
 		"notifySoundOnComplete": { "type": "boolean" },
 		"loggingEnabled": { "type": "boolean" },

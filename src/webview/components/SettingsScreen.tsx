@@ -68,6 +68,8 @@ interface SettingsScreenProps {
 	onLoadRulesSkills?: () => void;
 	onLoadPersonas?: () => void;
 	onOpenProjectPath?: (path: string) => void;
+	// Known server n_ctx for maxContextTokens warn
+	cachedNCtx?: number;
 }
 
 function renderNavItems(
@@ -126,6 +128,7 @@ export function SettingsScreen({
 	onLoadRulesSkills,
 	onLoadPersonas,
 	onOpenProjectPath,
+	cachedNCtx,
 }: SettingsScreenProps) {
 	const [page, setPage] = useState<SettingsPageId>('connection');
 	const [draft, setDraft] = useState<GenSettings>(settings);
@@ -251,7 +254,7 @@ export function SettingsScreen({
 									onLoadModels={onLoadModels}
 									onCheckConnection={onCheckConnection}
 								/>
-								<RequestPage draft={draft} setField={setField} />
+								<RequestPage draft={draft} setField={setField} cachedNCtx={cachedNCtx} />
 							</>
 						) : null}
 						{page === 'chat' ? (

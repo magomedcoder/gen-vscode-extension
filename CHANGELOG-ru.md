@@ -2,8 +2,17 @@
 
 [English version](CHANGELOG.md)
 
-## 0.4.dev (Версия в разработке)
+## 0.4.0 (11 сентября 2026)
 
+- **Context / compact:** budget токенов для @-вложений + eviction по kind; preflight trim; `toolOutputModelMaxChars` (default 2000); один overflow retry; `midLoopAutoCompact` default on; `llmAutoCompact` default **off**; preview `/compact` + undo; near-budget / n_ctx warn + CTA `/compact`; breakdown в шапке
+- **Параллельный research:** `task` с `prompts[]` (+ `max_parallel`) для read-only fan-out; статус busy; агрегированный JSON
+- **Tools:** `list_code_definition_names` (top-level defs по outline, multi-root); `new_task` - handoff в новую вкладку
+- **Mentions:** `@problems`, `@git-changes` (staged/unstaged); поиск outline по всем корням workspace
+- **IDE:** Explain / Improve выделение; Add to Gen из editor / terminal / notebook; единый `gen.addToChat`
+- **Plan <-> Act:** настройки `planModel` / `actModel`; `/deep-planning`; маршрутизация модели по режиму
+- **Checkpoints:** `/undo files|task`; `/compare` (Files / Task / оба / diff); `backgroundEditMode`
+- **Permissions:** быстрые пресеты (Ask all / Dev / Allow most)
+- **Worktrees:** команда «Gen: Управление worktrees» (список / открыть / удалить)
 - Plugins: `run_plugin` - spawn объявленных `command`/`args` или `bin` только под workspace (shell confirm; без `require` в host); `package.json` `gen`/`genAgent` и `.gen/npm-plugins.json` в `list_plugins` (без require/execute)
 - Project polish: бейдж «Project lead», усиленный промпт тимлида / `/project`, напоминание синтезировать после `task`
 - Режим **project**: промпт тимлида, slash `/project`, мутирующие tools как в multitask
@@ -20,7 +29,7 @@
 - Карточка подтверждения: кнопка **Always** + hint; allow/deny провайдеров по паттерну (`providerUsePolicy`)
 - Admin policy: блокировка security-ключей через `GEN_ADMIN_POLICY` / `/etc/gen/policy.json` (баннер read-only в Settings)
 - Slash-режимы: `/debug` `/design` `/plan` `/ask` `/agent`; также `/export` `/init` `/compact` `/new` `/undo` `/sessions` `/models`
-- Режим **Plan**: правки только на чтение; shell ask или deny (`planShellPolicy`); handoff Plan↔Agent (banner + reminders)
+- Режим **Plan**: правки только на чтение; shell ask или deny (`planShellPolicy`); handoff Plan<->Agent (banner + reminders)
 - Multitask + `plan_enter` / `plan_exit` / `switch_mode`; артефакты WritePlan в `.gen/plans/`
 - MCP stdio: отдельный экран настроек (enable/status/tools + JSON), `list_mcp_tools` / `call_mcp_tool`, cwd/timeout/headers на сервер
 - MCP OAuth MVP: paste-token в SecretStorage, Auth / Logout / Debug
