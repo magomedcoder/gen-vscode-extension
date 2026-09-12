@@ -216,7 +216,7 @@ export const executeTool: ToolDefinition = {
 			}
 
 			try {
-				const out = await getMcpManager().callTool(server, toolName, step.arguments ?? {});
+				const out = await getMcpManager().callTool(server, toolName, step.arguments ?? {}, ctx.signal);
 				results.push({
 					index: i + 1,
 					tool: step.tool,

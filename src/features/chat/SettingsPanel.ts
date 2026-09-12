@@ -195,6 +195,16 @@ export class SettingsPanel {
 			case 'refreshMcp':
 				await this.postMcpStatus();
 				return;
+			case 'reconnectMcp':
+				await getMcpManager().reconnect(msg.serverName);
+				await this.postMcpStatus(false);
+				return;
+			case 'refreshMcpTools':
+				try {
+					await getMcpManager().refreshTools(msg.serverName);
+				} catch {}
+				await this.postMcpStatus(false);
+				return;
 			case 'mcpOAuthAuth':
 				await this.handleMcpOAuthAuth(msg.serverName);
 				return;
@@ -278,9 +288,11 @@ export class SettingsPanel {
 	}
 
 	// Переподключить MCP и отправить статус в webview
-	private async postMcpStatus(): Promise<void> {
+	private async postMcpStatus(fullRefresh = true): Promise<void> {
 		const mcp = getMcpManager();
-		await mcp.refresh();
+		if (fullRefresh) {
+			await mcp.refresh();
+		}
 		this.post({
 			type: 'mcpStatus',
 			servers: await mcp.status(),

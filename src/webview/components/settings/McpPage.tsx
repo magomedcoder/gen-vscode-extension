@@ -3,11 +3,15 @@ import type { McpServerStatus } from '../../../features/chat/protocol';
 import type { GenSettings } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
+import { parseNumberInput } from './parseNumber';
+import { FieldNumber } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
 interface McpPageProps extends SettingsPageProps {
 	mcpServers?: McpServerStatus[];
 	onRefreshMcp?: () => void;
+	onReconnectMcp?: (serverName: string) => void;
+	onRefreshMcpTools?: (serverName: string) => void;
 	onMcpOAuthAuth?: (serverName: string) => void;
 	onMcpOAuthLogout?: (serverName: string) => void;
 	onMcpOAuthDebug?: (serverName: string) => void;
@@ -23,6 +27,8 @@ export function McpPage({
 	setField,
 	mcpServers = [],
 	onRefreshMcp,
+	onReconnectMcp,
+	onRefreshMcpTools,
 	onMcpOAuthAuth,
 	onMcpOAuthLogout,
 	onMcpOAuthDebug,
@@ -84,6 +90,16 @@ export function McpPage({
 			</label>
 			<span className="field__hint field__hint--warning">{t('settings.codeModeEnabled.warning')}</span>
 
+			<FieldNumber
+				labelKey="settings.mcpToolResultMaxChars.label"
+				hintKey="settings.mcpToolResultMaxChars.hint"
+				value={draft.mcpToolResultMaxChars}
+				min={500}
+				step={1000}
+				parse={parseNumberInput}
+				onChange={(v) => setField('mcpToolResultMaxChars', v)}
+			/>
+
 			<div className="settings__actions">
 				<button className="btn btn--secondary" type="button" onClick={onRefreshMcp}>{t('settings.mcp.refresh')}</button>
 			</div>
@@ -101,6 +117,9 @@ export function McpPage({
 						let badgeText = t('settings.mcp.disconnected');
 						if (!server.enabled) {
 							badgeText = t('settings.mcp.disabled');
+							badgeClass += ' mcp-card__badge--muted';
+						} else if (live?.connecting) {
+							badgeText = t('settings.mcp.connecting');
 							badgeClass += ' mcp-card__badge--muted';
 						} else if (live?.connected) {
 							badgeText = t('settings.mcp.connected');
@@ -142,7 +161,32 @@ export function McpPage({
 									</label>
 								</div>
 								<code className="mcp-card__command">{commandSummary(server) || '-'}</code>
+								{live?.lastConnectedAt ? (
+									<span className="field__hint">
+										{t('settings.mcp.lastConnected', live.lastConnectedAt)}
+									</span>
+								) : null}
 								{live?.error ? (<span className="field__hint field__hint--error">{live.error}</span>) : null}
+								{server.enabled ? (
+									<div className="mcp-card__oauth">
+										<button
+											type="button"
+											className="btn btn--secondary"
+											disabled={Boolean(live?.connecting)}
+											onClick={() => onReconnectMcp?.(server.name)}
+										>
+											{t('settings.mcp.reconnect')}
+										</button>
+										<button
+											type="button"
+											className="btn btn--secondary"
+											disabled={!live?.connected || Boolean(live?.connecting)}
+											onClick={() => onRefreshMcpTools?.(server.name)}
+										>
+											{t('settings.mcp.refreshTools')}
+										</button>
+									</div>
+								) : null}
 								{oauthRequested ? (
 									<div className="mcp-card__oauth">
 										<button

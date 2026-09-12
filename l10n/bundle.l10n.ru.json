@@ -857,5 +857,11 @@
 	"settings.llmAutoCompact.hint": "После rule-based shrink, если всё ещё over budget - LLM summary на smallModel. По умолчанию выкл. (используйте /compact).",
 	"settings.apiKey.placeholderClear": "Будет удалён при Save",
 	"settings.secret.clear": "Удалить сохранённый ключ",
-	"settings.secret.markedClear": "Помечено к удалению - Save применит"
+	"settings.secret.markedClear": "Помечено к удалению - Save применит",
+	"settings.mcp.connecting": "Подключение...",
+	"settings.mcp.reconnect": "Переподключить",
+	"settings.mcp.refreshTools": "Обновить tools",
+	"settings.mcp.lastConnected": "Последнее подключение: {0}",
+	"settings.mcpToolResultMaxChars.label": "Лимит MCP tool result",
+	"settings.mcpToolResultMaxChars.hint": "Макс. символов результата call_mcp_tool / execute в модель (по умолчанию 50000)."
 }

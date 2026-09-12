@@ -352,6 +352,11 @@ export interface GenSettings {
 	 */
 	codeModeEnabled: boolean;
 	/**
+	 * Макс. символов результата MCP tool (call_mcp_tool / execute).
+	 * default 50000
+	 */
+	mcpToolResultMaxChars: number;
+	/**
 	 * MCP-серверы (stdio): имя, команда, args, env, headers, cwd, timeoutMs, enabled, oauth, mcpOAuth*.
 	 * headers: для stdio * GEN_MCP_HEADER_*; будущий HTTP-транспорт - как HTTP-заголовки.
 	 * oauth: по умолчанию false / omit; paste-token + PKCE/discovery (issuer / authorize / token URLs).
@@ -608,6 +613,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	toolOutputMaxChars: 12_000,
 	toolOutputModelMaxChars: 2_000,
 	codeModeEnabled: false,
+	mcpToolResultMaxChars: 50_000,
 	mcpServers: [],
 	subagentDepth: 2,
 	worktreesEnabled: false,

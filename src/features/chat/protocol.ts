@@ -271,6 +271,8 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'loadActivity' }
 	| { type: 'clearActivity' }
 	| { type: 'refreshMcp' }
+	| { type: 'reconnectMcp'; serverName: string }
+	| { type: 'refreshMcpTools'; serverName: string }
 	| { type: 'mcpOAuthAuth'; serverName: string }
 	| { type: 'mcpOAuthLogout'; serverName: string }
 	| { type: 'mcpOAuthDebug'; serverName: string }

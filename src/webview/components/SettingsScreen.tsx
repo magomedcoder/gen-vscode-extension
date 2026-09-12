@@ -55,6 +55,8 @@ interface SettingsScreenProps {
 	onCheckConnection?: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
 	onRefreshMcp?: () => void;
+	onReconnectMcp?: (serverName: string) => void;
+	onRefreshMcpTools?: (serverName: string) => void;
 	onMcpOAuthAuth?: (serverName: string) => void;
 	onMcpOAuthLogout?: (serverName: string) => void;
 	onMcpOAuthDebug?: (serverName: string) => void;
@@ -123,6 +125,8 @@ export function SettingsScreen({
 	onCheckConnection,
 	onOpenLogsFolder,
 	onRefreshMcp,
+	onReconnectMcp,
+	onRefreshMcpTools,
 	onMcpOAuthAuth,
 	onMcpOAuthLogout,
 	onMcpOAuthDebug,
@@ -359,6 +363,8 @@ export function SettingsScreen({
 								setField={setField}
 								mcpServers={mcpServers}
 								onRefreshMcp={onRefreshMcp}
+								onReconnectMcp={onReconnectMcp}
+								onRefreshMcpTools={onRefreshMcpTools}
 								onMcpOAuthAuth={onMcpOAuthAuth}
 								onMcpOAuthLogout={onMcpOAuthLogout}
 								onMcpOAuthDebug={onMcpOAuthDebug}

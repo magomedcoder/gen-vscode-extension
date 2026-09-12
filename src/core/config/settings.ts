@@ -210,6 +210,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		toolOutputMaxChars: Math.max(1000, Math.floor(asNumber(raw.toolOutputMaxChars, DEFAULT_SETTINGS.toolOutputMaxChars))),
 		toolOutputModelMaxChars: Math.max(400, Math.floor(asNumber(raw.toolOutputModelMaxChars, DEFAULT_SETTINGS.toolOutputModelMaxChars))),
 		codeModeEnabled: raw.codeModeEnabled === true,
+		mcpToolResultMaxChars: Math.max(500, Math.floor(asNumber(raw.mcpToolResultMaxChars, DEFAULT_SETTINGS.mcpToolResultMaxChars))),
 		mcpServers: Array.isArray(raw.mcpServers)
 			? raw.mcpServers.filter((s): s is NonNullable<typeof s> => Boolean(s && typeof s === 'object'))
 				.map((s) => {

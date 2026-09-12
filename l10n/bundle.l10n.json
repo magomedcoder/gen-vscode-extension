@@ -857,5 +857,11 @@
 	"settings.llmAutoCompact.hint": "After rule-based shrink, if still over budget, run an LLM summary on smallModel. Default off (use /compact).",
 	"settings.apiKey.placeholderClear": "Will clear on Save",
 	"settings.secret.clear": "Clear stored key",
-	"settings.secret.markedClear": "Marked to clear - Save to apply"
+	"settings.secret.markedClear": "Marked to clear - Save to apply",
+	"settings.mcp.connecting": "Connecting...",
+	"settings.mcp.reconnect": "Reconnect",
+	"settings.mcp.refreshTools": "Refresh tools",
+	"settings.mcp.lastConnected": "Last connected: {0}",
+	"settings.mcpToolResultMaxChars.label": "MCP tool result max chars",
+	"settings.mcpToolResultMaxChars.hint": "Cap for call_mcp_tool / execute results sent to the model (default 50000)."
 }

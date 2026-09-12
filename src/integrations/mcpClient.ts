@@ -94,17 +94,33 @@ export interface McpServerStatus {
 	name: string;
 	enabled: boolean;
 	connected: boolean;
+	// Идёт reconnect / initial connect этого сервера
+	connecting?: boolean;
 	toolCount: number;
 	tools: Array<{ 
 		name: string; 
 		description?: string 
 	}>;
 	error?: string;
+	// ISO время последнего успешного connect
+	lastConnectedAt?: string;
+	transport?: 'stdio';
 	// В конфиге oauth:true
 	oauthRequested?: boolean;
 	// Debug OAuth без сырого токена (только при oauth:true)
 	oauth?: McpOAuthDebugInfo;
 }
+
+// Обрезать MCP tool result для model/UI path
+export function truncateMcpToolResult(text: string, maxChars: number): string {
+	const cap = Math.max(500, Math.floor(maxChars));
+	if (text.length <= cap) {
+		return text;
+	}
+
+	return `${text.slice(0, Math.max(0, cap - 48))}\n\n[truncated MCP result; was ${text.length} chars]`;
+}
+
 
 interface JsonRpcMessage {
 	jsonrpc: '2.0';
@@ -209,7 +225,7 @@ class StdioMcpConnection {
 		}
 	}
 
-	private request(method: string, params?: unknown): Promise<unknown> {
+	private request(method: string, params?: unknown, signal?: AbortSignal): Promise<unknown> {
 		const id = this.nextId++;
 		const payload: JsonRpcMessage = { 
 			jsonrpc: '2.0', 
@@ -218,16 +234,45 @@ class StdioMcpConnection {
 			params 
 		};
 		return new Promise((resolve, reject) => {
-			this.pending.set(id, { resolve, reject });
+			if (signal?.aborted) {
+				reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+				return;
+			}
+
+			const cleanup = () => {
+				signal?.removeEventListener('abort', onAbort);
+			};
+			const onAbort = () => {
+				if (!this.pending.has(id)) {
+					return;
+				}
+				this.pending.delete(id);
+				cleanup();
+				reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+			};
+			signal?.addEventListener('abort', onAbort, { once: true });
+
+			this.pending.set(id, {
+				resolve: (v) => {
+					cleanup();
+					resolve(v);
+				},
+				reject: (e) => {
+					cleanup();
+					reject(e);
+				},
+			});
 			this.proc.stdin.write(`${JSON.stringify(payload)}\n`, (err) => {
 				if (err) {
 					this.pending.delete(id);
+					cleanup();
 					reject(err);
 				}
 			});
 			setTimeout(() => {
 				if (this.pending.has(id)) {
 					this.pending.delete(id);
+					cleanup();
 					reject(new Error(`MCP ${this.name}: таймаут на ${method}`));
 				}
 			}, this.requestTimeoutMs);
@@ -247,6 +292,10 @@ class StdioMcpConnection {
 			jsonrpc: '2.0', 
 			method: 'notifications/initialized' 
 		})}\n`);
+		await this.reloadTools();
+	}
+
+	async reloadTools(): Promise<void> {
 		const listed = await this.request('tools/list', {}) as {
 			tools?: Array<{
 				name: string
@@ -265,8 +314,8 @@ class StdioMcpConnection {
 		return this.tools;
 	}
 
-	async callTool(name: string, args: unknown): Promise<string> {
-		const result = await this.request('tools/call', { name, arguments: args ?? {} }) as {
+	async callTool(name: string, args: unknown, signal?: AbortSignal): Promise<string> {
+		const result = await this.request('tools/call', { name, arguments: args ?? {} }, signal) as {
 			content?: Array<{ 
 				type: string; 
 				text?: string 
@@ -293,17 +342,20 @@ class McpManager {
 	private connections = new Map<string, StdioMcpConnection>();
 	// Последняя ошибка подключения по имени сервера
 	private lastErrors = new Map<string, string>();
-	private connecting?: Promise<void>;
+	private lastConnectedAt = new Map<string, string>();
+	private connectingNames = new Set<string>();
+	private connectingAll?: Promise<void>;
+	private reconnecting = new Map<string, Promise<void>>();
 
 	async refresh(): Promise<void> {
-		if (this.connecting) {
-			return this.connecting;
+		if (this.connectingAll) {
+			return this.connectingAll;
 		}
 
-		this.connecting = this.refreshInner().finally(() => {
-			this.connecting = undefined;
+		this.connectingAll = this.refreshInner().finally(() => {
+			this.connectingAll = undefined;
 		});
-		return this.connecting;
+		return this.connectingAll;
 	}
 
 	private async refreshInner(): Promise<void> {
@@ -318,18 +370,77 @@ class McpManager {
 			if (!cfg.enabled || cfg.transport !== 'stdio' || !cfg.command) {
 				continue;
 			}
+			await this.connectOne(cfg);
+		}
+	}
 
-			try {
-				// oauth:true + токен * Bearer / MCP_OAUTH_TOKEN; иначе cfg без изменений
-				const cfgReady = await applyMcpOAuthToConfig(cfg);
-				const conn = new StdioMcpConnection(cfgReady);
-				await conn.initialize();
-				this.connections.set(cfg.name, conn);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				this.lastErrors.set(cfg.name, message);
-				console.error(`MCP ${cfg.name} ошибка:`, err);
-			}
+	// Переподключить один сервер (не трогая остальные)
+	async reconnect(serverName: string): Promise<void> {
+		const name = serverName.trim();
+		if (!name) {
+			return;
+		}
+		const inflight = this.reconnecting.get(name);
+		if (inflight) {
+			return inflight;
+		}
+
+		const run = this.reconnectInner(name).finally(() => {
+			this.reconnecting.delete(name);
+		});
+		this.reconnecting.set(name, run);
+		return run;
+	}
+
+	private async reconnectInner(name: string): Promise<void> {
+		const cfg = (getSettings().mcpServers ?? []).find((s) => s.name === name);
+		this.connections.get(name)?.dispose();
+		this.connections.delete(name);
+		this.lastErrors.delete(name);
+
+		if (!cfg || !cfg.enabled || cfg.transport !== 'stdio' || !cfg.command) {
+			return;
+		}
+
+		await this.connectOne(cfg);
+	}
+
+	private async connectOne(cfg: McpServerConfig): Promise<void> {
+		this.connectingNames.add(cfg.name);
+		try {
+			const cfgReady = await applyMcpOAuthToConfig(cfg);
+			const conn = new StdioMcpConnection(cfgReady);
+			await conn.initialize();
+			this.connections.set(cfg.name, conn);
+			this.lastErrors.delete(cfg.name);
+			this.lastConnectedAt.set(cfg.name, new Date().toISOString());
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.lastErrors.set(cfg.name, message);
+			console.error(`MCP ${cfg.name} ошибка:`, err);
+		} finally {
+			this.connectingNames.delete(cfg.name);
+		}
+	}
+
+	// tools/list на уже подключённом сервере; если нет - reconnect
+	async refreshTools(serverName: string): Promise<void> {
+		const name = serverName.trim();
+		let conn = this.connections.get(name);
+		if (!conn) {
+			await this.reconnect(name);
+			conn = this.connections.get(name);
+		}
+		if (!conn) {
+			throw new Error(this.lastErrors.get(name) || `MCP-сервер не подключён: ${name}`);
+		}
+		try {
+			await conn.reloadTools();
+			this.lastErrors.delete(name);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.lastErrors.set(name, message);
+			throw err;
 		}
 	}
 
@@ -342,14 +453,24 @@ class McpManager {
 		return out;
 	}
 
-	async callTool(server: string, toolName: string, args: unknown): Promise<string> {
-		await this.refresh();
-		const conn = this.connections.get(server);
+	async callTool(
+		server: string,
+		toolName: string,
+		args: unknown,
+		signal?: AbortSignal,
+	): Promise<string> {
+		let conn = this.connections.get(server);
 		if (!conn) {
-			throw new Error(`MCP-сервер не подключён: ${server}`);
+			await this.reconnect(server);
+			conn = this.connections.get(server);
+		}
+		if (!conn) {
+			throw new Error(this.lastErrors.get(server) || `MCP-сервер не подключён: ${server}`);
 		}
 
-		return conn.callTool(toolName, args);
+		const raw = await conn.callTool(toolName, args, signal);
+		const maxChars = getSettings().mcpToolResultMaxChars || 50_000;
+		return truncateMcpToolResult(raw, maxChars);
 	}
 
 	async status(): Promise<McpServerStatus[]> {
@@ -366,13 +487,17 @@ class McpManager {
 				name: s.name,
 				enabled: Boolean(s.enabled),
 				connected: Boolean(c),
+				connecting: this.connectingNames.has(s.name) || this.reconnecting.has(s.name),
 				toolCount: tools.length,
 				tools,
+				transport: 'stdio',
 				...(error ? { error } : {}),
+				...(this.lastConnectedAt.get(s.name)
+					? { lastConnectedAt: this.lastConnectedAt.get(s.name) }
+					: {}),
 			};
 			if (s.oauth === true) {
 				row.oauthRequested = true;
-				// Debug без сырого токена
 				row.oauth = await getMcpOAuthDebugInfo(s.name);
 			}
 			out.push(row);

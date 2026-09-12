@@ -61,7 +61,7 @@ export const callMcpToolTool: ToolDefinition = {
 		}
 
 		try {
-			const out = await getMcpManager().callTool(server, toolName, args.arguments ?? {});
+			const out = await getMcpManager().callTool(server, toolName, args.arguments ?? {}, ctx.signal);
 			return {
 				ok: true,
 				content: out

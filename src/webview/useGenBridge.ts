@@ -278,6 +278,14 @@ export function useGenBridge() {
 		vscodeApi.postMessage({ type: 'refreshMcp' });
 	}, []);
 
+	const reconnectMcp = useCallback((serverName: string) => {
+		vscodeApi.postMessage({ type: 'reconnectMcp', serverName });
+	}, []);
+
+	const refreshMcpTools = useCallback((serverName: string) => {
+		vscodeApi.postMessage({ type: 'refreshMcpTools', serverName });
+	}, []);
+
 	const mcpOAuthAuth = useCallback((serverName: string) => {
 		vscodeApi.postMessage({ type: 'mcpOAuthAuth', serverName });
 	}, []);
@@ -371,6 +379,8 @@ export function useGenBridge() {
 		checkConnection,
 		openLogsFolder,
 		refreshMcp,
+		reconnectMcp,
+		refreshMcpTools,
 		mcpOAuthAuth,
 		mcpOAuthLogout,
 		mcpOAuthDebug,

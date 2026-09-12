@@ -87,6 +87,8 @@ export function App() {
 		checkConnection,
 		openLogsFolder,
 		refreshMcp,
+		reconnectMcp,
+		refreshMcpTools,
 		mcpOAuthAuth,
 		mcpOAuthLogout,
 		mcpOAuthDebug,
@@ -148,6 +150,8 @@ export function App() {
 				onCheckConnection={checkConnection}
 				onOpenLogsFolder={openLogsFolder}
 				onRefreshMcp={refreshMcp}
+				onReconnectMcp={reconnectMcp}
+				onRefreshMcpTools={refreshMcpTools}
 				onMcpOAuthAuth={mcpOAuthAuth}
 				onMcpOAuthLogout={mcpOAuthLogout}
 				onMcpOAuthDebug={mcpOAuthDebug}

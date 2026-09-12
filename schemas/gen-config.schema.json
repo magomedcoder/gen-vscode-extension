@@ -86,6 +86,11 @@
 			"type": "boolean",
 			"description": "Experimental: enable execute/code-mode (JSON steps * MCP tools only; no host JS eval). Default false."
 		},
+		"mcpToolResultMaxChars": {
+			"type": "integer",
+			"minimum": 500,
+			"description": "Max chars of MCP tool results returned to the model (default 50000)"
+		},
 		"primaryTools": {
 			"type": "array",
 			"items": { "type": "string" },

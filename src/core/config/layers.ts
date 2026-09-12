@@ -26,6 +26,7 @@ export const FILE_LAYER_KEYS = [
 	'commentSystemPrompt',
 	'mcpServers',
 	'codeModeEnabled',
+	'mcpToolResultMaxChars',
 	'primaryTools',
 	'modelRoutedPatch',
 	'watcherIgnore',
