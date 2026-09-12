@@ -1,45 +1,41 @@
-import * as vscode from 'vscode';
-import type { ExtensionContext, SecretStorage } from 'vscode';
+import type { ExtensionContext } from 'vscode';
+import { buildAuthHeaders } from './apiKeyHeaders';
+import { clearSecret, getSecret, hasSecret, initSecretVault, setSecret } from './secretVault';
 
-const API_KEY_SECRET = 'gen.apiKey';
-
-let secrets: SecretStorage | undefined;
+export { buildAuthHeaders } from './apiKeyHeaders';
 
 export function initApiKeyStore(context: ExtensionContext): void {
-	secrets = context.secrets;
+	initSecretVault(context);
 }
 
 export async function getApiKey(): Promise<string> {
-	return (await secrets?.get(API_KEY_SECRET))?.trim() ?? '';
+	return getSecret('apiKey');
 }
 
 export async function hasApiKey(): Promise<boolean> {
-	return Boolean(await getApiKey());
+	return hasSecret('apiKey');
 }
 
 export async function setApiKey(value: string): Promise<void> {
-	if (!secrets) {
-		throw new Error(vscode.l10n.t('config.apiKeyNotInit'));
-	}
-
-	const trimmed = value.trim();
-	if (!trimmed) {
-		await secrets.delete(API_KEY_SECRET);
-		return;
-	}
-
-	await secrets.store(API_KEY_SECRET, trimmed);
+	await setSecret('apiKey', value);
 }
 
-export function buildAuthHeaders(apiKey: string, headerName: string, scheme: string): Record<string, string> {
-	const key = apiKey.trim();
-	if (!key) {
-		return {};
-	}
+export async function clearApiKey(): Promise<void> {
+	await clearSecret('apiKey');
+}
 
-	const name = headerName.trim() || 'Authorization';
-	const prefix = scheme.trim();
-	return {
-		[name]: prefix ? `${prefix} ${key}` : key,
-	};
+export async function getWebSearchApiKey(): Promise<string> {
+	return getSecret('webSearchApiKey');
+}
+
+export async function hasWebSearchApiKey(): Promise<boolean> {
+	return hasSecret('webSearchApiKey');
+}
+
+export async function setWebSearchApiKey(value: string): Promise<void> {
+	await setSecret('webSearchApiKey', value);
+}
+
+export async function clearWebSearchApiKey(): Promise<void> {
+	await clearSecret('webSearchApiKey');
 }

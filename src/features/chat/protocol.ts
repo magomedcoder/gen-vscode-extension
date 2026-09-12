@@ -177,8 +177,8 @@ export interface ChatViewState {
 }
 
 export type ToWebviewMessage = | { type: 'state'; state: ChatViewState }
-	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
-	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
+	| { type: 'settings'; settings: GenSettings; apiKeySet: boolean; webSearchApiKeySet?: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
+	| { type: 'settingsSaved'; settings: GenSettings; apiKeySet: boolean; webSearchApiKeySet?: boolean; personas?: PersonaOption[]; adminPolicy?: AdminPolicyInfo }
 	| { type: 'settingsError'; message: string }
 	| { type: 'models'; models: Array<{ id: string; label: string }>; requestId: number }
 	| { type: 'modelsError'; message: string; requestId: number }
@@ -246,7 +246,7 @@ export type FromWebviewMessage = | { type: 'ready' }
 	| { type: 'setModel'; model: string }
 	| { type: 'openExternal'; url: string }
 	| { type: 'openSettings' }
-	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string }
+	| { type: 'saveSettings'; settings: GenSettings; apiKey?: string; clearApiKey?: boolean; webSearchApiKey?: string; clearWebSearchApiKey?: boolean }
 	| { type: 'loadModels'; baseUrl: string; requestId: number }
 	| { type: 'checkConnection'; baseUrl: string; requestId: number }
 	| { type: 'openLogsFolder' }

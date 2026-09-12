@@ -2,7 +2,7 @@ import { normalizeApprovalPolicy } from '../../features/agent/permissionPolicy';
 import type { ApprovalPolicy } from './approvalTypes';
 import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
-import { initApiKeyStore } from './apiKey';
+import { initApiKeyStore, getWebSearchApiKey, setWebSearchApiKey } from './apiKey';
 import { initMcpOAuthStore } from '../stores/mcpOAuthStore';
 import { applyAdminPolicy, stripAdminLockedForStorage } from './adminPolicy';
 import { deepMerge, getFileSettingsOverlay, initConfigLayers, onConfigLayersChanged, pickNonDefaultSettings } from './layers';
@@ -11,11 +11,14 @@ import { DEFAULT_SETTINGS } from './types';
 import type { ChatMode, ChatTextSize, ChatViewLocation, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
 export type { ChatMode, ChatTextSize, ChatViewLocation, CommentStyle, GenSettings, ProviderUsePolicy, RevealOnEdit, ShareMode, ThinkingDisplay, WebSearchBackend } from './types';
 export { DEFAULT_SETTINGS, EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS, isAgentLikeMode, resolveModeModel, resolveSmallModel } from './types';
-export { getApiKey, hasApiKey, initApiKeyStore, setApiKey } from './apiKey';
+export { getApiKey, hasApiKey, initApiKeyStore, setApiKey, clearApiKey, getWebSearchApiKey, hasWebSearchApiKey, setWebSearchApiKey, clearWebSearchApiKey } from './apiKey';
+export { initSecretVault } from './secretVault';
+export type { GenSecretId } from './secretVault';
 export { FILE_LAYER_KEYS, getConfigLayersSnapshot, getEffectiveHooksInline, getEffectiveHooksPath, reloadConfigLayers } from './layers';
 export { ADMIN_POLICY_KEYS, getAdminPolicySnapshot, isAdminPolicyActive } from './adminPolicy';
 export type { AdminPolicyKey, AdminPolicySnapshot } from './adminPolicy';
 const STORAGE_KEY = 'gen.settings';
+const WEB_SEARCH_KEY_MIGRATED = 'gen.webSearchApiKey.migrated';
 
 let store: Memento | undefined;
 let sessionModel = '';
@@ -168,8 +171,8 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		webSearchBackend: normalizeWebSearchBackend(raw.webSearchBackend),
 		webSearchHttpUrl: String(raw.webSearchHttpUrl ?? DEFAULT_SETTINGS.webSearchHttpUrl).trim(),
 		webSearchHttpHeader: String(raw.webSearchHttpHeader ?? DEFAULT_SETTINGS.webSearchHttpHeader).trim() || DEFAULT_SETTINGS.webSearchHttpHeader,
-		// MVP: ключ в settings (interpolate); не для production - предпочтительнее SecretStorage
-		webSearchApiKey: String(raw.webSearchApiKey ?? DEFAULT_SETTINGS.webSearchApiKey),
+		// Ключ только SecretStorage - никогда не держим в effective/JSON
+		webSearchApiKey: '',
 		webFetchEnabled: raw.webFetchEnabled !== false,
 		systemPrompt: String(raw.systemPrompt ?? '').trim(),
 		temperature: clamp(asNumber(raw.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
@@ -321,6 +324,7 @@ export function initSettings(context: ExtensionContext): void {
 	sessionModel = '';
 	// JSON-слои: user (~/.config/gen) + project (.gen/config.json)
 	initConfigLayers(context);
+	void migrateWebSearchApiKeyToVault(context);
 	context.subscriptions.push(
 		onConfigLayersChanged(() => {
 			for (const listener of listeners) {
@@ -331,6 +335,31 @@ export function initSettings(context: ExtensionContext): void {
 	);
 	// when-clause для views читает contributes.configuration - синхронизируем с GenSettings
 	void syncChatViewLocationToWorkspace(getSettings().chatViewLocation);
+}
+
+// Одноразовая миграция: plain `webSearchApiKey` из UI globalState / JSON-слоёв -> SecretStorage, затем очистка UI-хранилища. `${env:}` / `{file:}` в значении сохраняем как есть (resolve через interpolate).
+async function migrateWebSearchApiKeyToVault(context: ExtensionContext): Promise<void> {
+	if (context.globalState.get<boolean>(WEB_SEARCH_KEY_MIGRATED)) {
+		return;
+	}
+
+	try {
+		const stored = store?.get<Partial<GenSettings>>(STORAGE_KEY);
+		const legacy = String(stored?.webSearchApiKey ?? '').trim();
+		const existing = await getWebSearchApiKey();
+		if (!existing && legacy) {
+			await setWebSearchApiKey(legacy);
+		}
+
+		if (stored && String(stored.webSearchApiKey ?? '').trim()) {
+			await store?.update(STORAGE_KEY, {
+				...stored,
+				webSearchApiKey: ''
+			});
+		}
+	} finally {
+		await context.globalState.update(WEB_SEARCH_KEY_MIGRATED, true);
+	}
 }
 
 // Прописать gen.chatViewLocation в VS Code config (для view `when`)

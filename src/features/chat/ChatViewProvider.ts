@@ -5,7 +5,7 @@ import type { ChatProjectStatus, FromWebviewMessage, ToWebviewMessage } from './
 import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../../core/llm/client';
 import { isAbortError } from '../../core/llm/errors';
-import { getSettings, hasApiKey, getAdminPolicySnapshot, isAdminPolicyActive, onSettingsChanged, setSessionModel } from '../../core/config/settings';
+import { getSettings, hasApiKey, hasWebSearchApiKey, getAdminPolicySnapshot, isAdminPolicyActive, onSettingsChanged, setSessionModel } from '../../core/config/settings';
 import { loadWebviewL10n } from '../../l10n/loadBundle';
 import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../../host/ui/confirmDialog';
@@ -37,6 +37,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					type: 'settings',
 					settings: getSettings(),
 					apiKeySet: await hasApiKey(),
+					webSearchApiKeySet: await hasWebSearchApiKey(),
 					adminPolicy: {
 						active: isAdminPolicyActive(),
 						path: snap.path,
@@ -153,6 +154,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 						type: 'settings',
 						settings: getSettings(),
 						apiKeySet: await hasApiKey(),
+						webSearchApiKeySet: await hasWebSearchApiKey(),
 						adminPolicy: {
 							active: isAdminPolicyActive(),
 							path: snap.path,

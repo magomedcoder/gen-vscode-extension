@@ -33,7 +33,6 @@ export const FILE_LAYER_KEYS = [
 	'webSearchBackend',
 	'webSearchHttpUrl',
 	'webSearchHttpHeader',
-	'webSearchApiKey',
 	'webFetchEnabled',
 	'skillsPaths',
 	'skillsUrls',

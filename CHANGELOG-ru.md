@@ -2,6 +2,10 @@
 
 [English version](CHANGELOG.md)
 
+## dev (Версия в разработке)
+
+- **Secrets:** единый SecretStorage vault; `webSearchApiKey` больше не в JSON/слоях (migrate + clear в UI); LLM apiKey через тот же vault
+
 ## 0.4.0 (11 сентября 2026)
 
 - **Context / compact:** budget токенов для @-вложений + eviction по kind; preflight trim; `toolOutputModelMaxChars` (default 2000); один overflow retry; `midLoopAutoCompact` default on; `llmAutoCompact` default **off**; preview `/compact` + undo; near-budget / n_ctx warn + CTA `/compact`; breakdown в шапке

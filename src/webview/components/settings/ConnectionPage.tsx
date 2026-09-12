@@ -7,12 +7,14 @@ import { SettingsSection } from './SettingsSection';
 interface ConnectionPageProps extends SettingsPageProps {
 	apiKeySet: boolean;
 	apiKeyDraft: string;
+	clearApiKey?: boolean;
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
 	connectionHealth?: { ok: boolean; message: string };
 	connectionHealthLoading?: boolean;
 	onApiKeyDraft: (value: string) => void;
+	onClearApiKey?: () => void;
 	onLoadModels: (baseUrl: string) => void;
 	onCheckConnection?: (baseUrl: string) => void;
 }
@@ -22,12 +24,14 @@ export function ConnectionPage({
 	setField,
 	apiKeySet,
 	apiKeyDraft,
+	clearApiKey = false,
 	models,
 	modelsStatus,
 	modelsLoading,
 	connectionHealth,
 	connectionHealthLoading = false,
 	onApiKeyDraft,
+	onClearApiKey,
 	onLoadModels,
 	onCheckConnection,
 }: ConnectionPageProps) {
@@ -79,16 +83,35 @@ export function ConnectionPage({
 					) : null}
 				</div>
 
-				<FieldText
-					labelKey="settings.apiKey.label"
-					hintKey="settings.apiKey.hint"
-					type="password"
-					autoComplete="off"
-					value={apiKeyDraft}
-					placeholder={apiKeySet ? t('settings.apiKey.placeholderSet') : ''}
-					onChange={onApiKeyDraft}
-				/>
-
+				<div className="field">
+					<FieldText
+						labelKey="settings.apiKey.label"
+						hintKey="settings.apiKey.hint"
+						type="password"
+						autoComplete="off"
+						value={apiKeyDraft}
+						placeholder={
+							clearApiKey
+								? t('settings.apiKey.placeholderClear')
+								: apiKeySet
+									? t('settings.apiKey.placeholderSet')
+									: ''
+						}
+						onChange={onApiKeyDraft}
+					/>
+					{(apiKeySet || clearApiKey) ? (
+						<div className="field__row" style={{ marginTop: 6 }}>
+							<button
+								className="btn btn--secondary"
+								type="button"
+								onClick={() => onClearApiKey?.()}
+								disabled={clearApiKey}
+							>
+								{clearApiKey ? t('settings.secret.markedClear') : t('settings.secret.clear')}
+							</button>
+						</div>
+					) : null}
+				</div>
 				<label className="field">
 					<span className="field__label">{t('settings.model.label')}</span>
 					<div className="field__row">

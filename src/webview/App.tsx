@@ -68,6 +68,7 @@ export function App() {
 		personas,
 		adminPolicy,
 		apiKeySet,
+		webSearchApiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,
@@ -128,6 +129,7 @@ export function App() {
 				personas={personas}
 				adminPolicy={adminPolicy}
 				apiKeySet={apiKeySet}
+				webSearchApiKeySet={webSearchApiKeySet}
 				status={settingsStatus}
 				models={models}
 				modelsStatus={modelsStatus}

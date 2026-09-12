@@ -178,8 +178,8 @@ export interface GenSettings {
 	 */
 	webSearchHttpHeader: string;
 	/**
-	 * API-ключ для exa / parallel / http (MVP: plain settings + interpolate; для production - SecretStorage).
-	 * Поддерживает `${env:NAME}` / `{file:path}`.
+	 * Deprecated in JSON: ключ только в SecretStorage (`gen.webSearchApiKey`).
+	 * Поле в GenSettings всегда пустое в effective settings (совместимость типов).
 	 */
 	webSearchApiKey: string;
 	/**

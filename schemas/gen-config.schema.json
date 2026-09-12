@@ -108,7 +108,10 @@
 		},
 		"webSearchHttpUrl": { "type": "string" },
 		"webSearchHttpHeader": { "type": "string" },
-		"webSearchApiKey": { "type": "string" },
+		"webSearchApiKey": {
+			"type": "string",
+			"description": "Deprecated in JSON - use Settings UI / SecretStorage (gen.webSearchApiKey). Ignored if present in config layers."
+		},
 		"webFetchEnabled": { "type": "boolean" },
 		"skillsPaths": {
 			"type": "array",

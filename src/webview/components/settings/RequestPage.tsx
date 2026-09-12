@@ -6,9 +6,23 @@ import { SettingsSection } from './SettingsSection';
 
 interface RequestPageProps extends SettingsPageProps {
 	cachedNCtx?: number;
+	webSearchApiKeySet?: boolean;
+	webSearchApiKeyDraft?: string;
+	clearWebSearchApiKey?: boolean;
+	onWebSearchApiKeyDraft?: (value: string) => void;
+	onClearWebSearchApiKey?: () => void;
 }
 
-export function RequestPage({ draft, setField, cachedNCtx }: RequestPageProps) {
+export function RequestPage({
+	draft,
+	setField,
+	cachedNCtx,
+	webSearchApiKeySet = false,
+	webSearchApiKeyDraft = '',
+	clearWebSearchApiKey = false,
+	onWebSearchApiKeyDraft,
+	onClearWebSearchApiKey,
+}: RequestPageProps) {
 	const nCtxWarn = typeof cachedNCtx === 'number'
 		&& cachedNCtx > 0
 		&& draft.maxContextTokens > cachedNCtx;
@@ -142,14 +156,35 @@ export function RequestPage({ draft, setField, cachedNCtx }: RequestPageProps) {
 				) : null}
 
 				{draft.webSearchBackend === 'exa' || draft.webSearchBackend === 'parallel' || draft.webSearchBackend === 'http' ? (
-					<FieldText
-						labelKey="settings.webSearchApiKey.label"
-						hintKey="settings.webSearchApiKey.hint"
-						type="password"
-						autoComplete="off"
-						value={draft.webSearchApiKey}
-						onChange={(v) => setField('webSearchApiKey', v)}
-					/>
+					<div className="field">
+						<FieldText
+							labelKey="settings.webSearchApiKey.label"
+							hintKey="settings.webSearchApiKey.hint"
+							type="password"
+							autoComplete="off"
+							value={webSearchApiKeyDraft}
+							placeholder={
+								clearWebSearchApiKey
+									? t('settings.apiKey.placeholderClear')
+									: webSearchApiKeySet
+										? t('settings.apiKey.placeholderSet')
+										: ''
+							}
+							onChange={(v) => onWebSearchApiKeyDraft?.(v)}
+						/>
+						{(webSearchApiKeySet || clearWebSearchApiKey) ? (
+							<div className="field__row" style={{ marginTop: 6 }}>
+								<button
+									className="btn btn--secondary"
+									type="button"
+									onClick={() => onClearWebSearchApiKey?.()}
+									disabled={clearWebSearchApiKey}
+								>
+									{clearWebSearchApiKey ? t('settings.secret.markedClear') : t('settings.secret.clear')}
+								</button>
+							</div>
+						) : null}
+					</div>
 				) : null}
 			</SettingsSection>
 

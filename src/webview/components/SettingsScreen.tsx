@@ -29,6 +29,7 @@ interface SettingsScreenProps {
 	adminPolicy?: AdminPolicyInfo;
 	status?: string;
 	apiKeySet: boolean;
+	webSearchApiKeySet?: boolean;
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
@@ -44,7 +45,12 @@ interface SettingsScreenProps {
 	agents?: AgentsPageData;
 	agentsStatus?: string;
 	rulesSkills?: RulesSkillsPageData;
-	onSave: (settings: GenSettings, api?: { apiKey?: string }) => void;
+	onSave: (settings: GenSettings, api?: {
+		apiKey?: string;
+		clearApiKey?: boolean;
+		webSearchApiKey?: string;
+		clearWebSearchApiKey?: boolean;
+	}) => void;
 	onLoadModels: (baseUrl: string) => void;
 	onCheckConnection?: (baseUrl: string) => void;
 	onOpenLogsFolder: () => void;
@@ -98,6 +104,7 @@ export function SettingsScreen({
 	personas = [],
 	adminPolicy,
 	apiKeySet,
+	webSearchApiKeySet = false,
 	status,
 	models,
 	modelsStatus,
@@ -133,6 +140,9 @@ export function SettingsScreen({
 	const [page, setPage] = useState<SettingsPageId>('connection');
 	const [draft, setDraft] = useState<GenSettings>(settings);
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
+	const [clearApiKey, setClearApiKey] = useState(false);
+	const [webSearchApiKeyDraft, setWebSearchApiKeyDraft] = useState('');
+	const [clearWebSearchApiKey, setClearWebSearchApiKey] = useState(false);
 
 	const lockedKeySet = useMemo(
 		() => new Set(adminPolicy?.active ? adminPolicy.lockedKeys : []),
@@ -140,14 +150,17 @@ export function SettingsScreen({
 	);
 
 	useEffect(() => {
-		setDraft(settings);
+		setDraft({ ...settings, webSearchApiKey: '' });
 		setApiKeyDraft('');
+		setClearApiKey(false);
+		setWebSearchApiKeyDraft('');
+		setClearWebSearchApiKey(false);
 		if (settings.baseUrl.trim()) {
 			onLoadModels(settings.baseUrl);
 		} else {
 			onLoadModels('');
 		}
-	}, [settings, apiKeySet, onLoadModels]);
+	}, [settings, apiKeySet, webSearchApiKeySet, onLoadModels]);
 
 	useEffect(() => {
 		if (models.length === 0) {
@@ -194,13 +207,19 @@ export function SettingsScreen({
 		
 		setDraft(next);
 		setApiKeyDraft('');
+		setClearApiKey(false);
+		setWebSearchApiKeyDraft('');
+		setClearWebSearchApiKey(false);
 		onSave(next);
 	};
 
 	const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
 		event.preventDefault();
-		onSave(draft, {
-			apiKey: apiKeyDraft,
+		onSave({ ...draft, webSearchApiKey: '' }, {
+			apiKey: clearApiKey ? undefined : apiKeyDraft,
+			clearApiKey: clearApiKey || undefined,
+			webSearchApiKey: clearWebSearchApiKey ? undefined : webSearchApiKeyDraft,
+			clearWebSearchApiKey: clearWebSearchApiKey || undefined,
 		});
 	};
 
@@ -245,16 +264,39 @@ export function SettingsScreen({
 									setField={setField}
 									apiKeySet={apiKeySet}
 									apiKeyDraft={apiKeyDraft}
+									clearApiKey={clearApiKey}
 									models={models}
 									modelsStatus={modelsStatus}
 									modelsLoading={modelsLoading}
 									connectionHealth={connectionHealth}
 									connectionHealthLoading={connectionHealthLoading}
-									onApiKeyDraft={setApiKeyDraft}
+									onApiKeyDraft={(v) => {
+										setClearApiKey(false);
+										setApiKeyDraft(v);
+									}}
+									onClearApiKey={() => {
+										setClearApiKey(true);
+										setApiKeyDraft('');
+									}}
 									onLoadModels={onLoadModels}
 									onCheckConnection={onCheckConnection}
 								/>
-								<RequestPage draft={draft} setField={setField} cachedNCtx={cachedNCtx} />
+								<RequestPage
+									draft={draft}
+									setField={setField}
+									cachedNCtx={cachedNCtx}
+									webSearchApiKeySet={webSearchApiKeySet}
+									webSearchApiKeyDraft={webSearchApiKeyDraft}
+									clearWebSearchApiKey={clearWebSearchApiKey}
+									onWebSearchApiKeyDraft={(v) => {
+										setClearWebSearchApiKey(false);
+										setWebSearchApiKeyDraft(v);
+									}}
+									onClearWebSearchApiKey={() => {
+										setClearWebSearchApiKey(true);
+										setWebSearchApiKeyDraft('');
+									}}
+								/>
 							</>
 						) : null}
 						{page === 'chat' ? (

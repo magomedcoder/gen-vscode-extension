@@ -491,7 +491,7 @@
 	"settings.baseUrl.label": "Base URL",
 	"settings.apiKey.label": "API key",
 	"settings.apiKey.placeholderSet": "key saved - enter a new one to replace",
-	"settings.apiKey.hint": "Empty - do not send a header.",
+	"settings.apiKey.hint": "Stored in VS Code SecretStorage (not JSON). Leave blank to keep the current key.",
 	"settings.authHeader.label": "Key header (e.g. Authorization)",
 	"settings.authScheme.label": "Key scheme (e.g. Bearer)",
 	"settings.authScheme.hint": "Default is Authorization: Bearer and the key.",
@@ -527,7 +527,7 @@
 	"settings.webSearchHttpUrl.hint": "Use {query} in the URL, or leave it out to append ?q= / &q=. Ignored for Exa/Parallel.",
 	"settings.webSearchHttpHeader.label": "Web search API key header",
 	"settings.webSearchApiKey.label": "Web search API key",
-	"settings.webSearchApiKey.hint": "MVP: stored in settings (supports ${env:} / {file:}). Exa/Parallel send x-api-key. Not for production - prefer SecretStorage.",
+	"settings.webSearchApiKey.hint": "Stored in VS Code SecretStorage (not JSON). Optional ${env:NAME} / {file:path} in the value. Leave blank to keep the current key.",
 	"settings.webFetchEnabled.label": "Allow web fetch / @link",
 	"settings.enableWorkspaceContext.label": "Inject workspace context into prompts",
 	"settings.approvalPolicy.mode": "Mode",
@@ -854,5 +854,8 @@
 	"settings.toolOutputModelMaxChars.label": "Tool output cap (model path)",
 	"settings.toolOutputModelMaxChars.hint": "Max chars of each tool result sent to the model (default 2000). Separate from the UI tool card.",
 	"settings.llmAutoCompact.label": "LLM auto-compact (opt-in)",
-	"settings.llmAutoCompact.hint": "After rule-based shrink, if still over budget, run an LLM summary on smallModel. Default off (use /compact)."
+	"settings.llmAutoCompact.hint": "After rule-based shrink, if still over budget, run an LLM summary on smallModel. Default off (use /compact).",
+	"settings.apiKey.placeholderClear": "Will clear on Save",
+	"settings.secret.clear": "Clear stored key",
+	"settings.secret.markedClear": "Marked to clear - Save to apply"
 }

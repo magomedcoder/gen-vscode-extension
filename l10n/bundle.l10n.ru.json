@@ -491,7 +491,7 @@
 	"settings.baseUrl.label": "Базовый URL",
 	"settings.apiKey.label": "API-ключ",
 	"settings.apiKey.placeholderSet": "ключ сохранён - введи новый, чтобы заменить",
-	"settings.apiKey.hint": "Пусто - не отправлять заголовок.",
+	"settings.apiKey.hint": "Хранится в VS Code SecretStorage (не в JSON). Пусто - оставить текущий ключ.",
 	"settings.authHeader.label": "Заголовок ключа (например Authorization)",
 	"settings.authScheme.label": "Схема ключа (например Bearer)",
 	"settings.authScheme.hint": "По умолчанию Authorization: Bearer и ключ.",
@@ -527,7 +527,7 @@
 	"settings.webSearchHttpUrl.hint": "Подставь {query} в URL или оставь пустым хвост - допишется ?q= / &q=. Для Exa/Parallel не используется.",
 	"settings.webSearchHttpHeader.label": "Заголовок API-ключа web search",
 	"settings.webSearchApiKey.label": "API-ключ web search",
-	"settings.webSearchApiKey.hint": "MVP: в настройках (поддерживает ${env:} / {file:}). Exa/Parallel шлют x-api-key. Не для production - лучше SecretStorage.",
+	"settings.webSearchApiKey.hint": "Хранится в VS Code SecretStorage (не в JSON). В значении можно ${env:NAME} / {file:path}. Пусто - оставить текущий ключ.",
 	"settings.webFetchEnabled.label": "Разрешить web fetch / @link",
 	"settings.enableWorkspaceContext.label": "Подмешивать контекст workspace в prompt",
 	"settings.approvalPolicy.mode": "Режим",
@@ -854,5 +854,8 @@
 	"settings.toolOutputModelMaxChars.label": "Лимит tool output (в модель)",
 	"settings.toolOutputModelMaxChars.hint": "Макс. символов каждого tool result в prompt модели (по умолчанию 2000). Отдельно от UI-карточки.",
 	"settings.llmAutoCompact.label": "LLM auto-compact (opt-in)",
-	"settings.llmAutoCompact.hint": "После rule-based shrink, если всё ещё over budget - LLM summary на smallModel. По умолчанию выкл. (используйте /compact)."
+	"settings.llmAutoCompact.hint": "После rule-based shrink, если всё ещё over budget - LLM summary на smallModel. По умолчанию выкл. (используйте /compact).",
+	"settings.apiKey.placeholderClear": "Будет удалён при Save",
+	"settings.secret.clear": "Удалить сохранённый ключ",
+	"settings.secret.markedClear": "Помечено к удалению - Save применит"
 }

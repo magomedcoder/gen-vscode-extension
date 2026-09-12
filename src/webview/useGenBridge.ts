@@ -55,6 +55,7 @@ export function useGenBridge() {
 	const [personas, setPersonas] = useState<PersonaOption[]>([]);
 	const [adminPolicy, setAdminPolicy] = useState<AdminPolicyInfo | undefined>();
 	const [apiKeySet, setApiKeySet] = useState(false);
+	const [webSearchApiKeySet, setWebSearchApiKeySet] = useState(false);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
 	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
@@ -88,6 +89,7 @@ export function useGenBridge() {
 				case 'settings':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
+					setWebSearchApiKeySet(Boolean(data.webSearchApiKeySet));
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
@@ -96,6 +98,7 @@ export function useGenBridge() {
 				case 'settingsSaved':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
+					setWebSearchApiKeySet(Boolean(data.webSearchApiKeySet));
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
@@ -208,12 +211,20 @@ export function useGenBridge() {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
-	const saveSettings = useCallback((next: GenSettings, api?: { apiKey?: string }) => {
+	const saveSettings = useCallback((next: GenSettings, api?: {
+		apiKey?: string;
+		clearApiKey?: boolean;
+		webSearchApiKey?: string;
+		clearWebSearchApiKey?: boolean;
+	}) => {
 		setSettingsStatus(t('settings.status.saving'));
 		vscodeApi.postMessage({
 			type: 'saveSettings',
-			settings: next,
+			settings: { ...next, webSearchApiKey: '' },
 			apiKey: api?.apiKey,
+			clearApiKey: api?.clearApiKey,
+			webSearchApiKey: api?.webSearchApiKey,
+			clearWebSearchApiKey: api?.clearWebSearchApiKey,
 		});
 	}, []);
 
@@ -341,6 +352,7 @@ export function useGenBridge() {
 		personas,
 		adminPolicy,
 		apiKeySet,
+		webSearchApiKeySet,
 		settingsStatus,
 		models,
 		modelsStatus,

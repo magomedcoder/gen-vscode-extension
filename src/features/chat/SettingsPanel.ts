@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getEffectiveHooksPath } from '../../core/config/layers';
-import { getAdminPolicySnapshot, getSettings, hasApiKey, isAdminPolicyActive, setApiKey, setSessionModel, updateSettings } from '../../core/config/settings';
+import { clearApiKey, clearWebSearchApiKey, getSettings, hasApiKey, hasWebSearchApiKey, isAdminPolicyActive, setApiKey, setSessionModel, setWebSearchApiKey, updateSettings, getAdminPolicySnapshot } from '../../core/config/settings';
 import { collectIndexEngineStatus } from '../index/engineStatus';
 import { getIndexManagerInstance } from '../index/IndexManager';
 import { getMcpManager } from '../../integrations/mcpClient';
@@ -128,6 +128,7 @@ export class SettingsPanel {
 			type: 'settings',
 			settings: getSettings(),
 			apiKeySet: await hasApiKey(),
+			webSearchApiKeySet: await hasWebSearchApiKey(),
 			personas: await this.listPersonaOptions(),
 			adminPolicy: this.adminPolicyInfo(),
 		});
@@ -239,15 +240,27 @@ export class SettingsPanel {
 				return;
 			case 'saveSettings':
 				try {
-					if (typeof msg.apiKey === 'string' && msg.apiKey.trim()) {
+					if (msg.clearApiKey) {
+						await clearApiKey();
+					} else if (typeof msg.apiKey === 'string' && msg.apiKey.trim()) {
 						await setApiKey(msg.apiKey);
 					}
 
-					const saved = await updateSettings(msg.settings);
+					if (msg.clearWebSearchApiKey) {
+						await clearWebSearchApiKey();
+					} else if (typeof msg.webSearchApiKey === 'string' && msg.webSearchApiKey.trim()) {
+						await setWebSearchApiKey(msg.webSearchApiKey);
+					}
+
+					const saved = await updateSettings({
+						...msg.settings,
+						webSearchApiKey: '',
+					});
 					this.post({
 						type: 'settingsSaved',
 						settings: saved,
 						apiKeySet: await hasApiKey(),
+						webSearchApiKeySet: await hasWebSearchApiKey(),
 						personas: await this.listPersonaOptions(),
 						adminPolicy: this.adminPolicyInfo(),
 					});

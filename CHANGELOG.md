@@ -2,6 +2,10 @@
 
 [Русская версия](CHANGELOG-ru.md)
 
+## dev (Development version)
+
+- **Secrets:** unified SecretStorage vault; `webSearchApiKey` no longer in JSON/settings layers (migrate + clear UI); LLM apiKey via same vault
+
 ## 0.4.0 (11 September 2026)
 
 - **Context / compact (prod path):** mention token budgets + per-kind eviction (`@codebase` first); preflight trim before complete; tool model-path cap `toolOutputModelMaxChars` (default 2000); overflow **one** shrink+retry; `midLoopAutoCompact` default on (rule-based); `llmAutoCompact` default **off**; `/compact` preview + undo; near-budget / n_ctx warn banners + `/compact` CTA; budget breakdown in header

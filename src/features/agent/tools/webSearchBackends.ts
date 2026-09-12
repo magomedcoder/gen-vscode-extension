@@ -1,4 +1,5 @@
 import type { GenSettings, WebSearchBackend } from '../../../core/config/types';
+import { getWebSearchApiKey } from '../../../core/config/apiKey';
 import { interpolateConfigString } from '../../../core/config/interpolate';
 
 // Один результат веб-поиска
@@ -88,10 +89,11 @@ export function parseWebSearchJson(data: unknown, cap: number): WebSearchHit[] {
 	return out;
 }
 
-function resolveWebSearchApiKey(raw: string | undefined, backendLabel: string): string {
-	const apiKey = interpolateConfigString(raw ?? '').trim();
+async function resolveWebSearchApiKey(backendLabel: string): Promise<string> {
+	// SecretStorage (+ optional `${env:}` / `{file:}` в значении секрета)
+	const apiKey = interpolateConfigString(await getWebSearchApiKey()).trim();
 	if (!apiKey) {
-		throw new Error(`web_search: задай webSearchApiKey для бэкенда ${backendLabel}`);
+		throw new Error(`web_search: задай webSearchApiKey (Settings -> SecretStorage) для бэкенда ${backendLabel}`);
 	}
 
 	return apiKey;
@@ -159,7 +161,7 @@ export async function searchDuckDuckGo(
 
 /**
  * Exa Search API (best-effort): POST https://api.exa.ai/search
- * Auth: `x-api-key` из webSearchApiKey.
+ * Auth: `x-api-key` из SecretStorage `webSearchApiKey`.
  * Тело: `{ query, numResults }` - без contents (только ссылки).
  * Ответ: `{ results: [{ title, url, ... }] }`.
  * Docs: https://exa.ai/docs/reference/search
@@ -168,9 +170,9 @@ export async function searchExa(
 	query: string,
 	cap: number,
 	signal: AbortSignal | undefined,
-	settings: Pick<GenSettings, 'webSearchApiKey'>,
+	_settings?: Pick<GenSettings, 'webSearchApiKey'>,
 ): Promise<WebSearchHit[]> {
-	const apiKey = resolveWebSearchApiKey(settings.webSearchApiKey, 'exa');
+	const apiKey = await resolveWebSearchApiKey('exa');
 	const data = await postJsonSearch(
 		EXA_SEARCH_URL,
 		{ 
@@ -188,7 +190,7 @@ export async function searchExa(
 
 /**
  * Parallel Web Search API (best-effort): POST https://api.parallel.ai/v1/search
- * Auth: `x-api-key` из webSearchApiKey.
+ * Auth: `x-api-key` из SecretStorage `webSearchApiKey`.
  * Тело: `{ objective, search_queries, mode: "fast", advanced_settings: { max_results } }`.
  * Ответ: `{ results: [{ url, title?, excerpts[] }] }` - title может быть null.
  * Docs: https://docs.parallel.ai/api-reference/search/search
@@ -197,9 +199,9 @@ export async function searchParallel(
 	query: string,
 	cap: number,
 	signal: AbortSignal | undefined,
-	settings: Pick<GenSettings, 'webSearchApiKey'>,
+	_settings?: Pick<GenSettings, 'webSearchApiKey'>,
 ): Promise<WebSearchHit[]> {
-	const apiKey = resolveWebSearchApiKey(settings.webSearchApiKey, 'parallel');
+	const apiKey = await resolveWebSearchApiKey('parallel');
 	const data = await postJsonSearch(
 		PARALLEL_SEARCH_URL,
 		{
@@ -221,7 +223,7 @@ export async function searchParallel(
 
 /**
  * HTTP JSON API: GET по URL из настроек, опциональный auth-заголовок.
- * `webSearchApiKey` проходит через interpolate (`${env:}` / `{file:}`) - MVP, не для production.
+ * Ключ - SecretStorage; в значении секрета можно `${env:}` / `{file:}`.
  */
 export async function searchHttpJson(
 	query: string,
@@ -238,7 +240,7 @@ export async function searchHttpJson(
 		Accept: 'application/json',
 		'User-Agent': 'GenAgentVSCode/0.2',
 	};
-	const apiKey = interpolateConfigString(settings.webSearchApiKey ?? '').trim();
+	const apiKey = interpolateConfigString(await getWebSearchApiKey()).trim();
 	const headerName = (settings.webSearchHttpHeader || 'Authorization').trim();
 	if (apiKey && headerName) {
 		headers[headerName] = apiKey;
