@@ -56,6 +56,7 @@ export function useGenBridge() {
 	const [adminPolicy, setAdminPolicy] = useState<AdminPolicyInfo | undefined>();
 	const [apiKeySet, setApiKeySet] = useState(false);
 	const [webSearchApiKeySet, setWebSearchApiKeySet] = useState(false);
+	const [persistedAlwaysAllow, setPersistedAlwaysAllow] = useState<string[]>([]);
 	const [settingsStatus, setSettingsStatus] = useState<string | undefined>();
 	const [models, setModels] = useState<LlmModelOption[]>([]);
 	const [modelsStatus, setModelsStatus] = useState<string | undefined>();
@@ -90,18 +91,28 @@ export function useGenBridge() {
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
 					setWebSearchApiKeySet(Boolean(data.webSearchApiKeySet));
+					if (Array.isArray(data.persistedAlwaysAllow)) {
+						setPersistedAlwaysAllow(data.persistedAlwaysAllow);
+					}
+
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
+
 					setAdminPolicy(data.adminPolicy);
 					return;
 				case 'settingsSaved':
 					setSettings(data.settings);
 					setApiKeySet(data.apiKeySet);
 					setWebSearchApiKeySet(Boolean(data.webSearchApiKeySet));
+					if (Array.isArray(data.persistedAlwaysAllow)) {
+						setPersistedAlwaysAllow(data.persistedAlwaysAllow);
+					}
+					
 					if (data.personas) {
 						setPersonas(data.personas);
 					}
+
 					setAdminPolicy(data.adminPolicy);
 					setSettingsStatus(t('settings.status.saved'));
 					return;
@@ -216,6 +227,7 @@ export function useGenBridge() {
 		clearApiKey?: boolean;
 		webSearchApiKey?: string;
 		clearWebSearchApiKey?: boolean;
+		persistedAlwaysAllow?: string[];
 	}) => {
 		setSettingsStatus(t('settings.status.saving'));
 		vscodeApi.postMessage({
@@ -225,6 +237,7 @@ export function useGenBridge() {
 			clearApiKey: api?.clearApiKey,
 			webSearchApiKey: api?.webSearchApiKey,
 			clearWebSearchApiKey: api?.clearWebSearchApiKey,
+			persistedAlwaysAllow: api?.persistedAlwaysAllow,
 		});
 	}, []);
 
@@ -361,6 +374,7 @@ export function useGenBridge() {
 		adminPolicy,
 		apiKeySet,
 		webSearchApiKeySet,
+		persistedAlwaysAllow,
 		settingsStatus,
 		models,
 		modelsStatus,

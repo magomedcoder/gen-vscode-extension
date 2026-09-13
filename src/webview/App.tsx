@@ -69,6 +69,7 @@ export function App() {
 		adminPolicy,
 		apiKeySet,
 		webSearchApiKeySet,
+		persistedAlwaysAllow,
 		settingsStatus,
 		models,
 		modelsStatus,
@@ -132,6 +133,7 @@ export function App() {
 				adminPolicy={adminPolicy}
 				apiKeySet={apiKeySet}
 				webSearchApiKeySet={webSearchApiKeySet}
+				persistedAlwaysAllow={persistedAlwaysAllow}
 				status={settingsStatus}
 				models={models}
 				modelsStatus={modelsStatus}

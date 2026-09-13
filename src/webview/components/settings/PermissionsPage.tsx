@@ -2,13 +2,23 @@ import type { ApprovalActionType, ApprovalMode } from '../../../core/config/appr
 import { EXAMPLE_DENIED_COMMANDS, EXAMPLE_DENIED_PATHS, EXAMPLE_SECRET_PATTERNS, DEFAULT_SENSITIVE_PATH_PATTERNS } from '../../../core/config/types';
 import { t } from '../../i18n';
 import type { SettingsPageProps } from './pages';
-import { FieldTextarea } from './SettingsFields';
+import { FieldTextarea, FieldToggle } from './SettingsFields';
 import { SettingsSection } from './SettingsSection';
 
 const APPROVAL_ACTIONS: ApprovalActionType[] = ['shell', 'edits', 'delete', 'mcp', 'web', 'outside', 'task', 'skill'];
 const APPROVAL_MODES: ApprovalMode[] = ['allow', 'ask', 'review', 'deny'];
 
-export function PermissionsPage({ draft, setField }: SettingsPageProps) {
+interface PermissionsPageProps extends SettingsPageProps {
+	persistedAlwaysAllow?: string[];
+	onPersistedAlwaysAllowChange?: (patterns: string[]) => void;
+}
+
+export function PermissionsPage({
+	draft,
+	setField,
+	persistedAlwaysAllow = [],
+	onPersistedAlwaysAllowChange,
+}: PermissionsPageProps) {
 	const setListField = (
 		key: 'deniedPaths' | 'deniedCommands' | 'secretPatterns' | 'sensitivePathPatterns',
 		text: string,
@@ -80,6 +90,38 @@ export function PermissionsPage({ draft, setField }: SettingsPageProps) {
 					>
 						{t('settings.approvalPreset.allowMost')}
 					</button>
+				</div>
+			</SettingsSection>
+
+			<SettingsSection titleKey="settings.section.permissions.always" hintKey="settings.section.permissions.alwaysHint">
+				<FieldToggle
+					labelKey="settings.persistAlwaysAllow.label"
+					hintKey="settings.persistAlwaysAllow.hint"
+					checked={draft.persistAlwaysAllow}
+					onChange={(v) => setField('persistAlwaysAllow', v)}
+				/>
+				<div className="field">
+					<span className="field__label">{t('settings.persistedAlwaysAllow.label')}</span>
+					<textarea
+						className="field__input field__input--multiline"
+						rows={4}
+						value={persistedAlwaysAllow.join('\n')}
+						spellCheck={false}
+						disabled={!draft.persistAlwaysAllow}
+						onChange={(e) => onPersistedAlwaysAllowChange?.(e.target.value.split(/\r?\n/))}
+					/>
+					<span className="field__hint">{t('settings.persistedAlwaysAllow.hint')}</span>
+					{draft.persistAlwaysAllow && persistedAlwaysAllow.length > 0 ? (
+						<div className="field__row" style={{ marginTop: 6 }}>
+							<button
+								type="button"
+								className="btn btn--secondary"
+								onClick={() => onPersistedAlwaysAllowChange?.([])}
+							>
+								{t('settings.persistedAlwaysAllow.clear')}
+							</button>
+						</div>
+					) : null}
 				</div>
 			</SettingsSection>
 

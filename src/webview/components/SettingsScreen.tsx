@@ -30,6 +30,7 @@ interface SettingsScreenProps {
 	status?: string;
 	apiKeySet: boolean;
 	webSearchApiKeySet?: boolean;
+	persistedAlwaysAllow?: string[];
 	models: LlmModelOption[];
 	modelsStatus?: string;
 	modelsLoading: boolean;
@@ -50,6 +51,7 @@ interface SettingsScreenProps {
 		clearApiKey?: boolean;
 		webSearchApiKey?: string;
 		clearWebSearchApiKey?: boolean;
+		persistedAlwaysAllow?: string[];
 	}) => void;
 	onLoadModels: (baseUrl: string) => void;
 	onCheckConnection?: (baseUrl: string) => void;
@@ -107,6 +109,7 @@ export function SettingsScreen({
 	adminPolicy,
 	apiKeySet,
 	webSearchApiKeySet = false,
+	persistedAlwaysAllow: persistedAlwaysAllowProp = [],
 	status,
 	models,
 	modelsStatus,
@@ -147,6 +150,7 @@ export function SettingsScreen({
 	const [clearApiKey, setClearApiKey] = useState(false);
 	const [webSearchApiKeyDraft, setWebSearchApiKeyDraft] = useState('');
 	const [clearWebSearchApiKey, setClearWebSearchApiKey] = useState(false);
+	const [persistedAlwaysAllowDraft, setPersistedAlwaysAllowDraft] = useState<string[]>(persistedAlwaysAllowProp);
 
 	const lockedKeySet = useMemo(
 		() => new Set(adminPolicy?.active ? adminPolicy.lockedKeys : []),
@@ -159,12 +163,13 @@ export function SettingsScreen({
 		setClearApiKey(false);
 		setWebSearchApiKeyDraft('');
 		setClearWebSearchApiKey(false);
+		setPersistedAlwaysAllowDraft(persistedAlwaysAllowProp);
 		if (settings.baseUrl.trim()) {
 			onLoadModels(settings.baseUrl);
 		} else {
 			onLoadModels('');
 		}
-	}, [settings, apiKeySet, webSearchApiKeySet, onLoadModels]);
+	}, [settings, apiKeySet, webSearchApiKeySet, persistedAlwaysAllowProp, onLoadModels]);
 
 	useEffect(() => {
 		if (models.length === 0) {
@@ -224,6 +229,7 @@ export function SettingsScreen({
 			clearApiKey: clearApiKey || undefined,
 			webSearchApiKey: clearWebSearchApiKey ? undefined : webSearchApiKeyDraft,
 			clearWebSearchApiKey: clearWebSearchApiKey || undefined,
+			persistedAlwaysAllow: persistedAlwaysAllowDraft,
 		});
 	};
 
@@ -325,7 +331,12 @@ export function SettingsScreen({
 						{page === 'security' ? (
 							<>
 								<SecurityPage draft={draft} setField={setField} />
-								<PermissionsPage draft={draft} setField={setField} />
+								<PermissionsPage
+									draft={draft}
+									setField={setField}
+									persistedAlwaysAllow={persistedAlwaysAllowDraft}
+									onPersistedAlwaysAllowChange={setPersistedAlwaysAllowDraft}
+								/>
 							</>
 						) : null}
 						{page === 'project' ? (

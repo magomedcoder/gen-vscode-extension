@@ -6,6 +6,7 @@ import { ChatSession } from './ChatSession';
 import { HttpLlmClient } from '../../core/llm/client';
 import { isAbortError } from '../../core/llm/errors';
 import { getSettings, hasApiKey, hasWebSearchApiKey, getAdminPolicySnapshot, isAdminPolicyActive, onSettingsChanged, setSessionModel } from '../../core/config/settings';
+import { getPersistedAlwaysAllow } from '../../core/stores/alwaysAllowStore';
 import { loadWebviewL10n } from '../../l10n/loadBundle';
 import { SettingsPanel } from './SettingsPanel';
 import type { ConfirmDialogOptions } from '../../host/ui/confirmDialog';
@@ -38,6 +39,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 					settings: getSettings(),
 					apiKeySet: await hasApiKey(),
 					webSearchApiKeySet: await hasWebSearchApiKey(),
+					persistedAlwaysAllow: getPersistedAlwaysAllow(),
 					adminPolicy: {
 						active: isAdminPolicyActive(),
 						path: snap.path,
@@ -155,6 +157,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 						settings: getSettings(),
 						apiKeySet: await hasApiKey(),
 						webSearchApiKeySet: await hasWebSearchApiKey(),
+						persistedAlwaysAllow: getPersistedAlwaysAllow(),
 						adminPolicy: {
 							active: isAdminPolicyActive(),
 							path: snap.path,

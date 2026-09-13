@@ -6,6 +6,7 @@
 
 - **Secrets:** unified SecretStorage vault; `webSearchApiKey` no longer in JSON/settings layers (migrate + clear UI); LLM apiKey via same vault
 - **MCP:** per-server Reconnect / Refresh tools, connecting badge, lastConnectedAt; lazy reconnect on call (no full refresh); AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
+- **Permissions:** opt-in `persistAlwaysAllow` - Always patterns survive reloads (workspaceState); Permissions UI list/clear
 
 ## 0.4.0 (11 September 2026)
 

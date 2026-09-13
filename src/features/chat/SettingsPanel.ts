@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getEffectiveHooksPath } from '../../core/config/layers';
 import { clearApiKey, clearWebSearchApiKey, getSettings, hasApiKey, hasWebSearchApiKey, isAdminPolicyActive, setApiKey, setSessionModel, setWebSearchApiKey, updateSettings, getAdminPolicySnapshot } from '../../core/config/settings';
+import { getPersistedAlwaysAllow, setPersistedAlwaysAllow } from '../../core/stores/alwaysAllowStore';
 import { collectIndexEngineStatus } from '../index/engineStatus';
 import { getIndexManagerInstance } from '../index/IndexManager';
 import { getMcpManager } from '../../integrations/mcpClient';
@@ -129,6 +130,7 @@ export class SettingsPanel {
 			settings: getSettings(),
 			apiKeySet: await hasApiKey(),
 			webSearchApiKeySet: await hasWebSearchApiKey(),
+			persistedAlwaysAllow: getPersistedAlwaysAllow(),
 			personas: await this.listPersonaOptions(),
 			adminPolicy: this.adminPolicyInfo(),
 		});
@@ -262,6 +264,10 @@ export class SettingsPanel {
 						await setWebSearchApiKey(msg.webSearchApiKey);
 					}
 
+					if (Array.isArray(msg.persistedAlwaysAllow)) {
+						await setPersistedAlwaysAllow(msg.persistedAlwaysAllow);
+					}
+
 					const saved = await updateSettings({
 						...msg.settings,
 						webSearchApiKey: '',
@@ -271,6 +277,7 @@ export class SettingsPanel {
 						settings: saved,
 						apiKeySet: await hasApiKey(),
 						webSearchApiKeySet: await hasWebSearchApiKey(),
+						persistedAlwaysAllow: getPersistedAlwaysAllow(),
 						personas: await this.listPersonaOptions(),
 						adminPolicy: this.adminPolicyInfo(),
 					});

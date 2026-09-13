@@ -57,6 +57,7 @@ export const FILE_LAYER_KEYS = [
 	'formatAfterEdit',
 	'agentMaxIterations',
 	'autoApprove',
+	'persistAlwaysAllow',
 	'continueLoopOnDeny',
 	'approvalPolicy',
 	'baseUrl',

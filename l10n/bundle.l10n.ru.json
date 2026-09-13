@@ -863,5 +863,12 @@
 	"settings.mcp.refreshTools": "Обновить tools",
 	"settings.mcp.lastConnected": "Последнее подключение: {0}",
 	"settings.mcpToolResultMaxChars.label": "Лимит MCP tool result",
-	"settings.mcpToolResultMaxChars.hint": "Макс. символов результата call_mcp_tool / execute в модель (по умолчанию 50000)."
+	"settings.mcpToolResultMaxChars.hint": "Макс. символов результата call_mcp_tool / execute в модель (по умолчанию 50000).",
+	"settings.section.permissions.always": "Always allow (сессия)",
+	"settings.section.permissions.alwaysHint": "Паттерны с кнопки Always. Opt-in persist сохраняет их между перезагрузками для этого workspace.",
+	"settings.persistAlwaysAllow.label": "Сохранять Always между перезагрузками",
+	"settings.persistAlwaysAllow.hint": "По умолчанию выкл.: Always только для текущей вкладки. Вкл.: паттерны в workspace и подмешиваются в каждый turn.",
+	"settings.persistedAlwaysAllow.label": "Сохранённые Always-паттерны",
+	"settings.persistedAlwaysAllow.hint": "По одному на строку (напр. npm*, edits:src/**). В workspaceState, не в JSON-слоях.",
+	"settings.persistedAlwaysAllow.clear": "Очистить сохранённые"
 }

@@ -173,6 +173,10 @@
 			"maximum": 40
 		},
 		"autoApprove": { "type": "boolean" },
+		"persistAlwaysAllow": {
+			"type": "boolean",
+			"description": "Persist Always-allow patterns across reloads (workspaceState; default false)"
+		},
 		"continueLoopOnDeny": { "type": "boolean" },
 		"approvalPolicy": {
 			"type": "object",

@@ -95,6 +95,11 @@ export interface GenSettings {
 	 */
 	autoApprove: boolean;
 	/**
+	 * Сохранять Always-паттерны между перезагрузками (workspaceState).
+	 * Default false - только на текущую сессию вкладки.
+	 */
+	persistAlwaysAllow: boolean;
+	/**
 	 * Не рвать agent loop после deny - вернуть причину модели и продолжить
 	 */
 	continueLoopOnDeny: boolean;
@@ -563,6 +568,7 @@ export const DEFAULT_SETTINGS: GenSettings = {
 	agentMaxIterations: 40,
 	approvalPolicy: structuredClone(DEFAULT_APPROVAL_POLICY),
 	autoApprove: false,
+	persistAlwaysAllow: false,
 	continueLoopOnDeny: true,
 	enableWorkspaceContext: true,
 	alwaysOnWorkspaceContext: false,

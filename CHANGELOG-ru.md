@@ -6,6 +6,7 @@
 
 - **Secrets:** единый SecretStorage vault; `webSearchApiKey` больше не в JSON/слоях (migrate + clear в UI); LLM apiKey через тот же vault
 - **MCP:** Reconnect / Refresh tools по серверу, badge connecting, lastConnectedAt; lazy reconnect на call; AbortSignal cancel; `mcpToolResultMaxChars` (default 50000)
+- **Permissions:** opt-in `persistAlwaysAllow` - Always-паттерны переживают reload (workspaceState); список/очистка в Permissions
 
 ## 0.4.0 (11 сентября 2026)
 

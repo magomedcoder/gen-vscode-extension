@@ -3,6 +3,7 @@ import type { ApprovalPolicy } from './approvalTypes';
 import * as vscode from 'vscode';
 import type { ExtensionContext, Memento } from 'vscode';
 import { initApiKeyStore, getWebSearchApiKey, setWebSearchApiKey } from './apiKey';
+import { initAlwaysAllowStore } from '../stores/alwaysAllowStore';
 import { initMcpOAuthStore } from '../stores/mcpOAuthStore';
 import { applyAdminPolicy, stripAdminLockedForStorage } from './adminPolicy';
 import { deepMerge, getFileSettingsOverlay, initConfigLayers, onConfigLayersChanged, pickNonDefaultSettings } from './layers';
@@ -153,6 +154,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 		agentMaxIterations: clamp(Math.floor(asNumber(raw.agentMaxIterations, DEFAULT_SETTINGS.agentMaxIterations)), 0, 40),
 		approvalPolicy: normalizeApprovalPolicy(raw.approvalPolicy),
 		autoApprove: raw.autoApprove === true,
+		persistAlwaysAllow: raw.persistAlwaysAllow === true,
 		continueLoopOnDeny: raw.continueLoopOnDeny !== false,
 		enableWorkspaceContext: raw.enableWorkspaceContext !== false,
 		alwaysOnWorkspaceContext: raw.alwaysOnWorkspaceContext === true,
@@ -321,6 +323,7 @@ function normalize(raw: Partial<GenSettings>): GenSettings {
 export function initSettings(context: ExtensionContext): void {
 	store = context.globalState;
 	initApiKeyStore(context);
+	initAlwaysAllowStore(context);
 	initMcpOAuthStore(context);
 	sessionModel = '';
 	// JSON-слои: user (~/.config/gen) + project (.gen/config.json)

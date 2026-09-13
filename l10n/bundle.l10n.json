@@ -863,5 +863,12 @@
 	"settings.mcp.refreshTools": "Refresh tools",
 	"settings.mcp.lastConnected": "Last connected: {0}",
 	"settings.mcpToolResultMaxChars.label": "MCP tool result max chars",
-	"settings.mcpToolResultMaxChars.hint": "Cap for call_mcp_tool / execute results sent to the model (default 50000)."
+	"settings.mcpToolResultMaxChars.hint": "Cap for call_mcp_tool / execute results sent to the model (default 50000).",
+	"settings.section.permissions.always": "Always allow (session)",
+	"settings.section.permissions.alwaysHint": "Patterns from the Always button. Opt-in persist keeps them across reloads for this workspace.",
+	"settings.persistAlwaysAllow.label": "Persist Always patterns across reloads",
+	"settings.persistAlwaysAllow.hint": "Off by default: Always only lasts for the current chat tab. On: store patterns in workspace and re-apply on each turn.",
+	"settings.persistedAlwaysAllow.label": "Saved Always patterns",
+	"settings.persistedAlwaysAllow.hint": "One pattern per line (e.g. npm*, edits:src/**). Stored in workspaceState, not in JSON config layers.",
+	"settings.persistedAlwaysAllow.clear": "Clear saved patterns"
 }

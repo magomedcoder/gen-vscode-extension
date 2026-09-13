@@ -7,6 +7,7 @@ import { PLAN_ENTER_REMINDER, PLAN_EXIT_REMINDER } from '../agent/tools/plan/mod
 import type { ConfirmChoice } from '../agent/types';
 import { getSettings, isAgentLikeMode, setSessionModel, updateSettings } from '../../core/config/settings';
 import type { ChatMode } from '../../core/config/types';
+import { addPersistedAlwaysAllow, getPersistedAlwaysAllow, mergeAlwaysAllow } from '../../core/stores/alwaysAllowStore';
 import { writeLog } from '../../core/log/logger';
 import type { LlmClient } from '../../core/llm/types';
 import { sumUsage } from '../../core/llm/usage';
@@ -704,6 +705,32 @@ export class ChatSession {
 		this.activateRuntime(sessionId);
 		this.emit();
 		void focusChatView();
+	}
+
+	// Подмешать persisted Always в sessionAllow перед turn (если opt-in)
+	private seedSessionAllow(rt: { sessionAllow: string[] }): void {
+		if (!getSettings().persistAlwaysAllow) {
+			return;
+		}
+
+		const merged = mergeAlwaysAllow(rt.sessionAllow, getPersistedAlwaysAllow());
+		rt.sessionAllow.length = 0;
+		rt.sessionAllow.push(...merged);
+	}
+
+	private rememberAlwaysAllow(rt: { sessionAllow: string[] }, pattern: string): void {
+		const line = pattern.trim();
+		if (!line) {
+			return;
+		}
+
+		if (!rt.sessionAllow.includes(line)) {
+			rt.sessionAllow.push(line);
+		}
+		
+		if (getSettings().persistAlwaysAllow) {
+			void addPersistedAlwaysAllow(line);
+		}
 	}
 
 	private settleConfirm(choice: ConfirmChoice): void {
@@ -2149,6 +2176,7 @@ export class ChatSession {
 
 		rt.todos = [];
 		rt.agentPaused = undefined;
+		this.seedSessionAllow(rt);
 		const clearSeqAtStart = rt.clearSeq;
 		const controller = new AbortController();
 		// Сразу резервируем слот concurrent (до await), чтобы другие вкладки не обогнали
@@ -2280,9 +2308,7 @@ export class ChatSession {
 						this.emit();
 					},
 					onAlwaysAllow: (pattern) => {
-						if (pattern && !rt.sessionAllow.includes(pattern)) {
-							rt.sessionAllow.push(pattern);
-						}
+						this.rememberAlwaysAllow(rt, pattern);
 					},
 					onTodosChanged: (items) => {
 						if (!stillActive()) {
@@ -2615,9 +2641,7 @@ export class ChatSession {
 				mode: settings.chatMode,
 				sessionAllow: rt.sessionAllow,
 				onAlwaysAllow: (pattern) => {
-					if (pattern && !rt.sessionAllow.includes(pattern)) {
-						rt.sessionAllow.push(pattern);
-					}
+					this.rememberAlwaysAllow(rt, pattern);
 				},
 				onTodosChanged: (items) => {
 					if (!stillActive()) {
